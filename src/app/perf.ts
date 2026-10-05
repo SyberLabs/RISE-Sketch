@@ -1,6 +1,7 @@
 /**
  * CPU-side performance counters (DESIGN §9: measured in-app with performance.now()). Fixed rings,
- * no allocation per sample. Read by the `?debug` hooks (RiseDebug.perf) and the e2e suite.
+ * no allocation per sample. Read by the `?debug` hooks (RiseDebug.perf) and the e2e suite, so only
+ * debug builds (__DEBUG__) count; production gets no-op counters.
  */
 
 const RING = 1024;
@@ -33,8 +34,16 @@ export interface Perf {
   read(reset?: boolean): { liveFrameP95: number; liveFrameMax: number; inputP95: number; frames: number; longTasks: number };
 }
 
-/** Counters plus a long-task observer where the browser has one. */
+/** No-op counters: production builds have no reader for them (__DEBUG__ off). */
+const NO_PERF: Perf = {
+  live() {},
+  input() {},
+  read: () => ({ liveFrameP95: 0, liveFrameMax: 0, inputP95: 0, frames: 0, longTasks: 0 }),
+};
+
+/** Counters plus a long-task observer where the browser has one (debug builds only). */
 export function createPerf(): Perf {
+  if (!__DEBUG__) return NO_PERF;
   const live = new Ring(), input = new Ring();
   let longTasks = 0;
   try {

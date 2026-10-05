@@ -2265,7 +2265,7 @@ export interface LiveItemInfo {
 export interface LiveLayerExtras {
   /** Route predicted tails to the overlay (the renderer wires its overlay here). */
   attachOverlay(o: Pick<OverlayInternal, 'predicted'> | null): void;
-  /** Snapshot of every item (tests, debug HUD). */
+  /** Snapshot of every item (tests, debug HUD; empty in production builds, __DEBUG__ off). */
   inspect(): LiveItemInfo[];
 }
 
@@ -2717,6 +2717,7 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
     attachOverlay(o): void { overlay = o; },
     inspect(): LiveItemInfo[] {
       const out: LiveItemInfo[] = [];
+      if (!__DEBUG__) return out; // tests and debug HUD only: production builds drop the walk
       for (const it of items) {
         if (it.dead) continue;
         if (it instanceof WakeItem) {
