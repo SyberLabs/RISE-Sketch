@@ -82,9 +82,15 @@ describe('registry', () => {
       expect(paperAlphaScale(f, 3)).toBe(paperAlphaScale('sprout', 3)); // no Form-specific Paper rule
     }
     for (const f of Object.keys(CURRENT_V) as FormId[]) {
-      expect(CURRENT_V[f]).toBe(1);
+      // Sprout draws new strokes with v2 (clean crotches); v1 recipes keep cooking with v1
+      expect(CURRENT_V[f]).toBe(f === 'sprout' ? 2 : 1);
       expect(operatorFor(f, 1).dMax).toBe(f === 'ripple' ? 5 : FORMS[f].dMax);
+      expect(operatorFor(f, CURRENT_V[f]).dMax).toBe(f === 'ripple' ? 5 : FORMS[f].dMax);
+      expect(operatorFor(f, CURRENT_V[f]).v).toBe(f === 'ripple' ? 1 : CURRENT_V[f]);
     }
+    expect(operatorFor('sprout', 1).v).toBe(1);
+    expect(operatorFor('sprout', 2).v).toBe(2);
+    expect(operatorFor('sprout', 3).v).toBe(1); // unknown versions fall back to v1
   });
   it('Paper alpha conversions', () => {
     expect(paperAlphaScale('sprout', 0)).toBe(1);
@@ -101,14 +107,14 @@ describe('continuity in depth (bounded change per 1/16 level)', () => {
   const bound: Record<string, number> = { line: 1.6, echo: 8, sprout: 7, drift: 4, 
     // the promoted lab Forms (measured worst: craze 2.1, plume 3.2, caustic 4.3, burin 2.8, plait 3.9, orbit 0.6)
     craze: 4, plume: 6, caustic: 7, burin: 5, plait: 7, orbit: 1.2 };
-  for (const form of ALL) {
-    it(form, () => {
+  for (const [form, v] of [...ALL.map((f): [FormId, number] => [f, 1]), ['sprout', 2] as [FormId, number]]) {
+    it(v === 1 ? form : `${form}@${v}`, () => {
       const rows = medium(5).rows();
       const dMax = FORMS[form].dMax;
       let worst = 0;
       for (const d of [0, 0.4375, 1, 1.9375, 2.5, 3, dMax - 0.0625]) {
-        const a = cook(formRecipe(rows, { form, base: d, nib: 'pen', size: 3 }));
-        const b = cook(formRecipe(rows, { form, base: d + 0.0625, nib: 'pen', size: 3 }));
+        const a = cook(formRecipe(rows, { v, form, base: d, nib: 'pen', size: 3 }));
+        const b = cook(formRecipe(rows, { v, form, base: d + 0.0625, nib: 'pen', size: 3 }));
         const h = hausdorff(a, b, 0, 9);
         worst = Math.max(worst, h);
         expect(h).toBeLessThan(bound[form]);
@@ -159,12 +165,12 @@ describe('Line', () => {
 });
 
 describe('Sprout and Drift: truncation equals a direct cook at the shallower depth', () => {
-  for (const form of ['sprout', 'drift'] as const) {
-    it(form, () => {
+  for (const [form, v] of [['sprout', 1], ['drift', 1], ['sprout', 2]] as const) {
+    it(v === 1 ? form : `${form}@${v}`, () => {
       const rows = medium(7).rows();
-      const deep = cook(formRecipe(rows, { form, base: FORMS[form].dMax }));
+      const deep = cook(formRecipe(rows, { v, form, base: FORMS[form].dMax }));
       for (const d of [0.5, 1.25, 2, 3.0625]) {
-        const shallow = cook(formRecipe(rows, { form, base: d }));
+        const shallow = cook(formRecipe(rows, { v, form, base: d }));
         // every unit's growth at depth d lies exactly on its ceiling geometry
         const units = new Set<number>();
         for (let i = 0; i < shallow.nPolys; i++) if (shallow.gen[i] >= 1) units.add(shallow.unit[i]);
@@ -190,14 +196,16 @@ describe('budgets and operator safety', () => {
     for (let k = 0; k < 10; k++) h.arc(150 + 300 * k, 0, 150, Math.PI, 2 * Math.PI, 0.5).moveTo(450 + 300 * k, 0, 0.5);
     return h;
   };
-  it('Sprout: ≤ 900 points per sprout, causal total ≤ 24k (+ one sprout)', () => {
-    const c = cook(formRecipe(big().rows(), { form: 'sprout', base: 4, size: 30 }));
-    const per = new Map<number, number>();
-    let total = 0;
-    for (let i = 0; i < c.nPolys; i++) if (c.gen[i] >= 1) { per.set(c.unit[i], (per.get(c.unit[i]) ?? 0) + c.count[i]); total += c.count[i]; }
-    for (const n of per.values()) expect(n).toBeLessThanOrEqual(900);
-    expect(total).toBeLessThanOrEqual(24000 + 900);
-    expect(total).toBeGreaterThan(20000);
+  it('Sprout (v1 and v2): ≤ 900 points per sprout, causal total ≤ 24k (+ one sprout)', () => {
+    for (const v of [1, 2]) {
+      const c = cook(formRecipe(big().rows(), { v, form: 'sprout', base: 4, size: 30 }));
+      const per = new Map<number, number>();
+      let total = 0;
+      for (let i = 0; i < c.nPolys; i++) if (c.gen[i] >= 1) { per.set(c.unit[i], (per.get(c.unit[i]) ?? 0) + c.count[i]); total += c.count[i]; }
+      for (const n of per.values()) expect(n).toBeLessThanOrEqual(900);
+      expect(total).toBeLessThanOrEqual(24000 + 900);
+      expect(total).toBeGreaterThan(20000);
+    }
   });
   it('Drift: ≤ 150 steps per filament, causal total ≤ 30k (+ one filament)', () => {
     const c = cook(formRecipe(big().rows(), { form: 'drift', base: 6 }));
@@ -234,11 +242,12 @@ describe('budgets and operator safety', () => {
       { name: 'zigzag', rows: (() => { const h = new Hand(0, 0); for (let k = 0; k < 20; k++) h.moveTo(10 * k, k % 2 ? 30 : 0, 2.5); return h; })().rows() },
       { name: 'chisel tilt', rows: new Hand(0, 0, { alt: 0.5, az: 2 }).moveTo(200, 50, 0.8).rows(), o: { nib: 'chisel', size: 12 } },
     ];
-    for (const form of ALL) for (const h of hard) for (const base of [0, 1.5, FORMS[form].dMax]) {
-      const r = formRecipe(h.rows, { form, base, ...(h.o ?? {}), pools: [30, 1] });
+    const variants: [FormId, number][] = [...ALL.map((f): [FormId, number] => [f, 1]), ['sprout', 2]];
+    for (const [form, v] of variants) for (const h of hard) for (const base of [0, 1.5, FORMS[form].dMax]) {
+      const r = formRecipe(h.rows, { v, form, base, ...(h.o ?? {}), pools: [30, 1] });
       const c = cook(r);
       const p = cookedProblems(c);
-      if (p.length) throw new Error(`${form} ${h.name} base ${base}: ${p.join('; ')}`);
+      if (p.length) throw new Error(`${form}@${v} ${h.name} base ${base}: ${p.join('; ')}`);
       expect(inkBoxContains(c, r.origin)).toBe(true);
       expect(c.bytes).toBeGreaterThan(0);
     }
@@ -246,15 +255,17 @@ describe('budgets and operator safety', () => {
 });
 
 describe('tones, hierarchy and kinds', () => {
-  it('trunk is gen 0 (dBucket 0), Sprout gen g has dBucket min(g, 4) and α 0.92·0.72^(g−1)', () => {
-    const c = cook(formRecipe(medium().rows(), { form: 'sprout', base: 4 }));
-    for (let i = 0; i < c.nPolys; i++) {
-      const g = c.gen[i];
-      expect(c.tone[i] % 5).toBe(Math.min(g, 4));
-      if (g >= 1) expect(c.alpha[i]).toBeCloseTo(0.92 * 0.72 ** (g - 1), 6); // crowding 0 in fixtures
-      else expect(c.alpha[i]).toBe(1);
+  it('trunk is gen 0 (dBucket 0), Sprout gen g has dBucket min(g, 4) and α 0.92·0.72^(g−1) (v1 and v2)', () => {
+    for (const v of [1, 2]) {
+      const c = cook(formRecipe(medium().rows(), { v, form: 'sprout', base: 4 }));
+      for (let i = 0; i < c.nPolys; i++) {
+        const g = c.gen[i];
+        expect(c.tone[i] % 5).toBe(Math.min(g, 4));
+        if (g >= 1) expect(c.alpha[i]).toBeCloseTo(0.92 * 0.72 ** (g - 1), 6); // crowding 0 in fixtures
+        else expect(c.alpha[i]).toBe(1);
+      }
+      expect(c.genStart.length).toBe(4 + 2);
     }
-    expect(c.genStart.length).toBe(4 + 2);
   });
   it('Drift filaments are gen 1 in thirds with dBuckets 1/2/3 and α 0.38; trunk ×0.8', () => {
     const c = cook(formRecipe(medium().rows(), { form: 'drift', base: 3 }));
@@ -304,10 +315,12 @@ describe('radial seeds', () => {
     const g1 = e.genStart[1], last = e.start[e.nPolys - 1] + e.count[e.nPolys - 1] - 1;
     expect(e.pts[4 * e.start[g1]]).toBeCloseTo(e.pts[4 * last], 4);
     expect(e.pts[4 * e.start[g1] + 1]).toBeCloseTo(e.pts[4 * last + 1], 4);
-    const s = cook(formRecipe(tap, { form: 'sprout', base: 4, radial: true }));
-    expect(s.genStart[2] - s.genStart[1]).toBe(5);
-    expect(s.genStart.length).toBeLessThanOrEqual(3 + 2);
-    expect(s.ceilingMax).toBeLessThanOrEqual(3);
+    for (const v of [1, 2]) {
+      const s = cook(formRecipe(tap, { v, form: 'sprout', base: 4, radial: true }));
+      expect(s.genStart[2] - s.genStart[1]).toBe(5);
+      expect(s.genStart.length).toBeLessThanOrEqual(3 + 2);
+      expect(s.ceilingMax).toBeLessThanOrEqual(3);
+    }
     const d = cook(formRecipe(tap, { form: 'drift', base: 3, radial: true }));
     expect((d.nPolys - d.genStart[1]) / 3).toBe(24);
   });

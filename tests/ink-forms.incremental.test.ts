@@ -16,11 +16,13 @@ import {
 // cooks are heavy; other suites may share the CPU, so 5 s is not enough under load
 vi.setConfig({ testTimeout: 60000 });
 
-const FORMS: FormId[] = ['line', 'echo', 'sprout', 'drift'];
+/** Forms at v1, plus the later shipped versions (Sprout v2), as [form, version]. */
+const FORMS: [FormId, number][] = [['line', 1], ['echo', 1], ['sprout', 1], ['drift', 1], ['sprout', 2]];
+const label = (form: FormId, v: number): string => (v === 1 ? form : `${form}@${v}`);
 
 interface Case { name: string; r: StrokeRecipe; closedAtEnd: boolean }
 
-function cases(form: FormId): Case[] {
+function cases(form: FormId, v: number): Case[] {
   const base = form === 'line' ? 1.25 : 2;
   const chisel = (() => {
     const h = new Hand(0, 0, { jitter: 0.2, seed: 11, alt: 0.6, az: 0.4, p: 0.2, c: 0.3, cs: -0.2 });
@@ -28,11 +30,11 @@ function cases(form: FormId): Case[] {
     return h.rows(2.5);
   })();
   return [
-    { name: 'pen brush long', r: formRecipe(longStroke(3).rows(), { form, base }), closedAtEnd: false },
-    { name: 'mouse pen-nib scribble', r: formRecipe(scribble(5, 0.3, 125).rows(1, true), { form, base, device: 'mouse', nib: 'pen', size: 2.5 }), closedAtEnd: false },
-    { name: 'touch scribble 60 Hz', r: formRecipe(scribble(9, 0.8, 60).rows(1, true), { form, base, device: 'touch' }), closedAtEnd: false },
-    { name: 'chisel z 2.5', r: formRecipe(chisel, { form, base, nib: 'chisel', size: 12, z: 2.5 }), closedAtEnd: false },
-    { name: 'closed loop', r: formRecipe(loopStroke(70).rows(), { form, base }), closedAtEnd: true },
+    { name: 'pen brush long', r: formRecipe(longStroke(3).rows(), { v, form, base }), closedAtEnd: false },
+    { name: 'mouse pen-nib scribble', r: formRecipe(scribble(5, 0.3, 125).rows(1, true), { v, form, base, device: 'mouse', nib: 'pen', size: 2.5 }), closedAtEnd: false },
+    { name: 'touch scribble 60 Hz', r: formRecipe(scribble(9, 0.8, 60).rows(1, true), { v, form, base, device: 'touch' }), closedAtEnd: false },
+    { name: 'chisel z 2.5', r: formRecipe(chisel, { v, form, base, nib: 'chisel', size: 12, z: 2.5 }), closedAtEnd: false },
+    { name: 'closed loop', r: formRecipe(loopStroke(70).rows(), { v, form, base }), closedAtEnd: true },
   ];
 }
 
@@ -99,9 +101,9 @@ function runLive(c: Case, trial: number, opts: { pools: boolean; closure: boolea
 }
 
 describe('incremental ≡ full (bitwise)', () => {
-  for (const form of FORMS) {
-    for (const c of cases(form)) {
-      it(`${form}: ${c.name}`, () => {
+  for (const [form, v] of FORMS) {
+    for (const c of cases(form, v)) {
+      it(`${label(form, v)}: ${c.name}`, () => {
         for (let trial = 0; trial < 6; trial++) {
           const opts = { pools: trial >= 2, closure: trial >= 3, peek: trial % 2 === 0 };
           const { live, full, log } = runLive(c, trial, opts);
@@ -117,8 +119,8 @@ describe('incremental ≡ full (bitwise)', () => {
 
 describe('cook definition', () => {
   it('cook(r) is literally the incremental finish of draftOf(r)', () => {
-    for (const form of FORMS) {
-      const r = formRecipe(longStroke(4).rows(), { form, pools: [200, 1.5, 420, 0.75] });
+    for (const [form, v] of FORMS) {
+      const r = formRecipe(longStroke(4).rows(), { v, form, pools: [200, 1.5, 420, 0.75] });
       const a = cook(r), b = createIncrementalCook(draftOf(r)).finish(r);
       expect(cookedDiff(a, b)).toBeNull();
       // a committed recipe can drive the incremental cook directly as well
@@ -135,9 +137,9 @@ describe('cook definition', () => {
   });
 
   it('radial seeds cook the same live and full (taps and blooms)', () => {
-    for (const form of FORMS) {
+    for (const [form, v] of FORMS) {
       for (const hold of [40, 700]) {
-        const fd = new Feeder(formRecipe(tapStroke(hold).rows(), { form }));
+        const fd = new Feeder(formRecipe(tapStroke(hold).rows(), { v, form }));
         const ic = createIncrementalCook(fd.d);
         while (fd.fed < fd.total) { const n0 = fd.fed; fd.feed(3); ic.append(fd.fed - n0); }
         if (hold > 100) { fd.setPools([0, 1.5]); ic.regrow(-48, 32); }
@@ -150,8 +152,8 @@ describe('cook definition', () => {
 
 describe('drainSettled', () => {
   it('delivers each settled poly once, and the drained set matches the settled polys of the view', () => {
-    for (const form of FORMS) {
-      const fd = new Feeder(formRecipe(longStroke(6).rows(), { form }));
+    for (const [form, v] of FORMS) {
+      const fd = new Feeder(formRecipe(longStroke(6).rows(), { v, form }));
       const ic = createIncrementalCook(fd.d);
       const log = new DrainLog();
       const rand = mulberry32(31);
