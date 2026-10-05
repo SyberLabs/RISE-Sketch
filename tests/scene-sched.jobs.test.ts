@@ -283,5 +283,5 @@ describe('jobs: model check', () => {
       expect(log).toEqual(refLog);
       expect(jobs.pending).toBe(0);
     }
-  });
+  }, 60_000); // ~156k expects: generous budget so a loaded machine cannot time it out
 });

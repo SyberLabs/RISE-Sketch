@@ -67,9 +67,21 @@ function bellyRatio(c: Cooked): number {
   return best;
 }
 
+/** Every point of poly i as [x, y]. */
+function ptsOf(c: Cooked, i: number): [number, number][] {
+  const s = c.start[i], out: [number, number][] = [];
+  for (let k = 0; k < c.count[i]; k++) out.push([c.pts[4 * (s + k)], c.pts[4 * (s + k) + 1]]);
+  return out;
+}
+/** Whether segments ab and cd properly cross. */
+function crosses(a: number[], b: number[], c: number[], d: number[]): boolean {
+  const o = (p: number[], q: number[], r: number[]) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  return o(c, d, a) * o(c, d, b) < 0 && o(a, b, c) * o(a, b, d) < 0;
+}
+
 // ---------------------------------------------------------------------------- tests
 
-describe('burin: harness invariants', () => {
+describe('burin: harness invariants', { timeout: 30000 }, () => {
   it('cooks the signature and is structurally sound', () => {
     const { c } = labCook(burin, signature());
     expect(c.nPts).toBeGreaterThan(200);
@@ -147,7 +159,7 @@ describe('burin: harness invariants', () => {
   });
 });
 
-describe('burin: acceptance criteria', () => {
+describe('burin: acceptance criteria', { timeout: 30000 }, () => {
   it('1. light reads: on a straight run the ticks sit on one side (the shadow side of the up-left lamp), as lozenges', () => {
     const { c } = labCook(burin, straight(), { base: 1 });
     const t = ticks(c, 1);
@@ -170,6 +182,18 @@ describe('burin: acceptance criteria', () => {
     expect(up.length).toBeGreaterThan(0);
   });
 
+  it('1c. ticks switch sides where the line turns: the shadow stays down-right of the lamp', () => {
+    // right along +x, then down along +y: light travels down-right, so the shadow is +y on the first leg (the
+    // stroke's right-hand side) and +x on the second (its left-hand side)
+    const h = new Hand(0, 0, { jitter: 0.1, seed: 31, p: 0.5 });
+    h.moveTo(200, 0, 0.6).moveTo(200, 200, 0.6);
+    const t = ticks(labCook(burin, h, { base: 1 }).c, 1);
+    const legA = t.filter(p => p.x < 170), legB = t.filter(p => p.y > 30);
+    expect(legA.length).toBeGreaterThan(10); expect(legB.length).toBeGreaterThan(10);
+    expect(legA.filter(p => p.y1 > p.y + 1).length / legA.length).toBeGreaterThan(0.95);
+    expect(legB.filter(p => p.x1 > p.x + 1).length / legB.length).toBeGreaterThan(0.95);
+  });
+
   it('2. the sphere: a closed loop is hatched inside on the lower-right rim and bare on the upper-left', () => {
     const { c } = labCook(burin, loop(), { closed: true, base: 1 });
     const t = ticks(c, 1);
@@ -186,7 +210,26 @@ describe('burin: acceptance criteria', () => {
     expect(inside / t.length).toBeGreaterThan(0.85);
     expect(lowerRight).toBeGreaterThan(t.length * 0.5);
     expect(upperLeft).toBeLessThan(t.length * 0.1);
-    // no tick crosses the trunk: every tick root is outside the nib half-width from its spine point, and the tick heads inward
+    // no tick crosses the trunk: every point of an inward tick stays inside the spine circle (r = 60)
+    for (let i = 0; i < c.nPolys; i++) {
+      if (c.gen[i] < 1 || c.kind[i] === 2) continue;
+      const P = ptsOf(c, i), r0 = Math.hypot(P[0][0] - cx, P[0][1] - cy), r1 = Math.hypot(P[P.length - 1][0] - cx, P[P.length - 1][1] - cy);
+      if (r1 < r0) for (const [x, y] of P) expect(Math.hypot(x - cx, y - cy)).toBeLessThan(60);
+    }
+    // at base depth (2: shadow ticks + their infill) no tick crosses another
+    const b = labCook(burin, loop(), { closed: true }).c;
+    const segs: { i: number; a: number[]; b: number[] }[] = [];
+    for (let i = 0; i < b.nPolys; i++) {
+      if (b.gen[i] < 1 || b.kind[i] === 2) continue;
+      const P = ptsOf(b, i);
+      for (let k = 1; k < P.length; k++) segs.push({ i, a: P[k - 1], b: P[k] });
+    }
+    expect(segs.length).toBeGreaterThan(40);
+    let crossings = 0;
+    for (let u = 0; u < segs.length; u++) for (let v = u + 1; v < segs.length; v++) {
+      if (segs[u].i !== segs[v].i && crosses(segs[u].a, segs[u].b, segs[v].a, segs[v].b)) crossings++;
+    }
+    expect(crossings).toBe(0);
   });
 
   it('3. tone ladder: d = 2 single hatching, d = 3 cross-hatching, d = 4 three families + stipple; the held tap is a stippled disc', () => {

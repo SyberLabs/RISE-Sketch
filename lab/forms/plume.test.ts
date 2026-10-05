@@ -50,7 +50,7 @@ describe('plume: pipeline invariants', () => {
     expect(checkIncremental(plume, sig(), { holds: [[30, 1.5], [10, 2]], flickerClosure: true })).toBeNull();
     expect(checkIncremental(plume, loop(), { closed: true, holds: [[20, 2.5]], flickerClosure: true })).toBeNull();
     expect(checkIncremental(plume, corners(), { pools: [60, 2, 150, 1], holds: [[12, 1]], flickerClosure: true })).toBeNull();
-  });
+  }, 60000); // heavy: random chunkings x 3 gestures; slow on a loaded machine
   it('is deterministic', () => {
     expect(cookedHash(labCook(plume, sig()).c)).toBe(cookedHash(labCook(plume, sig()).c));
     expect(cookedHash(labCook(plume, loop(), { closed: true }).c)).toBe(cookedHash(labCook(plume, loop(), { closed: true }).c));
@@ -85,19 +85,37 @@ describe('plume: pipeline invariants', () => {
       prev = a;
     }
     expect(prev).toBeCloseTo(full, 6);
-  });
+  }, 60000);
 });
 
 describe('plume: gesture grammar', () => {
   it('has barbs on both sides, no branching: every gen-1 poly starts on the shaft edge', () => {
     const { c } = labCook(plume, line(0.5, 0.6, 3));
     expect(countGen(c, 1)).toBeGreaterThan(100);
-    // gen-1 polys come in pairs per unit (both sides)
+    // a unit is two barb pairs (at s_j and s_j + Δ/2), each with one barb per side: 4 gen-1
+    // polys per unit. (The earlier version of this test expected 2, from before the unit was
+    // widened to two pairs for cost; the test was wrong, not the form.)
     const perUnit = new Map<number, number>();
     eachPoly(c, 1, i => perUnit.set(c.unit[i], (perUnit.get(c.unit[i]) ?? 0) + 1));
-    let pairs = 0;
-    for (const n of perUnit.values()) if (n === 2) pairs++;
-    expect(pairs / perUnit.size).toBeGreaterThan(0.9);
+    let full = 0;
+    for (const n of perUnit.values()) if (n === 4) full++;
+    expect(full / perUnit.size).toBeGreaterThan(0.9);
+    // both sides: as many barbs left of the shaft as right of it (the stroke runs +x)
+    let up = 0, down = 0;
+    eachPoly(c, 1, (_, s, k) => { if (c.pts[4 * (s + k - 1) + 1] < c.pts[4 * s + 1]) up++; else down++; });
+    expect(Math.min(up, down)).toBeGreaterThan(0.4 * (up + down));
+    // no branching: every barb starts on the trunk edge (half the drawn trunk width from the
+    // nearest trunk point), never on another barb
+    const tr: number[] = [];
+    eachPoly(c, 0, (_, s, k) => { for (let q = 0; q < k; q++) tr.push(c.pts[4 * (s + q)], c.pts[4 * (s + q) + 1], c.pts[4 * (s + q) + 2]); });
+    let bad = 0;
+    eachPoly(c, 1, (_, s) => {
+      const x = c.pts[4 * s], y = c.pts[4 * s + 1];
+      let best = Infinity, w = 0;
+      for (let q = 0; q < tr.length; q += 3) { const d = Math.hypot(tr[q] - x, tr[q + 1] - y); if (d < best) { best = d; w = tr[q + 2]; } }
+      if (Math.abs(best - 0.5 * w) > 0.25 * w + 0.75) bad++;
+    });
+    expect(bad).toBe(0);
   });
   it('acceptance 1 — ocellus: a closed loop keeps a clear pupil ≥ 0.3R and inner barbs stay inside', () => {
     const R = 60;

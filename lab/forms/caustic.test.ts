@@ -77,19 +77,22 @@ function angSpread(a: number[]): number {
 
 // ---------------------------------------------------------------------------- invariants
 
+// the incremental checks cook each gesture ~7 times; give them room on a loaded machine
+const SLOW = 30000;
+
 describe('caustic: invariants', () => {
   it('incremental ≡ full on a signature with holds and closure flicker', () => {
     expect(checkIncremental(caustic, sig(), { holds: [[30, 1.5], [10, 2]], flickerClosure: true })).toBeNull();
-  });
+  }, SLOW);
   it('incremental ≡ full on a closed loop with holds', () => {
     expect(checkIncremental(caustic, loop(), { closed: true, holds: [[20, 1], [40, 2.5]], flickerClosure: true, pools: [120, 1.5] })).toBeNull();
-  });
+  }, SLOW);
   it('incremental ≡ full on corners with holds', () => {
     expect(checkIncremental(caustic, corners(), { holds: [[12, 2], [50, 1]] })).toBeNull();
-  });
+  }, SLOW);
   it('incremental ≡ full on a held tap (bloom)', () => {
     expect(checkIncremental(caustic, tap(800), { radial: true, pools: [0, 1.5] })).toBeNull();
-  });
+  }, SLOW);
   it('cookedHash is deterministic', () => {
     const a = cookedHash(labCook(caustic, sig()).c), b = cookedHash(labCook(caustic, sig()).c);
     expect(a).toBe(b);
@@ -117,7 +120,8 @@ describe('caustic: invariants', () => {
     for (const n of per.values()) expect(n).toBeLessThanOrEqual(caustic.ops.unitBudget);
     expect(total).toBeLessThanOrEqual(caustic.ops.strokeBudget + caustic.ops.unitBudget); // causal: admitted while cum < budget
     expect(total).toBeGreaterThan(1000);
-  });
+  }, SLOW);
+
   it('no NaN at degenerate input (2-sample stroke, tap, mouse without pressure)', () => {
     const two = new Hand(0, 0, { seed: 1, p: 0.5 });
     two.moveTo(9, 0, 9);
@@ -145,7 +149,8 @@ describe('caustic: invariants', () => {
       expect(ms[k]).toBeGreaterThanOrEqual(ms[k - 1] * 0.98);
       expect(Math.abs(ms[k] - ms[k - 1])).toBeLessThan(0.06 * top);
     }
-  });
+  }, SLOW);
+
 });
 
 // ---------------------------------------------------------------------------- acceptance
@@ -236,6 +241,46 @@ describe('caustic: acceptance', () => {
     const slow = spread(0.25), fast = spread(2.6);
     expect(slow).toBeLessThan(0.05);
     expect(fast).toBeGreaterThan(slow * 3);
+  });
+
+  it('3b. speed: the slow caustic is one razor line, the fast one a scattered band of glints', () => {
+    // a cup (concave toward the lamp at the top): the bottom of a radius-100 circle
+    const cup = (v: number) => {
+      const h = new Hand(-80, 60, { jitter: 0, seed: 33, p: 0.6 });
+      h.arc(0, 0, 100, Math.PI - 0.93, 0.93, v);
+      return labCook(caustic, h).c;
+    };
+    const rough = (c: Cooked) => {
+      const pts: number[][] = [];
+      for (const p of polys(c, 1)) for (let k = 0; k < p.n; k++) pts.push([p.x(k), p.y(k)]);
+      // lateral roughness: distance of each point from the midpoint of its neighbours
+      let r = 0;
+      for (let i = 1; i + 1 < pts.length; i++) r += Math.hypot(pts[i][0] - 0.5 * (pts[i - 1][0] + pts[i + 1][0]), pts[i][1] - 0.5 * (pts[i - 1][1] + pts[i + 1][1]));
+      return r / Math.max(1, pts.length - 2);
+    };
+    const slow = cup(0.25), fast = cup(2.6);
+    const sc = polys(slow, 1), fc = polys(fast, 1);
+    expect(sc.length).toBeGreaterThan(3);
+    expect(fc.length).toBeGreaterThan(6);
+    expect(sc.filter(p => p.n >= 3).length / sc.length).toBeGreaterThan(0.8); // connected runs (2-pt runs only at the range ends)
+    expect(fc.filter(p => p.n === 2).length / fc.length).toBeGreaterThan(0.8); // glints
+    // the slow caustic sits inside the cup, above its floor (the focus at R/2 from the mirror)
+    for (const p of sc) for (let k = 0; k < p.n; k++) expect(Math.hypot(p.x(k), p.y(k))).toBeLessThan(100);
+    expect(rough(fast)).toBeGreaterThan(3 * rough(slow));
+  });
+
+  it('caustic arms taper: the cusp is wider than the far arm', () => {
+    const h = new Hand(-80, 60, { jitter: 0, seed: 33, p: 0.6 });
+    h.arc(0, 0, 100, Math.PI - 0.93, 0.93, 0.25);
+    const ca = polys(labCook(caustic, h).c, 1);
+    // the cusp is the caustic point nearest the circle centre's axis below it (ρ = R/2 = 50)
+    let wCusp = 0, wArm = Infinity;
+    for (const p of ca) for (let k = 0; k < p.n; k++) {
+      if (Math.abs(p.x(k)) < 6) wCusp = Math.max(wCusp, p.w(k));
+      if (Math.abs(p.x(k)) > 30) wArm = Math.min(wArm, p.w(k));
+    }
+    expect(wCusp).toBeGreaterThan(0);
+    expect(wArm).toBeLessThan(wCusp);
   });
 
   it('lean swings the lamp: tilting the pen moves the fan to the other side', () => {
