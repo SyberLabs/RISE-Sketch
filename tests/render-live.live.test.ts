@@ -646,6 +646,28 @@ describe('lifted selection, ground and camera', () => {
     expect(e.live.inspect().length).toBe(0);
   });
 
+  it('camera moves with no live ink leave the blank layers alone and report them blank', () => {
+    // every pan / zoom frame used to full-clear the already empty #dry and #wet
+    const e = setup({ form: 'sprout' });
+    const blank: Record<string, boolean> = {};
+    (e.host as unknown as { layerBlank(l: string, b: boolean): void }).layerBlank = (l, b) => { blank[l] = b; };
+    tick(e);  // first frame: the full repaint of both layers finds nothing to draw
+    expect(blank).toEqual({ dry: true, wet: true });
+    e.host.dryC.ctx.take(); e.host.wetC.ctx.take();
+    for (let k = 0; k < 3; k++) { e.live.onCamera('gesture'); tick(e); }
+    expect(e.host.dryC.ctx.ops.length).toBe(0);
+    expect(e.host.wetC.ctx.ops.length).toBe(0);
+    // ink shows the layer again; a camera move then repaints it in full
+    drawSome(e, 40);
+    expect(blank.wet).toBe(false);
+    e.host.wetC.ctx.take();
+    e.live.onCamera('settled');
+    tick(e);
+    const ops = e.host.wetC.ctx.take();
+    expect(ops.some(o => o.op === 'clearRect')).toBe(true);
+    expect(fills(ops).length).toBeGreaterThan(0);
+  });
+
   it('a ground flip re-rasters with the new ink tables and composite op', () => {
     const e = setup({ form: 'sprout' });
     drawPath(e, PATH);

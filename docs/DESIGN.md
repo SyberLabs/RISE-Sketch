@@ -948,10 +948,10 @@ Bottom to top:
 | # | Element | Contents | Blend |
 |---|---|---|---|
 | 0 | `#ground` (div) | CSS ground (§6.1) | — |
-| 1 | `#base` | Committed tiles composited under the camera transform. Re-composited only on a camera or tile change. | CSS `plus-lighter` (Night) / `multiply` (Paper) |
+| 1 | `#base` | Committed tiles composited under the camera transform. Re-composited only on a camera or tile change; a gesture frame whose last composite still covers the viewport (a zoom in, or a return towards it) moves it by CSS transform instead, and the settle re-composites. | CSS `plus-lighter` (Night) / `multiply` (Paper) |
 | 2 | `#bloomA`, `#bloomB` (Night only) | ¼-resolution blurred ink, double-buffered (§6.7) | CSS `plus-lighter`, opacity .30 |
 | 3 | `#dry` | Settled live polys; committed strokes that are still baking; the **lifted selection** | Same as `#base` |
-| 4 | `#wet` | Unsettled tail, hot window, pool window, young growth, prediction, halo, and animating strokes (reveal, un-grow, fold-out, restyle morph). Cleared by dirty rects built from per-poly boxes. | Same as `#base` |
+| 4 | `#wet` | Unsettled tail, hot window, pool window, young growth, prediction, halo, and animating strokes (reveal, un-grow, fold-out, restyle morph). Cleared by dirty rects built from per-poly boxes. `#dry` and `#wet` are hidden while blank, so pan and zoom frames neither clear nor blend empty layers. | Same as `#base` |
 | 5 | `#overlay` | Cursor, predicted tip, weld ring, lasso, eraser ring and doom mask, selection bounds and outlines. `desynchronized: true`, DPR ≤ 2. | Normal |
 
 **Selection dimming.** While a selection is lifted, `#base` and the bloom canvases go to CSS opacity .45. No tile re-renders are needed.
@@ -1055,7 +1055,7 @@ There are two reveal kinds, both applied at tessellation. **Neither calls an ope
 - **Source:** the visible tiles, drawn at ¼ resolution into a scratch canvas. That is 20–40 small `drawImage` calls.
 - **Blur:** a dual-filter chain of three 2× downsamples followed by three 2× upsamples, using `drawImage` with `imageSmoothingQuality = 'high'`. It never uses `ctx.filter`, which Safari does not support reliably.
 - **Double buffer:** after each bake, the new bloom renders into the back buffer and cross-fades in over 400 ms. Unchanged regions are identical in both buffers, so only the new stroke's glow fades in: the ink *cures* into light.
-- **Camera gestures:** during a gesture, the bloom canvases follow a CSS transform. They recompute on settle.
+- **Camera gestures:** during a gesture, the bloom canvases follow a CSS transform. They recompute once the gesture ends (not when a pause mid-gesture lets tiles render).
 - **Scope:** Night only. Live layers are not bloomed; the hot trail stands in for that glow.
 
 ### 6.8 Caching
@@ -1082,7 +1082,7 @@ There are two reveal kinds, both applied at tessellation. **Neither calls an ope
 - Fit uses the content box plus a 6% margin.
 - Rotation is P1. In P0, `camera.rot` and `recipe.rot` are 0.
 - **During pan or zoom**, only cached tiles are composited, and stale tiles stay visible.
-- **150 ms after the last camera change**, the current level renders centre-out in time slices, with a one-tile prefetch ring.
+- **150 ms after the last camera change**, the current level renders centre-out in time slices, with a one-tile prefetch ring. A gesture that ends (navEnd, a glide's last step) settles at once. A first render left behind on another level pauses until that level is current again.
 - **Invalidation** (remove, restyle, lift) re-renders only the dirty sub-rect of each affected tile. That means clip, clear, and redraw the strokes whose boxes intersect it.
 
 **Memory: `render/ledger.ts` (CanvasLedger)** counts every canvas byte: tiles, live layers, bloom, sheets, export.

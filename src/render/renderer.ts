@@ -28,7 +28,7 @@ import type {
 import { createLiveLayer, drawInk, type LiveHostExt } from './live';
 import { createOverlay } from './overlay';
 import { createGlyphs } from './glyphs';
-import { TileCache, TILE_BYTES, type AddHint, type Drawable, type TileDraw, type TileSource, type TileView } from './tiles';
+import { TileCache, TILE_BYTES, type AddHint, type Drawable, type Tile, type TileDraw, type TileSource, type TileView } from './tiles';
 import { capDpr, createCompositor, DIM_MS, opFor, snapshotDocBox, type Compositor } from './compositor';
 export { capDpr, snapshotDocBox, MAX_VIEWPORT_PX } from './compositor';
 import { createBloom, type Bloom } from './bloom';
@@ -37,6 +37,7 @@ import { inkTableFor, regionMatrix, viewMatrix, type DrawOpts } from './raster';
 import { clampScale, sameCamera, snapToDevice } from './camera';
 import { grainDataUrl, paintGround } from './ground';
 import { conservativeBox } from '../scene/query';
+import { endFrame, rstats } from './stats';
 
 /** Camera settle delay before missing tiles render (DESIGN §6.9). */
 export const SETTLE_MS = 150;
@@ -162,6 +163,14 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
   let phase: 'gesture' | 'settled' = 'settled';
   let camDirty = false, viewDirty = true, baseDirty = true, bloomDirty = false;
   let settled = true, settleTimer = 0;
+  /** #base was last composited with gesture-quality smoothing (re-composite on settle). */
+  let lowQuality = false;
+  /** The last real composite of #base: its camera and viewport, the tiles it blitted, their revision. */
+  const ref = {
+    cam: null as Camera | null, list: [] as Tile[], revs: [] as number[], rev: -1, complete: false, cssW: 0, cssH: 0, dpr: 0,
+  };
+  /** #base is shown under a CSS transform (transform-only gesture frames) instead of re-composited. */
+  let baseXf = false;
   let liveKick = false, liveChanged = false, liveMs = 0;
   let lastFrameAt = -1, frameInterval = 1000 / 60;
   const held = new Map<StrokeId, Hold>();
@@ -257,6 +266,7 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
     matrixFor: (origin: Vec2) => viewMatrix(origin, cam, cssW, cssH, dpr),
     inkTable: r => inkTableFor(r, ground),
     bake,
+    layerBlank: (l, b) => comp.setBlank(l, b),
     requestFrame,
     reducedMotion: reduced,
     now: () => clock(),
@@ -528,12 +538,58 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
   }
 
   function composite(): void {
-    comp.composite(ctx => { tiles.drawInto(ctx, settled ? 'high' : 'low'); }, bloom.front, bloom.alpha);
+    rstats.c.composites++;
+    lowQuality = !settled;
+    comp.composite(ctx => { tiles.drawInto(ctx, settled ? 'high' : 'low', ref.list); }, bloom.front, bloom.alpha);
+    ref.cam = cam; ref.rev = tiles.contentRev; ref.cssW = cssW; ref.cssH = cssH; ref.dpr = dpr;
+    ref.complete = tiles.lastDrawMissing === 0;
+    tiles.revsOf(ref.list, ref.revs);
+    if (baseXf) { comp.transformBase(''); baseXf = false; }
     if (snap) drawSnap();
     baseDirty = false;
   }
 
+  /**
+   * A gesture frame in which only the camera moved (DESIGN §6.2: #base is the tiles under the camera
+   * transform). When the last composite, moved by a CSS transform, still covers the viewport (a
+   * zoom in, or back towards where it was drawn), #base is transformed instead of redrawn: no
+   * canvas work at all. That is exact when a fresh composite would blit the same unchanged tiles;
+   * it is also used, up to a √2 magnification (one tile level), when the last composite was
+   * complete and its tiles are unchanged but another level is cached for the new scale: the same
+   * ink, resampled once more (DESIGN §6.9: during gestures stale tiles stay visible). The settle
+   * re-composites #base at the settled camera.
+   */
+  function transformOnly(): boolean {
+    const r = ref.cam;
+    if (!r || phase !== 'gesture' || comp.blitting || snap) return false;
+    if (ref.cssW !== cssW || ref.cssH !== cssH || ref.dpr !== dpr) return false;
+    const f = cam.scale / r.scale;
+    const tx = cssW * 0.5 * (1 - f) + (r.cx - cam.cx) * cam.scale;
+    const ty = cssH * 0.5 * (1 - f) + (r.cy - cam.cy) * cam.scale;
+    // the composited viewport [0, cssW] × [0, cssH] lands on [tx, tx + f·cssW] × [ty, ty + f·cssH]
+    const e = 1e-3;
+    if (tx > e || ty > e || tx + f * cssW < cssW - e || ty + f * cssH < cssH - e) return false;
+    const exact = !tiles.inkChanged && tiles.contentRev === ref.rev && tiles.sameDisplay(ref.list);
+    if (!exact && !(ref.complete && f <= Math.SQRT2 + 1e-9 && tiles.intact(ref.list, ref.revs))) return false;
+    const identity = Math.abs(f - 1) < 1e-9 && Math.abs(tx) < 1e-6 && Math.abs(ty) < 1e-6;
+    comp.transformBase(identity ? '' : `translate(${tx}px, ${ty}px) scale(${f})`);
+    baseXf = !identity;
+    tiles.changed = false;
+    rstats.c.transformOnly++;
+    return true;
+  }
+
   function frame(now: number, budgetMs: number): boolean {
+    const t0 = clock();
+    const more = frameInner(now, budgetMs);
+    const c = rstats.c;
+    c.frames++;
+    c.frameMs += clock() - t0;
+    endFrame(now);
+    return more;
+  }
+
+  function frameInner(now: number, budgetMs: number): boolean {
     if (disposed) return false;
     const t0 = clock();
     let more = false;
@@ -556,6 +612,7 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
 
     // 1. camera / viewport
     let forced = false;
+    const camOnly = camDirty && !viewDirty;
     if (camDirty || viewDirty) {
       tiles.setView(view());
       bloom.follow(view());
@@ -591,7 +648,9 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
     if (groundSwitch && (clock() >= groundSwitch.deadline || tiles.visibleComplete())) finishGroundSwitch();
     const allReady = txns.every(txnReady);
     const want = forced || baseDirty || tiles.changed || txns.length > 0;
-    if (want && !groundSwitch && (forced || (!suspended && allReady && !tiles.busy()))) {
+    // a camera-only gesture frame may just move the last composite (no canvas work)
+    const moved = want && !groundSwitch && camOnly && txns.length === 0 && !baseDirty && !liveKick && transformOnly();
+    if (!moved && want && !groundSwitch && (forced || (!suspended && allReady && !tiles.busy()))) {
       const list = txns.splice(0, txns.length);
       for (const t of list) if (t.before) runSafe(t.before);
       if (tiles.inkChanged) { tiles.inkChanged = false; bloomDirty = ground === 'night'; }
@@ -612,9 +671,11 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
     // 5. overlay
     if (overlay.frame(now)) more = true;
 
-    // 6. bloom (Night): after the visible tiles settle
+    // 6. bloom (Night): after the gesture ends and the visible tiles settle (DESIGN §6.7: during a
+    //    gesture the buffers follow the camera by CSS transform; a pause mid-gesture renders tiles
+    //    but does not recompute the glow the next event would make stale again)
     if (bloomDirty && ground === 'night' && !groundSwitch) {
-      if (settled && txns.length === 0 && tiles.visibleComplete()) {
+      if (settled && phase === 'settled' && txns.length === 0 && tiles.visibleComplete()) {
         bloom.render(comp.inkSource, view(), !reduced());
         bloomDirty = false;
         if (comp.blitting) liveChanged = true;
@@ -647,20 +708,32 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
   }
 
   // ------------------------------------------------------------------ settle timer
-  function armSettle(): void {
+  /**
+   * The camera changed in phase `ph`. A gesture keeps showing cached tiles until SETTLE_MS after its
+   * last change (DESIGN §6.9); a settled camera (the gesture ended: navEnd, a glide's last step, a
+   * reset) has nothing left to wait for and settles at once, so a wheel burst's end does not wait
+   * out a second timer and re-render the glow twice.
+   */
+  function armSettle(ph: 'gesture' | 'settled'): void {
     if (settleTimer) { clearTimeout(settleTimer); settleTimer = 0; }
     // nothing cached to show meanwhile (first view, after reset/purge): render at once
-    if (tiles.tiles.size === 0) { settled = true; tiles.settled = true; return; }
+    if (ph === 'settled' || tiles.tiles.size === 0) { settle(); return; }
     settled = false;
     tiles.settled = false;
     settleTimer = window.setTimeout(() => {
       settleTimer = 0;
-      settled = true;
-      tiles.settled = true;
-      bloomDirty = true;
-      baseDirty = true;
+      settle();
       requestFrame();
     }, SETTLE_MS);
+  }
+
+  /** Missing tiles may render; the glow is stale; a gesture-quality #base is redone at 'high'. */
+  function settle(): void {
+    if (!settled) rstats.c.settles++;
+    settled = true;
+    tiles.settled = true;
+    bloomDirty = true;
+    if (lowQuality || baseXf) baseDirty = true;
   }
 
   // ------------------------------------------------------------------ public API
@@ -994,12 +1067,18 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
     const base: Camera = { cx: c.cx, cy: c.cy, scale: clampScale(c.scale), rot: 0 };
     if (!Number.isFinite(base.cx) || !Number.isFinite(base.cy)) return;
     const next = ph === 'settled' ? snapToDevice(base, cssW, cssH, dpr) : base;
-    if (sameCamera(next, cam) && ph === phase) return;
+    const moved = !sameCamera(next, cam);
+    if (!moved && ph === phase) return;
+    rstats.c.setCamera++;
     cam = next;
     phase = ph;
-    camDirty = true;
-    comp.endFade();
-    armSettle();
+    // a phase change alone (a gesture ending where it stood) needs no forced composite: the settle
+    // re-composites a gesture-quality #base and refreshes the glow
+    if (moved) {
+      camDirty = true;
+      comp.endFade();
+    }
+    armSettle(ph);
     requestFrame();
   }
 
@@ -1028,6 +1107,8 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
   function snapshot(maxEdge: number): Promise<Blob | null> {
     const f = Math.min(dpr, maxEdge > 0 ? maxEdge / Math.max(cssW, cssH) : dpr);
     const W = Math.max(1, Math.round(cssW * f)), H = Math.max(1, Math.round(cssH * f));
+    // a transform-only gesture frame left #base drawn for another camera: composite it for this one
+    if (baseXf && !comp.blitting) { tiles.flushDisplayed(false); composite(); }
     const c = ledger.alloc(W, H, 'snapshot');
     if (!c) return Promise.resolve(null);
     const ctx = c.getContext('2d')!;
@@ -1150,7 +1231,7 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
     get dpr() { return dpr; },
     get busy() {
       return settleTimer !== 0 || txns.length > 0 || tiles.pending > 0 || ensuring.size > 0 || waiting > 0 || groundSwitch !== null ||
-        live.animating > 0 || pendQueued || (bloomDirty && ground === 'night' && !suspended);
+        live.animating > 0 || pendQueued || (bloomDirty && ground === 'night' && !suspended && phase === 'settled');
     },
     debug() {
       return {
