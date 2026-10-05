@@ -55,6 +55,7 @@
  *  - Paper per-generation alpha (ink-forms registry.paperAlphaScale, Echo's Paper exposure) is
  *    applied here through drawInk; tiles draw through it too (render-live contract request §2).
  */
+import { rstats } from './stats';
 import type {
   AABB, ColorStyle, Cooked, DraftStroke, FormId, Ground, IncrementalCook, InkTable, InputSample, Mat2x3, MorphSet,
   PolyView, RecipeCore, StrokeRecipe, Vec2,
@@ -2234,6 +2235,11 @@ export function diffMasks(before: Cooked, after: Cooked): { bMask: Uint8Array; a
 /** Optional LiveHost extension: where predicted tails go (render-live contract request §1). */
 export interface LiveHostExt extends LiveHost {
   readonly overlay?: Pick<OverlayInternal, 'predicted'> | null;
+  /**
+   * #dry or #wet became blank (cleared with nothing drawn) or holds ink again. The renderer hides a
+   * blank layer so the compositor does not blend an empty full-viewport canvas every frame.
+   */
+  layerBlank?(layer: 'dry' | 'wet', blank: boolean): void;
 }
 
 /** Inspection of one item (tests, debug HUD). */
@@ -2295,6 +2301,20 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
   const bridgeA = mkSample(), bridgeB = mkSample();
 
   let dryCtx: Ctx2D | null = null, wetCtx: Ctx2D | null = null;
+  /**
+   * [#dry, #wet] hold no pixels: fully cleared with nothing drawn since. A full repaint of a blank
+   * canvas with nothing to draw (every camera frame of a pan or zoom with no live ink) is skipped.
+   */
+  const blank = [false, false];
+  const setBlank = (k: number, b: boolean): void => {
+    if (blank[k] === b) return;
+    blank[k] = b;
+    (host as LiveHostExt).layerBlank?.(k ? 'wet' : 'dry', b);
+  };
+  const anyInk = (wet: boolean): boolean => {
+    for (const it of items) if (!it.dead) return true;
+    return wet && halo.on;
+  };
   const ctxOf = (c: HTMLCanvasElement): Ctx2D | null => c.getContext('2d') as Ctx2D | null;
 
   function prepare(now: number): void {
@@ -2324,13 +2344,18 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
     if (!ctx) { ctx = ctxOf(canvas); if (wet) wetCtx = ctx; else dryCtx = ctx; }
     const W = canvas.width, H = canvas.height;
     if (!ctx || !(W > 0 && H > 0)) { list.clear(); return; }
+    const k = wet ? 1 : 0;
+    if (list.full && blank[k] && !anyInk(wet)) { list.clear(); return; }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    if (list.full) {
+    const full = list.full;
+    let drew = false;
+    if (full) {
       clip.x0 = 0; clip.y0 = 0; clip.x1 = W; clip.y1 = H;
       ctx.clearRect(0, 0, W, H);
+      rstats.c.fullClears++;
     } else {
       list.clampTo(W, H);
       if (!list.bbox(clip)) { ctx.restore(); list.clear(); return; }
@@ -2345,14 +2370,17 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
     list.clear();
     for (const it of items) {
       if (it.dead || !it.devBox(ib) || !overlaps(ib, clip)) continue;
+      drew = true;
       if (wet) it.drawWet(ctx, clip, cx); else it.drawDry(ctx, clip, cx);
     }
     if (wet && halo.on && haloRect(ib) && overlaps(ib, clip)) {
+      drew = true;
       const dpr = host.dpr();
       drawGlow(ctx, halo.x * dpr, halo.y * dpr, halo.r * dpr, haloAlpha(halo.pre, halo.level, cx.now - halo.flashT0, cx.rm),
         halo.css, cx.ground === 'night' ? 'lighter' : 'multiply');
     }
     ctx.restore();
+    if (full) setBlank(k, !drew); else if (drew) setBlank(k, false);
   }
 
   function flush(): void { repaint(false); repaint(true); }

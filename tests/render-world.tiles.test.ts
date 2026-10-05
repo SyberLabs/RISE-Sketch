@@ -284,6 +284,58 @@ describe('displayed other-level tiles (fallback during gestures)', () => {
   });
 });
 
+describe('gesture economy', () => {
+  it('a first render the camera left on another level pauses until that level is current again', () => {
+    const { w, tc } = setup();
+    for (let i = 0; i < 8; i++) addStroke(w, tc, 'p' + i, { x0: 150 + i * 12, y0: 150, x1: 190 + i * 12, y1: 420 });
+    drain(tc);
+    // a zoom pauses long enough to settle: level-2 renders start, then the zoom goes back
+    tc.setView({ cam: cam(256, 256, 2), cssW: 1400, cssH: 900, dpr: 1 });
+    tc.ensureVisible();
+    let tick = 0, guard = 0;
+    const started = (): number => [...tc.tiles.values()].filter(t => t.level === 2 && t.job && t.job.i > 0).length;
+    while (started() === 0 && guard++ < 1000) tc.run(0, () => tick++);
+    expect(started()).toBeGreaterThan(0);
+    tc.setView({ cam: cam(256, 256, 1), cssW: 1400, cssH: 900, dpr: 1 });
+    const snap = [...tc.tiles.values()].filter(t => t.level === 2 && t.job).map(t => t.job!.i);
+    drain(tc);
+    expect(tc.pending).toBe(0);
+    expect([...tc.tiles.values()].filter(t => t.level === 2 && t.job).map(t => t.job!.i)).toEqual(snap);
+    // back on level 2: the paused renders resume and stay exact (a stroke added meanwhile included)
+    addStroke(w, tc, 'late', { x0: 200, y0: 300, x1: 260, y1: 330 });
+    tc.setView({ cam: cam(256, 256, 2), cssW: 1400, cssH: 900, dpr: 1 });
+    drain(tc);
+    expect(tc.visibleComplete()).toBe(true);
+    expect(checkExact(tc, w)).toEqual([]);
+  });
+
+  it('a viewport covered by complete tiles is not cleared first: each blit replaces its rect', () => {
+    const { w, tc } = setup();
+    addStroke(w, tc, 'a', { x0: 100, y0: 100, x1: 300, y1: 140 });
+    drain(tc);
+    const base = new FakeCanvas(1400, 900);
+    const clears: number[][] = [];
+    const ctx = base.ctx as unknown as { clearRect(x: number, y: number, w: number, h: number): void };
+    ctx.clearRect = (x, y, cw, ch) => { clears.push([x, y, cw, ch]); };
+    tc.drawInto(base.ctx as unknown as CanvasRenderingContext2D);
+    expect(clears.some(c => c[0] === 0 && c[1] === 0 && c[2] === 1400 && c[3] === 900)).toBe(false);
+    // the per-tile replace rects tile the whole viewport
+    let area = 0;
+    for (const [x, y, cw, ch] of clears) {
+      const x0 = Math.max(0, x), y0 = Math.max(0, y), x1 = Math.min(1400, x + cw), y1 = Math.min(900, y + ch);
+      if (x1 > x0 && y1 > y0) area += (x1 - x0) * (y1 - y0);
+    }
+    expect(area).toBe(1400 * 900);
+    // with a cell missing (a gesture to an uncached level), the viewport is cleared first
+    tc.settled = false;
+    tc.setView({ cam: cam(256, 256, 0.6), cssW: 1400, cssH: 900, dpr: 1 });
+    tc.ensureVisible();
+    clears.length = 0;
+    tc.drawInto(base.ctx as unknown as CanvasRenderingContext2D);
+    expect(clears[0]).toEqual([0, 0, 1400, 900]);
+  });
+});
+
 describe('forget()', () => {
   it('drops skipped records of a removed stroke so its cell can complete', () => {
     // regression: a stroke removed before it ever cooked stayed "skipped" in its tile forever,

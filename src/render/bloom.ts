@@ -15,6 +15,7 @@
 import type { Camera } from '../core/types';
 import type { CanvasLedgerExt } from './ledger';
 import { DIM } from './compositor';
+import { rstats } from './stats';
 
 /** CSS opacity of the bloom layer (DESIGN §6.2). */
 export const BLOOM_ALPHA = 0.30;
@@ -176,6 +177,7 @@ export function createBloom(a: HTMLCanvasElement, b: HTMLCanvasElement, ledger: 
       const back = bufs[1 - front];
       const ctx = sized(back.el, bw, bh);
       if (!ctx || !ensureChain()) return;
+      rstats.c.bloomRenders++;
       prep(ctx);
       ctx.clearRect(0, 0, bw, bh);
       ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, bw, bh);

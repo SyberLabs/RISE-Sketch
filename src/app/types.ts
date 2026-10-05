@@ -4,6 +4,7 @@
  * it never touches doc/scene/renderer directly.
  */
 import type { ColorStyle, FormId, Ground, InkId, NibId, StrokeId, StrokeRecipe, ToolState } from '../core/types';
+import type { FrameRecord, RenderCounters } from '../render/stats';
 export type { ToolState };
 
 export type SheetId = 'stroke' | 'color' | 'form' | 'menu' | 'help';
@@ -111,6 +112,11 @@ export interface RiseDebug {
   exportPng(): Promise<{ width: number; height: number; bytes: number }>;
   /** Perf counters since the last reset (CPU-side ms). */
   perf(reset?: boolean): { liveFrameP95: number; liveFrameMax: number; inputP95: number; frames: number; longTasks: number };
+  /**
+   * Render work counters (render/stats.ts): totals and, while recording, one delta per renderer
+   * frame. `reset` zeroes both; `record` turns the per-frame log on or off (scripts/bench-zoom.mjs).
+   */
+  renderStats(opts?: { reset?: boolean; record?: boolean }): { totals: RenderCounters; log: FrameRecord[] };
   /** Pixel probe on the composited stage at viewport CSS px (reads the canvases; slow). */
   probe(sx: number, sy: number): [number, number, number, number];
   /** Wipe local persistence (IndexedDB + rise:* prefs) for clean test runs. */
