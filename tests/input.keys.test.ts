@@ -48,11 +48,20 @@ describe('keyAction: single keys', () => {
     expect(win(k('KeyB', { key: 'x' }))).toEqual({ k: 'nib', dir: 1 });
   });
 
+  it('Digit5–Digit9 and Digit0 pick the six promoted Forms (P0_FORMS order); Shift does not', () => {
+    for (let d = 5; d <= 9; d++) expect(win(k(`Digit${d}`))).toEqual({ k: 'form', index: d - 1 });
+    expect(win(k('Digit0'))).toEqual({ k: 'form', index: 9 });
+    expect(mac(k('Digit7'))).toEqual({ k: 'form', index: 6 });
+    expect(win(k('Digit0', { key: 'à' }))).toEqual({ k: 'form', index: 9 }); // AZERTY: physical key
+    for (let d = 5; d <= 9; d++) expect(win(k(`Digit${d}`, { shiftKey: true }))).toBe(null);
+    expect(win(k('Digit0', { shiftKey: true }))).toEqual({ k: 'resetView' });
+    expect(win(k('Digit5', { ctrlKey: true }))).toBe(null);
+    expect(win(k('Digit0', { altKey: true }))).toBe(null);
+  });
+
   it('P1 keys and unbound keys return null', () => {
-    expect(win(k('Digit5'))).toBe(null);
     expect(win(k('KeyM'))).toBe(null);
     expect(win(k('ArrowLeft'))).toBe(null);
-    expect(win(k('Digit0'))).toBe(null);
     expect(win(k('Digit2', { shiftKey: true }))).toBe(null);
     expect(win(k('KeyG', { shiftKey: true }))).toBe(null);
     expect(win(k('Space'))).toBe(null); // Space is a held modifier, handled by index.ts

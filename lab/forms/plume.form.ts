@@ -5,15 +5,16 @@
  * curved barbs with a soft undulating outer edge (a 24 sp lattice of random vane widths);
  * the entry taper is the bare quill. Fast strokes lay the barbs back toward the tip and
  * ruffle them into groups of 8 sp that sway together; slow strokes are pristine. At depth
- * 1+ barbules fringe each barb (one zigzag poly per barb: a translucent sheet); at depth 2+
- * every second unit grows a loose plumulaceous down barb (a held hand goes fluffy). The
+ * 1+ barbules fringe every second barb (one zigzag poly per barb: a translucent sheet); at
+ * depth 2+ every second barb pair grows a loose plumulaceous down barb (a held hand goes fluffy). The
  * concave vane of a curve is capped at 0.7/|κ̄|, so a closed loop is an ocellus with a clear
  * pupil. A tap is a tuft of down; a bloom grows into a powder-down rosette.
  *
- * Operator model: unit j = two barb pairs, at s_j and s_j + Δ/2, pitch Δ ≈ 3.4 sp (two pairs
- * per unit because the cook's per-unit overhead, not the geometry, dominates the cost: a
- * 300 sp stroke cooks in 7 ms instead of 13). Everything is a prefix or a width, so depth
- * is continuous: barbs to ℓ·clamp(D, 0, 1), barbules to clamp(D − 1, 0, 1),
+ * Operator model: unit j = two barb pairs, at s_j and s_j + Δ/2, pitch Δ ≈ 3.7 sp at S 9 (two
+ * pairs per unit because the cook's per-unit overhead dominates the cost of a unit this small).
+ * Barbules ride on the first pair only (one zigzag per side every Δ), and barbs are 4 substeps
+ * of ≤ 6 sp: ≈ 9 points per sp of stroke at base 2 (the brief budgets 16). Everything is a
+ * prefix or a width, so depth is continuous: barbs to ℓ·clamp(D, 0, 1), barbules to clamp(D − 1, 0, 1),
  * down to clamp(D − 2, 0, 1). The entry factor E is applied at emit only (drawn length and
  * width), so a unit's cooked geometry depends only on the spine within ±6 sp of s_j, d(s_j)
  * and its integer rng addresses.
@@ -25,8 +26,12 @@
  *    taper carries the end, as the brief's own risk note allows.
  *  - Angles are kept in the (σn, T) frame: heading(θ) = σn·sin θ + T·cos θ with θ the angle
  *    from the shaft; rotating toward the tip is θ − γ. No rotation matrices.
- *  - Barbule nodes sit on the barb's own substeps (≤ 6), not every 3 sp, and ℓ is capped at
- *    42 sp, so a broad brush barb stays inside the budget (≤ 106 of 160 points per unit).
+ *  - Barbule nodes sit on the barb's own substeps (≤ 4, from 0.4ℓ), not every 3 sp, and ℓ is
+ *    capped at 42 sp, so a unit is ≤ 56 points at the ceiling whatever the nib.
+ *  - Barbs root on the shaft edge through an undrawn root marker per barb (σn·0.45w), slid in
+ *    by (1 − E) at emit, so the vane stays on the tapering quill (E is still emit-only).
+ *  - The tap tuft is 12 curled down barbs (a swirl, not a random star), barbules at D > 1 and
+ *    12 more between them at D > 2, drawn a little brighter than the vane (it stands alone).
  *  - The concave cap is CAP·sin θ0/|κ̄| rather than 0.7/|κ̄|: barbs leaving a circle of radius
  *    R at angle θ from the shaft all touch the circle R·cos θ and cross each other beyond
  *    R·sin θ, so a fixed cap let fast (laid-back) inner vanes fold through themselves.
@@ -42,7 +47,7 @@ import { RADIAL_ID } from '../../src/ink/operators/line.v1';
 import type { LabFormMeta } from './harness';
 
 export const meta: LabFormMeta = {
-  name: 'Plume — the stroke as a rachis',
+  name: 'Plume',
   v: 102,
   ink: 'ochre',
   notes: 'The stroke is a feather shaft; a vane of parallel curved barbs grows from both edges. Speed sweeps and ruffles the vane into swaying groups; pressure widens it; lean (or curvature) makes it asymmetric; the inner vane of a curve is capped so a loop is an ocellus. Depth 1+ barbules fringe the barbs, depth 2+ (a hold) turns it to down. A tap is a tuft of down.',
@@ -56,7 +61,7 @@ const HALF_WIN = WIN + 5;
 /** Unit depth ceiling. */
 const DMAX = 3;
 /** Barb substeps (max), down steps (max), substep length (sp). */
-const NSUB = 6, NDOWN = 14, SUB = 4;
+const NSUB = 4, NDOWN = 10, SUB = 6;
 /** Barb width: fraction of the nib width, clamped (sp); tip fraction; collar in base widths. */
 const WB_F = 0.16, WB_MIN = 0.45, WB_MAX = 1.4, WB_TIP = 0.3, COLLAR = 0.6;
 /** Barbule and down widths (sp). */
@@ -64,7 +69,7 @@ const W_HAIR = 0.35, W_DOWN = 0.55;
 /** Design alphas (Night) before hierarchy and glow. */
 const ALPHA = 0.5;
 /** Barbule angle from the barb toward the tip, and the barbule length in pitches. */
-const GAMMA = 55 * DEG, BARBULE_F = 0.7;
+const GAMMA = 55 * DEG, BARBULE_F = 0.85;
 /** Down barb length factor and heading wander per step (rad). */
 const DOWN_F = 1.4, WANDER = 0.5;
 /** Vane-width lattice (sp) and ruffle group (sp). */
@@ -77,21 +82,27 @@ const CAP = 0.8;
 /** Shortest and longest barb (sp). */
 const MIN_LEN = 0.6, MAX_LEN = 42;
 /** Points per unit, the causal stroke budget and a tap's tuft budget. */
-const UNIT_BUDGET = 160, STROKE_BUDGET = 24000, TUFT_BUDGET = 640;
+const UNIT_BUDGET = 80, STROKE_BUDGET = 24000, TUFT_BUDGET = 640;
 /** Down barbs of a tap and their heading jitter. */
-const TUFT = 12, TUFT_JIT = 8 * DEG, TUFT_F = 0.8, TUFT_WANDER = 0.7, TUFT_BARBULE = 0.14;
+const TUFT = 12, TUFT_JIT = 8 * DEG, TUFT_F = 1.05, TUFT_WANDER = 0.18, TUFT_CURL = 40 * DEG, TUFT_ALPHA = 0.68, TUFT_BARBULE = 0.3, TUFT_SUB = 3, TUFT_NSUB = 12;
 /** Heading range from the shaft (rad): a hair never crosses the shaft or points back along it. */
 const TH_MIN = 4 * DEG, TH_MAX = 150 * DEG;
 /** Branch gen tags inside a UnitGeom. */
 const G_BARB = 1, G_BARBULE = 2, G_DOWN = 3;
+/**
+ * A root marker (never drawn) precedes each barb: one point holding the offset from the shaft
+ * centre to the barb's root (σn·0.45w). At emit the barb, its barbules and its down slide in by
+ * (1 − E)·offset, so in the entry taper the vane stays rooted on the tapering shaft's edge.
+ */
+const G_ROOT = 0;
 
 const v2 = new Float64Array(2), n2 = new Float64Array(2), t2 = new Float64Array(2);
 /** Node heading angles of the barb being built (scratch). */
-const nodeTh = new Float64Array(NDOWN + 1);
+const nodeTh = new Float64Array(Math.max(NDOWN, TUFT_NSUB, NSUB) + 1);
 
 /** Δ(s): barb pitch from the nib size and crowding. */
 function pitch(S: number, c: number): number {
-  return clamp(2.8 + 0.07 * S, 2.8, 6) * (1 + 0.6 * clamp(c, 0, 1));
+  return clamp(3.1 + 0.07 * S, 3.1, 6.4) * (1 + 0.6 * clamp(c, 0, 1));
 }
 
 /** Smooth lerp of two lattice values. */
@@ -109,8 +120,8 @@ function vaneAt(seed: number, s: number): number {
  * ±wander as a smooth sine. Node angles are left in nodeTh; returns the branch index.
  */
 function hair(g: UnitGeom, gen: number, len: number, x: number, y: number, ax: number, ay: number, bx: number, by: number,
-  th0: number, curve: number, wander: number, seed: number, addr: number, nmax: number, z: number): number {
-  const nsub = Math.max(1, Math.min(nmax, Math.ceil(len / SUB))), d = len / nsub;
+  th0: number, curve: number, wander: number, seed: number, addr: number, nmax: number, sub: number, z: number): number {
+  const nsub = Math.max(1, Math.min(nmax, Math.ceil(len / sub))), d = len / nsub;
   const b = g.beginBranch(gen, len);
   g.addPt(x, y, 0);
   nodeTh[0] = th0;
@@ -139,7 +150,7 @@ function barbules(g: UnitGeom, b: number, len: number, bl: number, ax: number, a
   const zb = g.beginBranch(G_BARBULE, 0);
   let arc = 0, lx = 0, ly = 0, first = true;
   for (let k = 1; k < n; k++) {
-    if (g.pa[o + k] < 0.25 * len) continue;
+    if (g.pa[o + k] < 0.4 * len) continue;
     const t = nodeTh[k] - GAMMA;
     const sn = dsin(t), cs = dcos(t);
     const x = g.px[o + k], y = g.py[o + k];
@@ -162,7 +173,7 @@ function unitCount(g: UnitGeom, D: number, E: number): number {
   let n = 0;
   for (let b = 0; b < g.nB; b++) {
     const gen = g.bGen[b];
-    if (gen === G_BARBULE && !(g.k > 0)) continue;
+    if (gen === G_ROOT || (gen === G_BARBULE && !(g.k > 0))) continue;
     const f = genF(gen, D) * E;
     if (f > 0) n += g.prefixCount(b, g.bLen[b] * f);
   }
@@ -189,23 +200,24 @@ function barbWidth(w0: number, a: number, len: number, collar: number): number {
  */
 function unitEmit(g: UnitGeom, D: number, E: number, z: number, born: number, unit: number, kind: PolyKind, ang: number, hairOnly: boolean, out: Sink): number {
   const gl = glow(g.c), hair = W_HAIR / z, downW = W_DOWN / z;
-  const wb = hairOnly ? hair : clamp(WB_F * g.w * z * E, WB_MIN, WB_MAX) / z;
+  const wb = hairOnly ? downW : clamp(WB_F * g.w * z * E, WB_MIN, WB_MAX) / z;
   const collar = COLLAR * wb * z;
-  let pts = 0;
+  let pts = 0, ox = 0, oy = 0;
   for (let b = 0; b < g.nB; b++) {
     const gen = g.bGen[b];
+    if (gen === G_ROOT) { ox = (1 - E) * g.px[g.bOff[b]]; oy = (1 - E) * g.py[g.bOff[b]]; continue; }
     if (gen === G_BARBULE && !(g.k > 0)) continue;
     const f = genF(gen, D) * E;
     if (!(f > 0)) continue;
     const len = g.bLen[b], lam = len * f;
     const o = g.bOff[b], cnt = g.bCnt[b], pa = g.pa;
     const barb = gen === G_BARB;
-    const alpha = ALPHA * hierarchy(gen) * gl * (gen === G_BARBULE ? g.k : 1);
+    const alpha = (hairOnly ? TUFT_ALPHA : ALPHA) * hierarchy(gen) * gl * (gen === G_BARBULE ? g.k : 1);
     out.begin(barb ? kind : PolyKind.Ribbon, gen, alpha, toneOf(g.p, gen), born, unit, 1);
     let k = 0;
     for (; k < cnt && (k === 0 || pa[o + k] < lam); k++) {
       const w = barb ? barbWidth(wb, pa[o + k], len, collar) : gen === G_DOWN ? downW : hair;
-      out.pt(g.px[o + k], g.py[o + k], w > hair ? w : hair, ang);
+      out.pt(g.px[o + k] - ox, g.py[o + k] - oy, w > hair ? w : hair, ang);
     }
     if (k < cnt) {
       const a0 = pa[o + k - 1], a1 = pa[o + k];
@@ -213,7 +225,7 @@ function unitEmit(g: UnitGeom, D: number, E: number, z: number, born: number, un
       const x = t >= 1 ? g.px[o + k] : g.px[o + k - 1] + (g.px[o + k] - g.px[o + k - 1]) * t;
       const y = t >= 1 ? g.py[o + k] : g.py[o + k - 1] + (g.py[o + k] - g.py[o + k - 1]) * t;
       const w = barb ? barbWidth(wb, lam, len, collar) : gen === G_DOWN ? downW : hair;
-      out.pt(x, y, w > hair ? w : hair, ang);
+      out.pt(x - ox, y - oy, w > hair ? w : hair, ang);
     }
     pts += out.end();
   }
@@ -292,10 +304,13 @@ const chain: ChainOperator = {
         const th = th0 + 8 * DEG * rho * (2 * ra - 1);
         if (!(len >= MIN_LEN)) continue;
         const x0 = v2[0] + ax * half, y0 = v2[1] + ay * half;
-        const b = hair(g, G_BARB, len, x0, y0, ax, ay, t2[0], t2[1], th, curve, 0, seed, addr, NSUB, z);
-        barbules(g, b, len, bl0 * (0.8 + 0.4 * rnd(seed, Ch.Length, addr, 1)), ax, ay, t2[0], t2[1], z);
+        const rb = g.beginBranch(G_ROOT, 0); g.addPt(ax * half, ay * half, 0); g.endBranch(rb);
+        const b = hair(g, G_BARB, len, x0, y0, ax, ay, t2[0], t2[1], th, curve, 0, seed, addr, NSUB, SUB, z);
+        // barbules on the first pair only: a barbule zigzag every Δ per side (the pair between
+        // reads through them; halving them halves the dominant point cost)
+        if (q === 0) barbules(g, b, len, bl0 * (0.8 + 0.4 * rnd(seed, Ch.Length, addr, 1)), ax, ay, t2[0], t2[1], z);
         // down on the first pair of each unit: every second barb pair
-        if (q === 0) hair(g, G_DOWN, DOWN_F * len, x0, y0, ax, ay, t2[0], t2[1], th, curve, WANDER, seed, addr + 1, NDOWN, z);
+        if (q === 0) hair(g, G_DOWN, DOWN_F * len, x0, y0, ax, ay, t2[0], t2[1], th, curve, WANDER, seed, addr + 1, NDOWN, SUB, z);
       }
     }
     g.ceil = unitCeiling(g, DMAX, UNIT_BUDGET);
@@ -339,7 +354,7 @@ function plumeRadial(cx: FormCx, seed: RadialSeed, depth: number, out: Sink): nu
       const ux = dcos(a), uy = dsin(a), px = -uy, py = ux;
       const l = len * (0.8 + 0.4 * rnd(r.seed, Ch.Length, addr));
       // gens: ring 0 down at 1 (grows 0–1), its barbules at 2, ring 1 down at 3
-      const b = hair(tuft, ring === 0 ? G_BARB : G_DOWN, l, seed.x + ux * half, seed.y + uy * half, ux, uy, px, py, 90 * DEG, 0, TUFT_WANDER, r.seed, addr, NDOWN, z);
+      const b = hair(tuft, ring === 0 ? G_BARB : G_DOWN, l, seed.x + ux * half, seed.y + uy * half, ux, uy, px, py, 90 * DEG, TUFT_CURL, TUFT_WANDER, r.seed, addr, TUFT_NSUB, TUFT_SUB, z);
       if (ring === 0) barbules(tuft, b, l, bl, ux, uy, px, py, z);
     }
   }

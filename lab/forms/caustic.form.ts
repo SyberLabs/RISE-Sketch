@@ -19,19 +19,24 @@
  *   c(s)     = pos(s) + ρ_f·r            caustic point (real faces only)
  *   scatter  = ±(0.02 + 0.25·smoothstep(0.6, 2.4, vn)) rad on r: slow = polished, fast = brushed
  *   ℓ_max    = (24 + 2.5S)(0.6 + 0.8p)(1 − 0.5·max(0, cs·sign(r·n)))
- *   ℓ(D)     = ℓ_max·min(D, 1)·(1 + 0.35·max(0, D − 1))       a prefix of the ray
+ *   ℓ(D)     = ℓ_max·min(D, 1)·(1 + 0.6·max(0, D − 1))        a prefix of the ray (the brief's law)
  *   α_ray    = (0.14 + 0.18p)·min(1, ρ_f/12)·smoothstep(0, 0.12, cos θ)·glow(c)
  *              ·(1 + 0.3·clamp(D − 1, 0, 1))                   (gen 2; a hold brightens more than it reaches)
- *   source   the pair r rotated ±2.5° at α × clamp(D − 2, 0, 1): above the default base the
- *            source spreads, so a held spot triples its rays on an otherwise quiet fan
+ *   source   the pair r rotated ±2.5° about the ray origin (at emit) at α × clamp(D − 2, 0, 1):
+ *            above the default base the source spreads, so a held spot triples its rays
  *   caustic  5-point polyline c(s) over the unit (gen 1), split into runs of real points,
  *            α 0.9 × mean of smoothstep(0, 4, ℓ(D) − ρ_f)·smoothstep(140, 70, ρ_f)
- *            ·smoothstep(0, 6, ρ_f)·cos θ  (a focus on the mirror itself is only a hot spot)
+ *            ·smoothstep(0, 6, ρ_f)·cos θ  (a focus on the mirror itself is only a hot spot);
+ *            width 0.35w·(0.5 + 0.5cos θ)·taper(ρ_f) (full to 40 sp, a thread by 120 sp)
+ *            + 0.04·σ·ρ_f. Each caustic point's r also turns by its own scatter σ·(2rnd − 1)
+ *            (address (j, 16 + m); the shared end point takes the next unit's (j + 1, 16)),
+ *            and above σ ≈ 0.05 the run breaks into glints (segments shrunk about their
+ *            midpoints by 0.8·smoothstep(0.05, 0.2, σ)): slow = a razor line, fast = glitter
  *
  * Every ray is a prefix or an alpha weight of geometry cooked once at the ceiling, so depth
  * is continuous; the lit-face flip at L ⟂ n is continuous because cos θ → 0 fades it. A unit
  * is a pure function of the spine within 20 sp of s_j, d(s_j), the entry factor and the rng
- * address (Ch.Jitter, j, q).
+ * addresses (Ch.Jitter, j, q) and (Ch.Jitter, j | j + 1, 16 + m).
  *
  * Decisions:
  *  - Virtual caustics (convex faces) are not drawn: the real rays diverge there and read as
@@ -39,10 +44,11 @@
  *  - A caustic run breaks where a point is virtual, beyond 140 sp or more than 40 sp from
  *    its neighbour (corners), so no long faint chords cross the drawing. Foci further than
  *    ~100 sp from a gentle bend fade out: they floated as detached bright dashes.
- *  - A hold brightens the fan (×1.3 by D = 2) and triples it (D > 2) more than it lengthens
- *    it (×2.05 at D = 4): spread too far, the light thinned into haze instead of blazing.
- *  - Ray width is max(0.7 sp, 0.3·w) tapering to 0.4 sp over the DRAWN length (Drift's rule):
- *    a short ray at low depth still ends in a point; thinner rays died under the hairline LOD.
+ *  - A hold brightens the fan (×1.3 by D = 2), triples it (D > 2) and lengthens it by the
+ *    brief's law (×1.56 from D = 2 to 3.5, ×2.8 at D = 4 against D = 1).
+ *  - Ray width is clamp(0.25·w, 0.7, 2.4) sp tapering to 0.4 sp over the DRAWN length (Drift's
+ *    rule): a short ray at low depth still ends in a point; thinner rays died under the
+ *    hairline LOD, and a 22 sp brush without the cap threw spikes instead of light.
  *  - Rays beyond the stroke's end (s > L) are dropped at cook: a live-cooked unit never has
  *    any (need = s + 20 > s + 16), so cook ≡ finish holds.
  *  - Chisel: the spine normal is used (the brief's chisel-edge normal is left for later).
@@ -58,7 +64,7 @@ import { RADIAL_ID } from '../../src/ink/operators/line.v1';
 import type { LabFormMeta } from './harness';
 
 export const meta: LabFormMeta = {
-  name: 'Caustic — the stroke as a mirror',
+  name: 'Caustic',
   v: 103,
   ink: 'spectral',
   notes: 'A lamp from the lean side (top when upright) lights the stroke as a mirror: rays leave the lit face at the mirror angle; concave bends focus them on a cusped caustic, straight runs hatch, corners cross in an X, a loop fills with a nephroid. Speed = polish (scatter), pressure = reflectivity and reach, hold = longer, tripled rays, nearby ink = shorter and dimmer. Tap = glint with a star.',
@@ -79,14 +85,20 @@ const RHO_MIN = 6;
 const RHO_CAP = 400, RHO_FAR = 140, RHO_NEAR = 70;
 /** Longest caustic segment (sp) before the run breaks. */
 const SEG_MAX = 40;
+/** Rough-mirror band: extra caustic width BAND_W·σ·ρ_f (sp) and alpha ÷ (1 + BAND_DIM·σ). */
+const BAND_W = 0.04, BAND_DIM = 1.5;
+/** Glints: segment gap GLINT_GAP·smoothstep(GAP_S0, GAP_S1, σ). */
+const GLINT_GAP = 0.8, GAP_S0 = 0.05, GAP_S1 = 0.2;
+/** Caustic width taper: full below TAPER_NEAR sp of focal distance, TAPER_MIN beyond TAPER_FAR. */
+const TAPER_NEAR = 40, TAPER_FAR = 120, TAPER_MIN = 0.12;
 /** Ray reach: (LEN0 + LEN_S·S)(0.6 + 0.8p) sp; depth growth F(D), F(DMAX) = FD4. */
-const LEN0 = 24, LEN_S = 2.5, LEN_GROW = 0.35, FD4 = 1 + LEN_GROW * (DMAX - 1);
+const LEN0 = 24, LEN_S = 2.5, LEN_GROW = 0.6, FD4 = 1 + LEN_GROW * (DMAX - 1);
 /** Hold brightness: ray α × (1 + BLAZE·clamp(D − 1, 0, 1)). */
 const BLAZE = 0.3;
 /** Alphas (Night design values). */
 const RAY_A0 = 0.14, RAY_AP = 0.18, CAUSTIC_A = 0.9;
-/** Widths: ray = max(RAY_W_MIN sp, RAY_W·w), caustic = CAUSTIC_W·w, floor W_FLOOR sp. */
-const RAY_W = 0.3, RAY_W_MIN = 0.7, CAUSTIC_W = 0.35, W_FLOOR = 0.4;
+/** Widths: ray = clamp(RAY_W·w, RAY_W_MIN, RAY_W_MAX) sp (a broad brush throws rays, not spikes), caustic = CAUSTIC_W·w, floor W_FLOOR sp. */
+const RAY_W = 0.25, RAY_W_MIN = 0.7, RAY_W_MAX = 2.4, CAUSTIC_W = 0.35, W_FLOOR = 0.4;
 const UNIT_BUDGET = 40, STROKE_BUDGET = 16000;
 /** Glint: 12 rays at 30°, astroid radius as a fraction of the ray length, astroid points. */
 const GLINT_N = 12, GLINT_STEP = PI / 6, STAR_R = 0.3, STAR_PTS = 32;
@@ -102,6 +114,11 @@ const lenMax = (S: number, p: number): number => (LEN0 + LEN_S * S) * (0.6 + 0.8
 const spacing = (cx: FormCx, s: number): number => UNIT_SP * (1 + clamp(cx.at.at(cx.sp.c, s), 0, 1));
 
 const pos = new Float64Array(2), nrm = new Float64Array(2), lampV = new Float64Array(2);
+const cSig = new Float64Array(CPTS);
+/** Mirror roughness (rad) from normalised speed: polished when slow, brushed when fast. */
+const scatterOf = (vn: number): number => 0.02 + 0.25 * smoothstep(0.6, 2.4, vn);
+/** rng sub-address base of the caustic points (rays use 0..RAYS-1). */
+const C_ADDR = 16;
 
 /** Lamp direction (light travel, doc frame) at arc s. */
 function lamp(cx: FormCx, s: number, out: Float64Array): void {
@@ -121,14 +138,13 @@ function lamp(cx: FormCx, s: number, out: Float64Array): void {
 }
 
 /** Reflection state at arc s (module scratch, single-threaded). */
-let R_rx = 0, R_ry = 0, R_cos = 0, R_rho = 0, R_real = false, R_sgn = 1, R_ln = 0;
+let R_rx = 0, R_ry = 0, R_cos = 0, R_rho = 0, R_real = false, R_sgn = 1;
 function reflectAt(cx: FormCx, s: number): void {
   const at = cx.at;
   at.pos(s, pos); at.normal(s, nrm);
   lamp(cx, s, lampV);
   const ln = lampV[0] * nrm[0] + lampV[1] * nrm[1];
   const k = at.mean(cx.sp.k, s, KWIN);
-  R_ln = ln;
   R_cos = ln < 0 ? -ln : ln;
   R_sgn = ln > 0 ? -1 : 1;
   R_rx = lampV[0] - 2 * ln * nrm[0]; R_ry = lampV[1] - 2 * ln * nrm[1];
@@ -138,34 +154,54 @@ function reflectAt(cx: FormCx, s: number): void {
 }
 
 /**
- * Cook the three branches (main, +side, −side) of ray q at arc sq. Each branch is 4 points:
+ * The unit's reflection samples, shared by the rays and the caustic: arcs s + FR[m]·Δ, the
+ * rays sit on m = 1..3 (centred thirds), the caustic on all five (its ends are shared with
+ * the neighbouring units bit for bit: s + 1·Δ is the next unit's s). Module scratch.
+ */
+const FR = [0, 1 / 6, 0.5, 5 / 6, 1];
+const S_x = new Float64Array(CPTS), S_y = new Float64Array(CPTS), S_nx = new Float64Array(CPTS), S_ny = new Float64Array(CPTS);
+const S_rx = new Float64Array(CPTS), S_ry = new Float64Array(CPTS), S_cos = new Float64Array(CPTS), S_rho = new Float64Array(CPTS);
+const S_sgn = new Float64Array(CPTS), S_vn = new Float64Array(CPTS), S_s = new Float64Array(CPTS);
+const S_real = new Uint8Array(CPTS);
+function sampleUnit(cx: FormCx, s: number, delta: number): void {
+  for (let m = 0; m < CPTS; m++) {
+    const sq = m === 0 ? s : m === CPTS - 1 ? s + delta : s + FR[m] * delta;
+    reflectAt(cx, sq);
+    S_s[m] = sq; S_x[m] = pos[0]; S_y[m] = pos[1]; S_nx[m] = nrm[0]; S_ny[m] = nrm[1];
+    S_rx[m] = R_rx; S_ry[m] = R_ry; S_cos[m] = R_cos; S_rho[m] = R_rho; S_sgn[m] = R_sgn; S_real[m] = R_real ? 1 : 0;
+    S_vn[m] = cx.at.at(cx.sp.vn, sq);
+  }
+}
+
+/**
+ * Cook ray q (sample m = q + 1) as one branch (the ±2.5° source pair is rotated from it at emit), 4 points:
  * meta (px = α base, py = born arc), origin on the lit rim, mid (at the focus when it is real
  * and within reach, else half way) and the tip at ℓ_ceil; bLen = ℓ_ceil (sp).
  */
-function cookRay(cx: FormCx, g: UnitGeom, sq: number, j: number, q: number): void {
-  const sp = cx.sp, at = cx.at, r = cx.r, z = cx.z;
-  reflectAt(cx, sq);
-  const p = at.at(sp.p, sq), c = at.at(sp.c, sq), cs = at.at(sp.cs, sq), vn = at.at(sp.vn, sq), w = at.at(sp.w, sq);
-  const toward = R_rx * nrm[0] + R_ry * nrm[1] > 0 ? cs : -cs;
+function cookRay(cx: FormCx, g: UnitGeom, j: number, q: number): void {
+  const sp = cx.sp, at = cx.at, r = cx.r, z = cx.z, m = q + 1, sq = S_s[m];
+  const R_rx = S_rx[m], R_ry = S_ry[m], R_rho = S_rho[m], R_cos = S_cos[m], R_sgn = S_sgn[m], R_real = S_real[m] === 1;
+  const nx = S_nx[m], ny = S_ny[m];
+  const p = at.at(sp.p, sq), c = at.at(sp.c, sq), cs = at.at(sp.cs, sq), vn = S_vn[m], w = at.at(sp.w, sq);
+  const toward = R_rx * nx + R_ry * ny > 0 ? cs : -cs;
   const lmax = lenMax(r.stroke.size, p) * (1 - 0.5 * Math.max(0, toward));
   const lceil = lmax * FD4;
   let aBase = (RAY_A0 + RAY_AP * p) * Math.min(1, R_rho / 12) * smoothstep(0, 0.12, R_cos) * glow(c);
   if (sq > cx.L || !(lceil > 0)) aBase = 0;
-  const scat = (0.02 + 0.25 * smoothstep(0.6, 2.4, vn)) * (2 * rnd(r.seed, Ch.Jitter, j, q) - 1);
-  const ox = pos[0] + R_sgn * nrm[0] * w * 0.5, oy = pos[1] + R_sgn * nrm[1] * w * 0.5;
+  const scat = scatterOf(vn) * (2 * rnd(r.seed, Ch.Jitter, j, q) - 1);
+  const ox = S_x[m] + R_sgn * nx * w * 0.5, oy = S_y[m] + R_sgn * ny * w * 0.5;
   const aMid = R_real && R_rho < lceil ? R_rho : lceil * 0.5;
-  for (let e = 0; e < 3; e++) {
-    const a = scat + (e === 0 ? 0 : e === 1 ? SIDE_ANG : -SIDE_ANG);
-    const ca = dcos(a), sa = dsin(a);
-    const dx = (R_rx * ca - R_ry * sa) / z, dy = (R_rx * sa + R_ry * ca) / z;
-    const b = g.beginBranch(e === 0 ? 2 : 3, lceil);
-    g.addPt(aBase, sq, 0);
-    g.addPt(ox, oy, 0);
-    g.addPt(ox + dx * aMid, oy + dy * aMid, aMid);
-    g.addPt(ox + dx * lceil, oy + dy * lceil, lceil);
-    g.endBranch(b);
-  }
+  const ca = dcos(scat), sa = dsin(scat);
+  const dx = (R_rx * ca - R_ry * sa) / z, dy = (R_rx * sa + R_ry * ca) / z;
+  const b = g.beginBranch(2, lceil);
+  g.addPt(aBase, sq, 0);
+  g.addPt(ox, oy, 0);
+  g.addPt(ox + dx * aMid, oy + dy * aMid, aMid);
+  g.addPt(ox + dx * lceil, oy + dy * lceil, lceil);
+  g.endBranch(b);
 }
+/** Extended-source rotation (±2.5°), applied about the ray origin at emit. */
+const SIDE_C = dcos(SIDE_ANG), SIDE_S = dsin(SIDE_ANG);
 
 /** Points of a ray branch drawn to ℓ, 0 when it is dark. */
 function rayCount(g: UnitGeom, b: number, l: number): number {
@@ -174,17 +210,30 @@ function rayCount(g: UnitGeom, b: number, l: number): number {
   return g.pa[o + 2] < l ? 3 : 2;
 }
 
-function rayEmit(g: UnitGeom, b: number, l: number, alpha: number, tone: number, unit: number, w0: number, floor: number, out: Sink): number {
+/** Emit ray branch b drawn to ℓ; side e (0 main, ±1 the source pair) rotates it about its origin. */
+function rayEmit(g: UnitGeom, b: number, e: number, l: number, alpha: number, tone: number, unit: number, w0: number, floor: number, out: Sink): number {
   const o = g.bOff[b], lceil = g.bLen[b];
-  const ox = g.px[o + 1], oy = g.py[o + 1], tx = g.px[o + 3], ty = g.py[o + 3];
+  const ox = g.px[o + 1], oy = g.py[o + 1];
+  let ux = (g.px[o + 3] - ox) / lceil, uy = (g.py[o + 3] - oy) / lceil;
+  if (e !== 0) { const sn = e * SIDE_S, x = ux * SIDE_C - uy * sn; uy = ux * sn + uy * SIDE_C; ux = x; }
   out.begin(PolyKind.Ribbon, 2, alpha, tone, g.py[o], unit, 1);
   out.pt(ox, oy, w0);
   const aMid = g.pa[o + 2];
-  if (aMid < l) { const wm = w0 * (1 - aMid / l); out.pt(g.px[o + 2], g.py[o + 2], wm > floor ? wm : floor); }
-  const t = l / lceil;
-  out.pt(ox + (tx - ox) * t, oy + (ty - oy) * t, floor);
+  if (aMid < l) { const wm = w0 * (1 - aMid / l); out.pt(ox + ux * aMid, oy + uy * aMid, wm > floor ? wm : floor); }
+  out.pt(ox + ux * l, oy + uy * l, floor);
   return out.end();
 }
+
+/**
+ * Caustic width taper by focal distance: full up to TAPER_NEAR sp (a cup or loop keeps its
+ * whole nephroid, cusp widest through cos θ), a thread by TAPER_FAR, so a gentle bend's far
+ * focus never reads as a detached second stroke.
+ */
+const causticTaper = (rho: number): number => TAPER_MIN + (1 - TAPER_MIN) * smoothstep(TAPER_FAR, TAPER_NEAR, rho);
+
+/** Caustic width (doc) at point i: cos θ, the cusp taper and the rough-mirror band. */
+const cWidth = (g: UnitGeom, co: number, dO: number, i: number, wC: number, z: number): number =>
+  wC * (0.5 + 0.5 * g.px[dO + i]) * causticTaper(g.pa[co + i]) + BAND_W * g.py[dO + i] * g.pa[co + i] / z;
 
 /** Caustic run factor: mean ignition × far fade × cos θ over points [a, b). */
 function runFactor(g: UnitGeom, co: number, dO: number, a: number, b: number, l: number): number {
@@ -200,21 +249,23 @@ function runFactor(g: UnitGeom, co: number, dO: number, a: number, b: number, l:
 function unitWalk(cx: FormCx, rec: ChainRecord, g: UnitGeom, D: number, eIn: number, out: Sink | null): number {
   const z = cx.z, F = lenF(D), side = clamp(D - SIDE_D0, 0, 1);
   const wsp = g.w * eIn * z;
-  const w0 = Math.max(RAY_W_MIN, RAY_W * wsp) / z, floor = W_FLOOR / z;
+  const w0 = Math.max(RAY_W_MIN, Math.min(RAY_W_MAX, RAY_W * wsp)) / z, floor = W_FLOOR / z;
   const gl = glow(g.c), tone2 = toneOf(g.p, 2), tone1 = toneOf(g.p, 1);
   const a2 = gl * hierarchy(2) * (1 + BLAZE * clamp(D - 1, 0, 1));
   let n = 0;
-  for (let b = 0; b < 3 * RAYS; b++) {
-    const e = b % 3;
-    if (e !== 0 && !(side > 0)) continue;
+  const nE = side > 0 ? 3 : 1;
+  for (let b = 0; b < RAYS; b++) {
     const l = g.bLen[b] * F / FD4;
     const k = rayCount(g, b, l);
     if (k === 0) continue;
-    n += k;
-    if (out) rayEmit(g, b, l, g.px[g.bOff[b]] * a2 * (e === 0 ? 1 : side), tone2, rec.j, w0, floor, out);
+    n += k * nE;
+    if (!out) continue;
+    const a = g.px[g.bOff[b]] * a2;
+    rayEmit(g, b, 0, l, a, tone2, rec.j, w0, floor, out);
+    if (nE === 3) { rayEmit(g, b, 1, l, a * side, tone2, rec.j, w0, floor, out); rayEmit(g, b, -1, l, a * side, tone2, rec.j, w0, floor, out); }
   }
   // the caustic: runs of consecutive real points, broken at long jumps
-  const cb = 3 * RAYS, co = g.bOff[cb], dO = g.bOff[cb + 1], cnt = g.bCnt[cb];
+  const cb = RAYS, co = g.bOff[cb], dO = g.bOff[cb + 1], cnt = g.bCnt[cb];
   const lUnit = g.k * F, wC = CAUSTIC_W * wsp / z;
   let run = -1;
   for (let m = 0; m <= cnt; m++) {
@@ -224,14 +275,33 @@ function unitWalk(cx: FormCx, rec: ChainRecord, g: UnitGeom, D: number, eIn: num
       if (run >= 0 && m - run >= 2) {
         const f = runFactor(g, co, dO, run, m, lUnit);
         if (f > 1e-3) {
-          n += m - run;
+          // a rough (fast) mirror: the focus scatters (cooked) and the line breaks into
+          // glints, segments shrunk about their midpoints by gap(σ); gap 0 is the razor line
+          let sg = 0;
+          for (let i = run; i < m; i++) sg += g.py[dO + i];
+          sg /= m - run;
+          const gap = GLINT_GAP * smoothstep(GAP_S0, GAP_S1, sg);
+          n += gap > 0 ? 2 * (m - run - 1) : m - run;
           if (out) {
-            out.begin(PolyKind.Ribbon, 1, CAUSTIC_A * gl * f, tone1, rec.s, rec.j, 1);
-            for (let i = run; i < m; i++) {
-              const w = wC * (0.5 + 0.5 * g.px[dO + i]);
-              out.pt(g.px[co + i], g.py[co + i], w > floor ? w : floor);
+            const a = CAUSTIC_A * gl * f / (1 + BAND_DIM * sg * (1 - gap / GLINT_GAP));
+            if (gap > 0) {
+              const h = 0.5 * (1 - gap);
+              for (let i = run; i + 1 < m; i++) {
+                const x0 = g.px[co + i], y0 = g.py[co + i], x1 = g.px[co + i + 1], y1 = g.py[co + i + 1];
+                const mx = 0.5 * (x0 + x1), my = 0.5 * (y0 + y1), w = 0.5 * (cWidth(g, co, dO, i, wC, z) + cWidth(g, co, dO, i + 1, wC, z));
+                out.begin(PolyKind.Ribbon, 1, a, tone1, rec.s, rec.j, 1);
+                out.pt(mx - (x1 - x0) * h, my - (y1 - y0) * h, w > floor ? w : floor);
+                out.pt(mx + (x1 - x0) * h, my + (y1 - y0) * h, w > floor ? w : floor);
+                out.end();
+              }
+            } else {
+              out.begin(PolyKind.Ribbon, 1, a, tone1, rec.s, rec.j, 1);
+              for (let i = run; i < m; i++) {
+                const w = cWidth(g, co, dO, i, wC, z);
+                out.pt(g.px[co + i], g.py[co + i], w > floor ? w : floor);
+              }
+              out.end();
             }
-            out.end();
           }
         }
       }
@@ -268,27 +338,36 @@ const chain: ChainOperator = {
     const delta = spacing(cx, s), sm = s + delta * 0.5;
     g.w = at.at(sp.w, sm); g.p = at.at(sp.p, sm); g.c = at.at(sp.c, sm);
     g.k = lenMax(cx.r.stroke.size, g.p);
-    for (let q = 0; q < RAYS; q++) cookRay(cx, g, s + (q + 0.5) * delta / RAYS, j, q);
-    // caustic geometry (pa = ρ_f, −1 when virtual / off the end) and its data (px = cos θ)
+    sampleUnit(cx, s, delta);
+    for (let q = 0; q < RAYS; q++) cookRay(cx, g, j, q);
+    // caustic geometry (pa = ρ_f, −1 when virtual / off the end). A rough (fast) mirror
+    // scatters the focus too: each point's reflected direction turns by its own scatter, so the
+    // razor line becomes a glittering band. The last point is the next unit's first (same arc,
+    // bit for bit), so it takes that unit's rng address and adjacent runs still meet exactly.
     const cb = g.beginBranch(1, delta);
+    const seed = cx.r.seed;
     for (let m = 0; m < CPTS; m++) {
-      const sq = s + m * delta / (CPTS - 1);
-      reflectAt(cx, sq);
-      const ok = R_real && R_rho < RHO_FAR && sq <= cx.L;
-      g.addPt(pos[0] + R_rx * R_rho / z, pos[1] + R_ry * R_rho / z, ok ? R_rho : -1);
+      const sq = S_s[m], R_rho = S_rho[m], R_rx = S_rx[m], R_ry = S_ry[m];
+      const ok = S_real[m] === 1 && R_rho < RHO_FAR && sq <= cx.L;
+      const sig = scatterOf(S_vn[m]);
+      const last = m === CPTS - 1;
+      const d = sig * (2 * rnd(seed, Ch.Jitter, last ? j + 1 : j, C_ADDR + (last ? 0 : m)) - 1);
+      const ca = dcos(d), sa = dsin(d), k = R_rho / z;
+      g.addPt(S_x[m] + (R_rx * ca - R_ry * sa) * k, S_y[m] + (R_rx * sa + R_ry * ca) * k, ok ? R_rho : -1);
+      cSig[m] = sig;
     }
     g.endBranch(cb);
-    // data: px = cos θ, py = L·n, pa = 1 when the segment from the previous point is longer than SEG_MAX
+    // data (from the same reflection, kept in scratch): px = cos θ, py = scatter σ, pa = 1 when
+    // the segment from the previous point is longer than SEG_MAX
     const co = g.bOff[cb];
     const db = g.beginBranch(0, 0);
     for (let m = 0; m < CPTS; m++) {
-      reflectAt(cx, s + m * delta / (CPTS - 1));
       let far = 0;
       if (m > 0) {
         const dx = (g.px[co + m] - g.px[co + m - 1]) * z, dy = (g.py[co + m] - g.py[co + m - 1]) * z;
         if (dx * dx + dy * dy > SEG_MAX * SEG_MAX) far = 1;
       }
-      g.addPt(R_cos, R_ln, far);
+      g.addPt(S_cos[m], cSig[m], far);
     }
     g.endBranch(db);
     g.ceil = DMAX;
@@ -311,7 +390,7 @@ function causticRadial(cx: FormCx, seed: RadialSeed, depth: number, out: Sink): 
   const r = cx.r, z = cx.z, p = seed.p;
   const len = lenMax(r.stroke.size, p) * lenF(D);
   const wsp = seed.w * z, rim = wsp * 0.5;
-  const w0 = Math.max(RAY_W_MIN, RAY_W * wsp) / z, floor = W_FLOOR / z;
+  const w0 = Math.max(RAY_W_MIN, Math.min(RAY_W_MAX, RAY_W * wsp)) / z, floor = W_FLOOR / z;
   const rot0 = GLINT_STEP * rnd(r.seed, Ch.Angle, RADIAL_ID + 32);
   const gl = glow(seed.c), side = clamp(D - SIDE_D0, 0, 1);
   const aRay = (RAY_A0 + RAY_AP * p) * gl * hierarchy(2) * (1 + BLAZE * clamp(D - 1, 0, 1)), tone2 = toneOf(p, 2);

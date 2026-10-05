@@ -42,7 +42,7 @@ export class RiseFormatError extends Error {
 
 const DEVICES: readonly Device[] = ['pen', 'mouse', 'touch'];
 const NIBS: readonly NibId[] = ['pen', 'brush', 'chisel', 'charcoal'];
-const FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'ripple'];
+const FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'ripple', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'];
 const GROUNDS: readonly Ground[] = ['night', 'paper'];
 const AXES: readonly Symmetry['axis'][] = ['v', 'h'];
 const ID_RE = /^[0-9a-z]+$/;
@@ -457,7 +457,9 @@ export function parseDoc(text: string, opts?: ParseOptions): { meta: DocMeta; st
 
 const DEVICE_CODE: Record<Device, number> = { pen: 0, mouse: 1, touch: 2 };
 const NIB_CODE: Record<NibId, number> = { pen: 0, brush: 1, chisel: 2, charcoal: 3 };
-const FORM_CODE: Record<FormId, number> = { line: 0, echo: 1, sprout: 2, drift: 3, ripple: 4 };
+const FORM_CODE: Record<FormId, number> = {
+  line: 0, echo: 1, sprout: 2, drift: 3, ripple: 4, craze: 5, plume: 6, caustic: 7, burin: 8, plait: 9, orbit: 10,
+};
 const N_SCALARS = 31;
 /** Canonical quiet NaN as two 32-bit words in platform order (low word first on LE). */
 const NAN_LO = LITTLE ? 0 : 0x7ff80000, NAN_HI = LITTLE ? 0x7ff80000 : 0;

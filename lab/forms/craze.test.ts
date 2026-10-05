@@ -317,6 +317,15 @@ describe('craze: 3. two grounds, one geometry', () => {
     }
     expect(shared).toBeGreaterThan(5);
   });
+  it('the film covers the whole stroke: the last unit carries the uncracked tail plate', () => {
+    for (const h of [signature(), straight(0.25, 0.9), sweep()]) {
+      const { c } = labCook(craze, h, { base: 2 });
+      // last trunk point vs the nearest film point
+      let tx = 0, ty = 0;
+      for (let i = 0; i < c.nPolys; i++) if (isTrunk(c, i)) { const e = ends(c, i); tx = e[2]; ty = e[3]; }
+      expect(nearest(c, tx, ty, (m) => isFilm(c, m))).toBeLessThan(3);
+    }
+  });
   it('gens 3–4 never widen with depth (no blow-out at a held spot)', () => {
     const h = sweep();
     const a = labCook(craze, h, { base: 3, pools: [100, 1] }).c, b = labCook(craze, h, { base: 3 }).c;

@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { Cooked, FormId, StrokeRecipe } from '../src/core/types';
-import { PolyKind } from '../src/core/types';
+import { PolyKind, P0_FORMS } from '../src/core/types';
 import { cook, cookPreview, createIncrementalCook, draftOf, spineOf } from '../src/ink/cook';
 import { buildSpine } from '../src/ink/spine';
 import { FORMS, CURRENT_V, operatorFor, paperAlphaScale, echoPaperExposure } from '../src/ink/operators/registry';
@@ -17,7 +17,7 @@ import {
 // cooks are heavy; other suites may share the CPU, so 5 s is not enough under load
 vi.setConfig({ testTimeout: 60000 });
 
-const ALL: FormId[] = ['line', 'echo', 'sprout', 'drift'];
+const ALL: FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'];
 
 /** A medium stroke (~330 sp) with a curve, a corner and a speed change. */
 function medium(seed = 3): Hand {
@@ -73,6 +73,14 @@ describe('registry', () => {
     expect(FORMS.sprout).toMatchObject({ dMax: 4, baseDefault: 2, locality: 'local', p0: true });
     expect(FORMS.drift).toMatchObject({ dMax: 6, baseDefault: 2, locality: 'local', p0: true });
     expect(FORMS.ripple.p0).toBe(false);
+    // promoted from the forms lab: local, offered in the UI after the first four, in this order
+    expect(P0_FORMS).toEqual(['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit']);
+    for (const f of P0_FORMS.slice(4)) {
+      expect(FORMS[f]).toMatchObject({ id: f, locality: 'local', p0: true, baseDefault: 2 });
+      expect(operatorFor(f, 1).id).toBe(f);
+      expect(operatorFor(f, 1).baseDefault).toBe(FORMS[f].baseDefault);
+      expect(paperAlphaScale(f, 3)).toBe(paperAlphaScale('sprout', 3)); // no Form-specific Paper rule
+    }
     for (const f of Object.keys(CURRENT_V) as FormId[]) {
       expect(CURRENT_V[f]).toBe(1);
       expect(operatorFor(f, 1).dMax).toBe(f === 'ripple' ? 5 : FORMS[f].dMax);
@@ -90,7 +98,9 @@ describe('registry', () => {
 
 describe('continuity in depth (bounded change per 1/16 level)', () => {
   // sp at z = 1; Echo's crystal appears off the trunk by at most the 3%-of-chord RDP tolerance
-  const bound: Record<string, number> = { line: 1.6, echo: 8, sprout: 7, drift: 4 };
+  const bound: Record<string, number> = { line: 1.6, echo: 8, sprout: 7, drift: 4, 
+    // the promoted lab Forms (measured worst: craze 2.1, plume 3.2, caustic 4.3, burin 2.8, plait 3.9, orbit 0.6)
+    craze: 4, plume: 6, caustic: 7, burin: 5, plait: 7, orbit: 1.2 };
   for (const form of ALL) {
     it(form, () => {
       const rows = medium(5).rows();

@@ -10,23 +10,30 @@
  * consecutive orbits (and the seam of a closed loop) join at a bit-identical point.
  *
  *   P(s)  = clamp((10 + 2S)(0.6 + 0.9·smoothstep(0.4, 2.4, v̄n)), 10, 36) sp     v̄n over ±12 sp
- *   R(s)  = (2.5 + 0.8S)(0.5 + p)(1 − 0.5·smoothstep(1, 2.6, vn))(1 − 0.4c) sp
+ *   R(s)  = (3.5 + 1.1S)(0.5 + p)(1 − 0.5·smoothstep(1, 2.6, vn))(1 − 0.4c) sp
  *   T(s)  = pos(s) + swell(D)·Σ_k f_k(D)·e_k(s),   e_k = R·ρ_k·M·(cos φ_k t + sin φ_k n)
- *   (m_k, ρ_k) = (1, 1), (−5, 0.16), (−11, 0.045);  φ_k = m_k·2πu,  u = (s − s_j)/P_j
+ *   (m_k, ρ_k) = (1, 1), (+6, 0.13), (+11, 0.04);  φ_k = m_k·2πu,  u = (s − s_j)/P_j
  *   f_k(D) = clamp(D − k + 1, 0, 1);  swell(D) = 1 + 0.5·clamp(D − 3, 0, 1)
  *   M     = I − 0.6·cos(alt)·tv tvᵀ (pen lean: the circle seen in perspective)
  *   cs    : the n-component on the ink side × (1 − 0.6·|cs|)  (loops lean away from neighbours)
+ *
+ * (+6, 0.13) is five-fold (6 − 1 = 5): every loop grows five ROUND outward lobes (a cloud-scroll
+ * frill); (+11, 0.04) is ten-fold, a scallop on every lobe (lace). Same-sense harmonics keep the
+ * cusps inward and the velocity ratios (0.78, 0.44) < 1, so the edge never spikes.
  *
  * The unit is cooked ONCE at its ceiling: per sample the trunk position, the three epicycle
  * vectors (lean and cs applied) and the width profile; emit at depth D is a weighted sum,
  * so fractional depth is continuous by construction and rising never re-cooks. The orbit
  * is written as three polys split by thirds of u with tone buckets 1 / 2 / 3 (shared joints).
+ * The phase advances by a fixed rotation recurrence and the spine is read by a monotone
+ * station walker that reproduces Sampler.pos / normal bit for bit (no per-sample search).
  *
- * Width: brush 0.55·w·(0.5 + 0.8·v̂), v̂ = normalised speed of the D = 1 trail: thick on the
- * outer sweep where the loops are apart (the flourish's belly), thin at the inner cusp where
- * they bunch over the trunk (so additive Night ink does not blow out there); pen / chisel
- * 0.5·w. Floor 0.35 sp. Alpha 0.5·glow(c), eased in over D ∈ [0, 0.5] so the trail grows
- * out of the trunk instead of popping onto it.
+ * Width: brush 0.32·w'·(0.5 + 0.8·v̂), v̂ = normalised speed of the D = 1 trail: thick on the
+ * outer sweep where the loops are apart (the flourish's belly), thin at the inner cusp;
+ * pen 0.5·w (hairline), chisel 0.32·w'; w' = max(w, 0.4·S) so a light, fast hand still draws a
+ * legible rope. Where the plain loop lies over the trunk (|offset| < 0.45w) the width eases to
+ * 0.4×, so additive Night ink stays off white at the crossings. Floor 0.35 sp. Alpha
+ * 0.8·glow(c), eased in over D ∈ [0, 0.5] so the trail grows out of the trunk.
  *
  * Seam: at finish, a unit whose successor would not be kept (keep(s) = s ≤ L − 0.45·P(s))
  * is the last orbit and stretches to P' = L − s_j, so a closed loop's rope joins itself; on
@@ -34,13 +41,15 @@
  * satellite lands on the nib. With halfWin = 54 > 1.45·P_MAX a unit cooked live can never
  * be the last one at finish, which keeps live cooking ≡ one-shot cooking exact (keepRule).
  *
- * Decisions vs the brief: period 10–36 sp over (10 + 2S) and R over (2.5 + 0.8S) so a loop's
- * diameter is at most ~1.2 periods (the brief's (8 + 1.4S) / (3 + 0.9S) piled loops into a fringe);
- * lace harmonics (−5, 0.16) and (−11, 0.045) with velocity ratios < 1 (scallops, not the
- * spikes that (−5, 0.30) and (+7, 0.12) made); halfWin / reach 54 instead of 40; width from
- * the plain D = 1 loop, thick on the outer sweep; endpoint facts (R, lean, cs, width) are
- * evaluated at the orbit's two ends and lerped over u (smooth, and neighbours agree at the
- * joint exactly). The rose is 1.6R with (−4, 0.25R); its rotation is the only use of rng.
+ * Decisions vs the brief: lace harmonics (+6, 0.13), (+11, 0.04) instead of (−5, 0.30),
+ * (+7, 0.12) (those make outward cusps: a chain of barbed stars, and −5 is six-fold, not the
+ * five lobes the acceptance asks for); trail 0.32·w at α 0.8 rather than 0.55·w (a thin bright
+ * line reads as a rope, a wide one as a halo); R over (3.5 + 1.1S) so loops clear the trunk;
+ * halfWin / reach 54 instead of 40 (keepRule; the brief's 40 cannot hold exactness with
+ * P up to 36); endpoint facts (R, lean, cs, width) evaluated at the orbit's two ends and lerped
+ * over u (smooth, and neighbours agree at the joint exactly). The rose is a five-loop
+ * spirograph (1, 1.25R), (−4, 0.55·1.25R) rather than (−4, 0.35R) (a pentagon with corner
+ * knots); its moon is (+6, 0.06) (five-fold compatible); its rotation is the only use of rng.
  */
 import { PolyKind } from '../../src/core/types';
 import { rnd, Ch, dcos, dsin, TAU } from '../../src/core/det';
@@ -51,7 +60,7 @@ import { RADIAL_ID } from '../../src/ink/operators/line.v1';
 import type { LabFormMeta } from './harness';
 
 export const meta: LabFormMeta = {
-  name: 'Orbit — epicycles around the nib',
+  name: 'Orbit',
   v: 106,
   ink: 'rose',
   notes: 'A satellite circles the nib; its trochoid trail curls along the stroke as one rope of loops. Slow = tight round loops, fast = cusps and waves, pressure = radius, lean = ellipses, hold = lace + swell, nearby ink = smaller loops leaning away, tap = five-petal rose.',
@@ -62,21 +71,23 @@ const DMAX = 4, HALF_WIN = 54;
 /** Budgets: samples per orbit (multiple of 3) + 3 joint points ≤ unitBudget. */
 const NMAX = 216, NMIN = 48, UNIT_BUDGET = NMAX + 4, STROKE_BUDGET = 24000;
 /** Target ceiling-trail advance per sample (sp). */
-const SAMPLE_SP = 1.3;
+const SAMPLE_SP = 2.0;
 /** Period clamp (sp) and the speed averaging half-window (sp). 1.45·P_MAX < HALF_WIN (see keepRule). */
 const P_MIN = 10, P_MAX = 36, SPEED_WIN = 12;
 /** Tail fraction of a period below which the next orbit is not started. */
 const KEEP_FRAC = 0.45;
-/** Epicycle radii as fractions of R (harmonics 1, −5, −11). */
-const RHO1 = 1, RHO2 = 0.16, RHO3 = 0.045;
+/** Epicycle radii as fractions of R (harmonics 1, +6, +11: five round lobes, then ten scallops). */
+const RHO1 = 1, RHO2 = 0.13, RHO3 = 0.04;
 /** Swell above depth 3. */
 const SWELL = 0.5;
 /** Trail alpha (Night and Paper), width factor, width floor (sp), tail fade of width and radius (sp). */
-const ALPHA = 0.5, WF = 0.55, W_FLOOR = 0.35, TAIL = 10;
+const ALPHA = 0.8, WF = 0.32, W_FLOOR = 0.35, TAIL = 10;
+/** Least reference nib width (× S) of the brush / chisel trail. */
+const W_MIN = 0.4;
 /** Depth over which the trail's alpha eases in. */
 const ALPHA_IN = 0.5;
-/** Rose: radius factor, second harmonic (m = −4) = five petals, moon (−11); samples. */
-const ROSE_R = 1.6, ROSE_RHO2 = 0.25, ROSE_RHO3 = 0.04, ROSE_N = 360;
+/** Rose: radius factor, second harmonic (m = −4) = five petal loops, moon (+6); samples. */
+const ROSE_R = 1.25, ROSE_RHO2 = 0.55, ROSE_RHO3 = 0.06, ROSE_N = 360;
 
 /** P(S, v̄n) in sp. */
 export function period(S: number, vbar: number): number {
@@ -87,7 +98,7 @@ function periodAt(cx: FormCx, s: number): number {
 }
 /** R(S, p, vn, c) in sp. */
 export function radius(S: number, p: number, vn: number, c: number): number {
-  return (2.5 + 0.8 * S) * (0.5 + p) * (1 - 0.5 * smoothstep(1, 2.6, vn)) * (1 - 0.4 * clamp(c, 0, 1));
+  return (3.5 + 1.1 * S) * (0.5 + p) * (1 - 0.5 * smoothstep(1, 2.6, vn)) * (1 - 0.4 * clamp(c, 0, 1));
 }
 
 /** Facts at one end of an orbit: radius (sp), lean matrix, side crowding, nib width (doc), pressure, crowding. */
@@ -111,14 +122,13 @@ function endFacts(cx: FormCx, s: number, out: EndFacts): void {
   }
 }
 
-const pv = new Float64Array(2), nv = new Float64Array(2);
 /** Per-sample scratch: the epicycle vectors and the D = 1 trail (width profile). */
 const E1X = new Float64Array(NMAX + 1), E1Y = new Float64Array(NMAX + 1), E2X = new Float64Array(NMAX + 1), E2Y = new Float64Array(NMAX + 1);
-const E3X = new Float64Array(NMAX + 1), E3Y = new Float64Array(NMAX + 1), TX = new Float64Array(NMAX + 1), TY = new Float64Array(NMAX + 1), DS = new Float64Array(NMAX + 1);
+const E3X = new Float64Array(NMAX + 1), E3Y = new Float64Array(NMAX + 1), TX = new Float64Array(NMAX + 1), TY = new Float64Array(NMAX + 1), DS = new Float64Array(NMAX + 1), ON = new Float64Array(NMAX + 1);
 
 /** Samples for an orbit of period P (sp) and mean radius R (sp): a multiple of 3 in [NMIN, NMAX]. */
 function sampleCount(P: number, R: number): number {
-  const len = P + TAU * R * (1 + SWELL) * (1 + 5 * RHO2 + 11 * RHO3) * 0.8;
+  const len = P + TAU * R * (1 + SWELL) * (1 + 6 * RHO2 + 11 * RHO3) * 0.8;
   const n = Math.ceil(len / SAMPLE_SP / 3) * 3;
   return n < NMIN ? NMIN : n > NMAX ? NMAX : n;
 }
@@ -153,32 +163,50 @@ function cookOrbit(cx: FormCx, rec: ChainRecord, g: UnitGeom): void {
   g.w = FA.w; g.p = FA.p; g.c = FA.c; g.ceil = DMAX;
   const N = sampleCount(P, 0.5 * (FA.R + FB.R));
   g.k = N;
-  const brush = r.stroke.nib === 'brush';
+  const brush = r.stroke.nib === 'brush', pen = r.stroke.nib === 'pen';
   const openTail = last && !cx.closed;
   const inv = 1 / z;
+  // phase by rotation recurrence (fixed operation order: deterministic), exact at both ends
+  const cd = dcos(TAU / N), sd = dsin(TAU / N);
+  let c1 = 1, s1 = 0;
+  // spine walker: the same bracketing stations and weights as Sampler.pos / normal, without a
+  // binary search per sample (arcs increase monotonically along the orbit)
+  const sp = cx.sp, S = sp.s, X = sp.x, Y = sp.y, NX = sp.nx, NY = sp.ny, hi = at.hi;
+  let k = at.locate(s);
   const b0 = g.beginBranch(1, P);
   for (let i = 0; i <= N; i++) {
     const u = i / N, sa = i === N ? s + P : s + u * P;
-    at.pos(sa, pv); at.normal(sa, nv);
-    const nx = nv[0], ny = nv[1], tx = -ny, ty = nx;
-    g.addPt(pv[0], pv[1], sa - s);
+    if (i > 0) { const c = c1 * cd - s1 * sd; s1 = s1 * cd + c1 * sd; c1 = c; }
+    if (i === N) { c1 = 1; s1 = 0; }
+    let px: number, py: number, nx: number, ny: number;
+    if (hi <= 0 || !(sa > S[0])) { px = X[0]; py = Y[0]; nx = NX[0]; ny = NY[0]; }
+    else if (sa >= S[hi]) { px = X[hi]; py = Y[hi]; nx = NX[hi]; ny = NY[hi]; }
+    else {
+      while (k < hi - 1 && S[k + 1] <= sa) k++;
+      const ds = S[k + 1] - S[k], t = ds > 0 ? (sa - S[k]) / ds : 0;
+      if (t === 0) { px = X[k]; py = Y[k]; nx = NX[k]; ny = NY[k]; }
+      else { px = X[k] + (X[k + 1] - X[k]) * t; py = Y[k] + (Y[k + 1] - Y[k]) * t; nx = NX[k] + (NX[k + 1] - NX[k]) * t; ny = NY[k] + (NY[k + 1] - NY[k]) * t; }
+    }
+    const nm = Math.sqrt(nx * nx + ny * ny);
+    if (nm > 1e-9) { nx /= nm; ny /= nm; } else { nx = 0; ny = -1; }
+    const tx = -ny, ty = nx;
+    g.addPt(px, py, sa - s);
     // facts lerped between the orbit's ends (neighbours agree at the joint exactly)
     let R = (FA.R + (FB.R - FA.R) * u) * inv;
     if (openTail) R *= smoothstep(0, TAIL, cx.L - sa);
     const cs = FA.cs + (FB.cs - FA.cs) * u;
     const m00 = FA.m00 + (FB.m00 - FA.m00) * u, m01 = FA.m01 + (FB.m01 - FA.m01) * u, m11 = FA.m11 + (FB.m11 - FA.m11) * u;
-    let c1: number, s1: number;
-    if (i === 0 || i === N) { c1 = 1; s1 = 0; } else { const phi = TAU * u; c1 = dcos(phi); s1 = dsin(phi); }
-    // harmonics by angle addition: 2, 4, 5 = 4 + 1, 11 = 5 + 5 + 1 (deterministic, exact-order)
+    // harmonics by angle addition: 2, 4, 6 = 4 + 2, 8, 10 = 8 + 2, 11 = 10 + 1 (fixed order: deterministic)
     const c2 = c1 * c1 - s1 * s1, s2 = 2 * s1 * c1;
     const c4 = c2 * c2 - s2 * s2, s4 = 2 * s2 * c2;
-    const c5 = c4 * c1 - s4 * s1, s5 = s4 * c1 + c4 * s1;
-    const c10 = c5 * c5 - s5 * s5, s10 = 2 * s5 * c5;
+    const c6 = c4 * c2 - s4 * s2, s6 = s4 * c2 + c4 * s2;
+    const c8 = c4 * c4 - s4 * s4, s8 = 2 * s4 * c4;
+    const c10 = c8 * c2 - s8 * s2, s10 = s8 * c2 + c8 * s2;
     const c11 = c10 * c1 - s10 * s1, s11 = s10 * c1 + c10 * s1;
     epi(R * RHO1, c1, s1, cs, tx, ty, nx, ny, m00, m01, m11, E1X, E1Y, i);
-    epi(R * RHO2, c5, -s5, cs, tx, ty, nx, ny, m00, m01, m11, E2X, E2Y, i);
-    epi(R * RHO3, c11, -s11, cs, tx, ty, nx, ny, m00, m01, m11, E3X, E3Y, i);
-    TX[i] = pv[0] + E1X[i]; TY[i] = pv[1] + E1Y[i];
+    epi(R * RHO2, c6, s6, cs, tx, ty, nx, ny, m00, m01, m11, E2X, E2Y, i);
+    epi(R * RHO3, c11, s11, cs, tx, ty, nx, ny, m00, m01, m11, E3X, E3Y, i);
+    TX[i] = px + E1X[i]; TY[i] = py + E1Y[i]; ON[i] = Math.abs(E1X[i] * nx + E1Y[i] * ny);
   }
   g.endBranch(b0);
   for (let k = 1; k <= 3; k++) {
@@ -196,9 +224,13 @@ function cookOrbit(cx: FormCx, rec: ChainRecord, g: UnitGeom): void {
   }
   DS[0] = DS[1];
   const vinv = vmax > 0 ? 1 / vmax : 0;
+  // a light / fast hand still draws a legible rope: the brush / chisel trail reads at least a 0.4·S nib
+  const wMin = (W_MIN * r.stroke.size) / z;
   for (let i = 0; i <= N; i++) {
-    const u = i / N, w = FA.w + (FB.w - FA.w) * u;
-    let wd = brush ? WF * w * (0.5 + 0.8 * DS[i] * vinv) : 0.5 * w;
+    const u = i / N, wn = FA.w + (FB.w - FA.w) * u, w = pen || wn > wMin ? wn : wMin;
+    let wd = brush ? WF * w * (0.5 + 0.8 * DS[i] * vinv) : pen ? 0.5 * w : WF * w;
+    // thin where the plain loop crosses the trunk (half-width 0.45w): additive Night ink stays off white
+    wd *= 0.4 + 0.6 * smoothstep(0.7, 1.4, ON[i] / (0.45 * wn));
     if (openTail) wd *= smoothstep(0, TAIL, cx.L - (i === N ? s + P : s + u * P));
     g.pa[i] = wd;
   }
@@ -271,10 +303,11 @@ const chain: ChainOperator = {
 const RX = new Float64Array(ROSE_N + 1), RY = new Float64Array(ROSE_N + 1), RW = new Float64Array(ROSE_N + 1);
 
 /**
- * Radial seed: a five-petal hypotrochoid rose (1, R), (−4, 0.25R) of radius 1.6·R drawn as a
- * prefix to fraction min(1, D/2) of its parameter, the moon (−11, 0.04R) fading in over
- * D ∈ [2, 3], swelling above 3; split into tone thirds of the drawn part. Width from the
- * normalised speed of the moonless rose (brush), 0.5·w for pen / chisel.
+ * Radial seed: a five-loop spirograph rose (1, 1), (−4, 0.55) scaled by 1.25·R, drawn as a
+ * prefix to fraction min(1, D/2) of its parameter (the pen draws the rosette for you), the
+ * moon (+6, 0.06) fading in over D ∈ [2, 3], swelling above 3; split into tone thirds of the
+ * drawn part. Width from the normalised speed of the moonless rose (brush), 0.5·w pen,
+ * 0.32·w' chisel (w' = max(w, 0.4·S)).
  */
 function orbitRadial(cx: FormCx, seed: RadialSeed, depth: number, out: Sink): number {
   const D = clamp(depth, 0, DMAX);
@@ -290,18 +323,18 @@ function orbitRadial(cx: FormCx, seed: RadialSeed, depth: number, out: Sink): nu
     const phi = (TAU * i) / ROSE_N;
     const c1 = i === 0 || i === ROSE_N ? 1 : dcos(phi), s1 = i === 0 || i === ROSE_N ? 0 : dsin(phi);
     const c2 = c1 * c1 - s1 * s1, s2 = 2 * s1 * c1, c4 = c2 * c2 - s2 * s2, s4 = 2 * s2 * c2;
-    const c5 = c4 * c1 - s4 * s1, s5 = s4 * c1 + c4 * s1, c10 = c5 * c5 - s5 * s5, s10 = 2 * s5 * c5;
-    const c11 = c10 * c1 - s10 * s1, s11 = s10 * c1 + c10 * s1;
+    const c6 = c4 * c2 - s4 * s2, s6 = s4 * c2 + c4 * s2;
     // base rose (for the width) and the full trail; (cos mφ, sin mφ) for m < 0 is (c, −s)
     const bx = c1 + ROSE_RHO2 * c4, by = s1 - ROSE_RHO2 * s4;
-    const fx = bx + f3 * ROSE_RHO3 * c11, fy = by - f3 * ROSE_RHO3 * s11;
+    const fx = bx + f3 * ROSE_RHO3 * c6, fy = by + f3 * ROSE_RHO3 * s6;
     RX[i] = seed.x + R * (cr * fx - sr * fy); RY[i] = seed.y + R * (sr * fx + cr * fy);
     if (i > 0) { const dx = bx - lx, dy = by - ly; const d = Math.sqrt(dx * dx + dy * dy); RW[i] = d; if (d > vmax) vmax = d; }
     lx = bx; ly = by;
   }
   RW[0] = RW[1];
-  const inv = vmax > 0 ? 1 / vmax : 0, w0 = seed.w, floor = W_FLOOR / z;
-  for (let i = 0; i <= ROSE_N; i++) RW[i] = brush ? WF * w0 * (0.5 + 0.8 * RW[i] * inv) : 0.5 * w0;
+  const wMin = (W_MIN * r.stroke.size) / z, inv = vmax > 0 ? 1 / vmax : 0, w0 = brush || r.stroke.nib === 'chisel' ? (seed.w > wMin ? seed.w : wMin) : seed.w, floor = W_FLOOR / z;
+  const pen = r.stroke.nib === 'pen';
+  for (let i = 0; i <= ROSE_N; i++) RW[i] = brush ? WF * w0 * (0.5 + 0.8 * RW[i] * inv) : pen ? 0.5 * w0 : WF * w0;
   const drawn = ROSE_N * Math.min(1, D / 2);
   if (!(drawn > 0)) return D;
   const alpha = ALPHA * glow(seed.c) * smoothstep(0, ALPHA_IN, D);

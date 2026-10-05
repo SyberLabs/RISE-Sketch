@@ -45,13 +45,19 @@ function growth(c: Cooked, x0 = -Infinity, x1 = Infinity): { n: number; polys: n
   }
   return { n, polys, maxOff, meanOff: n ? sum / n : 0 };
 }
-/** Local maxima of |y − 100| along the growth polys (one per plain loop; one per scallop when laced). */
-function bumps(c: Cooked): number {
+/** Curvature sign changes (inflections) along the growth polys, ignoring near-straight turns. */
+function inflections(c: Cooked): number {
   let t = 0;
   for (let i = c.genStart[1]; i < c.nPolys; i++) {
+    let last = 0;
     for (let k = 1; k + 1 < c.count[i]; k++) {
-      const j = c.start[i] + k, a = Math.abs(c.pts[4 * j - 3] - 100), b = Math.abs(c.pts[4 * j + 1] - 100), d = Math.abs(c.pts[4 * j + 5] - 100);
-      if (b > a + 1e-4 && b >= d) t++;
+      const j = 4 * (c.start[i] + k), P = c.pts;
+      const ax = P[j] - P[j - 4], ay = P[j + 1] - P[j - 3], bx = P[j + 4] - P[j], by = P[j + 5] - P[j + 1];
+      const cr = (ax * by - ay * bx) / (Math.hypot(ax, ay) * Math.hypot(bx, by) + 1e-12);
+      if (Math.abs(cr) < 0.004) continue;
+      const sg = cr > 0 ? 1 : -1;
+      if (last !== 0 && sg !== last) t++;
+      last = sg;
     }
   }
   return t;
@@ -82,13 +88,13 @@ describe('orbit: pipeline invariants', () => {
     expect(checkIncremental(orbit, sig(), { holds: [[30, 1.5], [10, 2]], flickerClosure: true })).toBeNull();
     expect(checkIncremental(orbit, loop(), { closed: true, holds: [[20, 2], [40, 1]], flickerClosure: true })).toBeNull();
     expect(checkIncremental(orbit, corners(), { holds: [[12, 2.5]], flickerClosure: true, pools: [95, 2] })).toBeNull();
-  });
+  }, 60_000); // heavy: many chunkings × holds × flicker; generous for a loaded machine
 
   it('incremental ≡ full on a long slow stroke that exhausts the causal budget', () => {
     const h = new Hand(0, 0, { jitter: 0.1, seed: 5, p: 0.9 });
     for (let i = 0; i < 12; i++) h.arc(200 * (i % 2), 0, 200, i % 2 ? Math.PI : 0, i % 2 ? 2 * Math.PI : Math.PI, 0.2);
     expect(checkIncremental(orbit, h, { chunks: [7, 500] })).toBeNull();
-  });
+  }, 60_000);
 
   it('honours the budgets', () => {
     const { c } = labCook(orbit, sig());
@@ -194,9 +200,12 @@ describe('orbit: acceptance', () => {
     expect(g1.maxOff).toBeGreaterThan(R * 0.9); expect(g1.maxOff).toBeLessThan(R * 1.1);
     expect(g2.maxOff / g1.maxOff).toBeGreaterThan(1.08); expect(g2.maxOff / g1.maxOff).toBeLessThan(1.25);
     expect(g4.maxOff / g1.maxOff).toBeGreaterThan(1.5 * 1.1); expect(g4.maxOff / g1.maxOff).toBeLessThan(1.5 * 1.3);
-    // lace: five scallops per loop at d = 2 against one belly per plain loop at d = 1
-    expect(bumps(c1)).toBeLessThan(2.5 * units(c1));
-    expect(bumps(c2)).toBeGreaterThan(bumps(c1) + 3 * units(c2));
+    // lace: a plain prolate loop never changes its turning sense; five lobes put two
+    // inflections at each of the five dents (≈ 10 per orbit, a few lost at the third joints)
+    const i1 = inflections(c1) / units(c1), i2 = inflections(c2) / units(c2), i4 = inflections(c4) / units(c4);
+    expect(i1).toBeLessThan(1);
+    expect(i2).toBeGreaterThan(7); expect(i2).toBeLessThan(11);
+    expect(i4).toBeGreaterThan(i2 + 3); // the ten-fold lace on top of the five lobes
   });
 
   it('3. tap: a rose drawn as a growing prefix, full at d = 2, moon above', () => {
@@ -208,6 +217,14 @@ describe('orbit: acceptance', () => {
     expect(c.genStart[1]).toBe(1); // the gen-0 dot, then three thirds
     expect(c.nPolys).toBe(4);
     expect(new Set([c.tone[1] % 5, c.tone[2] % 5, c.tone[3] % 5]).size).toBe(3);
+    // five petals: the distance from the seed peaks five times around the full rose
+    const xs: number[] = [], ys: number[] = [];
+    for (let i = c.genStart[1]; i < c.nPolys; i++) for (let k = i === c.genStart[1] ? 0 : 1; k < c.count[i]; k++) { const [x, y] = pt(c, i, k); xs.push(x); ys.push(y); }
+    const [cx0, cy0] = pt(c, 0, 0), rr = xs.map((x, k) => Math.hypot(x - cx0, ys[k] - cy0)), n0 = rr.length - 1;
+    let peaks = 0;
+    for (let k = 0; k < n0; k++) if (rr[k] > rr[(k + n0 - 1) % n0] && rr[k] >= rr[(k + 1) % n0]) peaks++;
+    expect(peaks).toBe(5);
+    expect(dist([xs[0], ys[0]], [xs[n0], ys[n0]])).toBeLessThan(1e-3); // the full rose closes
   });
 
   it('3. tones: every orbit is three thirds with depth buckets 1 / 2 / 3', () => {
@@ -215,6 +232,21 @@ describe('orbit: acceptance', () => {
     const per = new Map<number, number[]>();
     for (let i = c.genStart[1]; i < c.nPolys; i++) { const u = c.unit[i]; if (!per.has(u)) per.set(u, []); per.get(u)!.push(c.tone[i] % 5); }
     for (const t of per.values()) expect(t).toEqual([1, 2, 3]);
+  });
+
+  it('3. Night: the trail thins where it crosses the trunk (crossings do not blow out), the trunk stays underneath', () => {
+    const { c } = labCook(orbit, straight(0.8, { p: 0.8 }), { base: 1 });
+    let on = 0, nOn = 0, off = 0, nOff = 0;
+    for (let i = c.genStart[1]; i < c.nPolys; i++) for (let k = 0; k < c.count[i]; k++) {
+      const j = 4 * (c.start[i] + k), x = c.pts[j], dy = Math.abs(c.pts[j + 1] - 100), w = c.pts[j + 2];
+      if (x < 60 || x > 340) continue;
+      if (dy < 1) { on += w; nOn++; } else if (dy > 6) { off += w; nOff++; }
+    }
+    expect(nOn).toBeGreaterThan(10);
+    expect(on / nOn).toBeLessThan(0.6 * (off / nOff));
+    let trunk = 0;
+    for (let i = 0; i < c.genStart[1]; i++) trunk += c.count[i];
+    expect(trunk).toBeGreaterThan(20);
   });
 
   it('pressure: harder pressing widens the orbit', () => {

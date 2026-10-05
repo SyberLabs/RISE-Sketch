@@ -74,7 +74,7 @@ describe('chip labels (DESIGN §10)', () => {
     expect(chipTip('stroke', s)).toContain('tap to return');
   });
   it('tooltips include the shortcut and the drag; long-press names the drag', () => {
-    expect(chipTip('form', state())).toBe('Form · Sprout · 1–4 · drag ↕ to deepen');
+    expect(chipTip('form', state())).toBe('Form · Sprout · 1–0 · drag ↕ to deepen');
     expect(chipTip('stroke', state())).toBe('Stroke · Brush · B · drag ↕ to resize');
     expect(chipHoldLabel('form')).toBe('Form · drag ↕ to deepen');
   });

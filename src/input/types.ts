@@ -7,7 +7,7 @@
 import type { Device, InputSample } from '../core/types';
 
 export type KeyAction =
-  | { k: 'form'; index: number }            // Digit1..4 -> 0..3
+  | { k: 'form'; index: number }            // Digit1..9 -> 0..8, Digit0 -> 9 (P0_FORMS order)
   | { k: 'nib'; dir: 1 | -1 }               // B / Shift+B
   | { k: 'ink'; dir: 1 | -1 }               // C / Shift+C
   | { k: 'ground' }                         // G

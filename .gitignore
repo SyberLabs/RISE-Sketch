@@ -3,3 +3,7 @@ dist
 dist-single
 e2e-out
 *.log
+
+# per-lane / scratch builds
+dist-lane*
+*.stackdump

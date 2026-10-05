@@ -17,16 +17,17 @@ export type StrokeId = string; // base36(ms).padStart(9,'0') + base36(counter).p
 export type Device = 'pen' | 'mouse' | 'touch';
 export type NibId = 'pen' | 'brush' | 'chisel' | 'charcoal';
 export type InkId = 'graphite' | 'indigo' | 'oxide' | 'ochre' | 'moss' | 'rose' | 'spectral' | 'custom';
-export type FormId = 'line' | 'echo' | 'sprout' | 'drift' | 'ripple';
+export type FormId = 'line' | 'echo' | 'sprout' | 'drift' | 'ripple'
+  | 'craze' | 'plume' | 'caustic' | 'burin' | 'plait' | 'orbit';
 export type Ground = 'night' | 'paper';
 export type Vec2 = readonly [number, number];
 export type LCh = readonly [L: number, C: number, h: number];
 export type Mat2x3 = Float64Array; // [a b c d e f], Canvas2D setTransform order
 export interface AABB { x0: number; y0: number; x1: number; y1: number }
 
-/** P0 nibs/forms offered in the UI (charcoal and ripple are P1). */
+/** Nibs / Forms offered in the UI, in sheet and number-key order (charcoal and ripple are P1). */
 export const P0_NIBS: readonly NibId[] = ['pen', 'brush', 'chisel'];
-export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift'];
+export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'];
 export const INK_ORDER: readonly InkId[] = ['graphite', 'indigo', 'oxide', 'ochre', 'moss', 'rose', 'spectral'];
 
 // ============================================================================ input samples

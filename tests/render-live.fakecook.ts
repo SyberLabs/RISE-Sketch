@@ -106,8 +106,8 @@ const pBucket = (p: number): number => Math.max(0, Math.min(5, Math.floor(p * 6)
 const hash = (a: number, b: number): number => { let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35); h ^= h >>> 13; h = Math.imul(h, 0x27d4eb2f); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 
 const BLOCK = 50;
-const REACH: Record<FormId, number> = { line: 36, echo: 0, sprout: 24, drift: 12, ripple: 24 };
-const DMAX: Record<FormId, number> = { line: 5, echo: 5, sprout: 4, drift: 6, ripple: 6 };
+const REACH: Record<FormId, number> = { line: 36, echo: 0, sprout: 24, drift: 12, ripple: 24, craze: 60, plume: 22, caustic: 20, burin: 8, plait: 108, orbit: 54 };
+const DMAX: Record<FormId, number> = { line: 5, echo: 5, sprout: 4, drift: 6, ripple: 6, craze: 4, plume: 3, caustic: 4, burin: 4, plait: 4, orbit: 4 };
 
 /** The fake cook. */
 export class FakeCook implements IncrementalCook {

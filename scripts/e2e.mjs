@@ -113,6 +113,82 @@ await scenario('draw-each-form', async ({ page, cdp }) => {
   await shot(page, 'forms-paper');
 });
 
+await scenario('draw-new-forms', async ({ page, cdp }) => {
+  // the six Forms promoted from the forms lab, each in its gallery ink, on a 3 × 2 grid
+  const forms = [['craze', 'oxide'], ['plume', 'ochre'], ['caustic', 'spectral'], ['burin', 'graphite'], ['plait', 'indigo'], ['orbit', 'rose']];
+  for (let i = 0; i < forms.length; i++) {
+    const [form, ink] = forms[i];
+    await dispatch(page, { k: 'pickForm', form });
+    await dispatch(page, { k: 'pickInk', ink });
+    const x0 = 110 + (i % 3) * 380, y = 250 + Math.floor(i / 3) * 320;
+    await penStroke(cdp, wave(x0, y, x0 + 300, 70, 70));
+    await idle(page);
+    const s = await last(page);
+    assert(s && s.form === form, `stroke ${i} form ${form}, got ${s && s.form}`);
+    assert(s.nPts > 10, `${form} produced geometry (${s.nPts} pts)`);
+    assert(s.gens >= 2, `${form} grew generations (gens=${s.gens})`);
+  }
+  // a tap with each is a radial seed (bottom row)
+  for (let i = 0; i < forms.length; i++) {
+    const [form, ink] = forms[i];
+    await dispatch(page, { k: 'pickForm', form });
+    await dispatch(page, { k: 'pickInk', ink });
+    const x = 190 + i * 180, y = 735;
+    await penStroke(cdp, [[x, y, 0.6], [x + 0.5, y + 0.3, 0.7], [x + 0.8, y + 0.4, 0.7]]);
+    await idle(page);
+    const s = await last(page);
+    assert(s.form === form && s.radial, `${form} tap is radial (form=${s.form}, radial=${s.radial})`);
+    assert(s.nPts > 3, `${form} tap produced geometry (${s.nPts} pts)`);
+  }
+  assert(await count(page) === 12, 'six strokes and six taps');
+  // a .rise round trip keeps the new Form ids (serialize.ts knows them)
+  const h0 = await R(page, () => window.__rise.sceneHash());
+  const text = await R(page, () => window.__rise.serialize());
+  await R(page, t => window.__rise.load(t), text);
+  await idle(page);
+  assert(await R(page, () => window.__rise.sceneHash()) === h0, 'round trip keeps the scene hash');
+  await shot(page, 'new-forms-night');
+  await dispatch(page, { k: 'ground', g: 'paper' });
+  await idle(page);
+  await shot(page, 'new-forms-paper');
+  // number keys 5–9 and 0 pick them, in sheet order
+  const keys = ['Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
+  for (let i = 0; i < keys.length; i++) {
+    await key(page, keys[i]);
+    const f = await R(page, () => window.__rise.state().tool.form);
+    assert(f === forms[i][0], `${keys[i]} picks ${forms[i][0]}, got ${f}`);
+    // the Form chip's glyph is that Form grown on a tiny squiggle
+    await idle(page);
+    await sleep(250);
+    const inked = await R(page, () => {
+      const cv = document.querySelector('.r-chip[data-chip="form"] canvas.r-glyph');
+      const g = cv && cv.width > 0 ? cv.getContext('2d') : null;
+      if (!g) return -1;
+      const d = g.getImageData(0, 0, cv.width, cv.height).data;
+      let n = 0;
+      for (let k = 3; k < d.length; k += 4) if (d[k] > 24) n++;
+      return n;
+    });
+    assert(inked !== 0, `${forms[i][0]} chip glyph has ink (${inked} px)`);
+    const chip = await page.$('.r-chip[data-chip="form"]');
+    await chip.screenshot({ path: `${OUT}/new-forms-chip-${forms[i][0]}.png` });
+  }
+  // the Form sheet offers all ten as labelled tiles, two rows of five on desktop
+  await dispatch(page, { k: 'openSheet', sheet: 'form' });
+  await idle(page);
+  await sleep(400);
+  const tiles = await R(page, () => [...document.querySelectorAll('.r-sheet[data-sheet="form"] .r-tile')].map(t => {
+    const b = t.getBoundingClientRect();
+    return { label: t.textContent.trim(), top: Math.round(b.top) };
+  }));
+  assert(tiles.length === 10, `ten Form tiles, got ${tiles.length}`);
+  const labels = tiles.map(t => t.label).join(',');
+  assert(labels === 'Line,Echo,Sprout,Drift,Craze,Plume,Caustic,Burin,Plait,Orbit', `tile labels ${labels}`);
+  const rows = new Set(tiles.map(t => t.top)).size;
+  assert(rows === 2, `two rows of tiles on desktop, got ${rows}`);
+  await shot(page, 'new-forms-sheet');
+});
+
 await scenario('rise-hold-pen', async ({ page, cdp }) => {
   await dispatch(page, { k: 'pickForm', form: 'sprout' });
   await penStroke(cdp, line(300, 420, 700, 400, 60), { hold: 1400 });
