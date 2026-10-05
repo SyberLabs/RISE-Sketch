@@ -94,11 +94,23 @@ export interface Compositor {
   /** Blend modes for a ground and the CSS ground itself. */
   setGround(g: Ground, animate: boolean): void;
   /**
+   * A live layer (#dry / #wet) is blank: hide it, so the compositor does not blend an empty
+   * full-viewport canvas over the drawing every frame of a pan or zoom. Shown again (in the same
+   * frame) as soon as the live layer draws into it.
+   */
+  setBlank(layer: 'dry' | 'wet', blank: boolean): void;
+  /**
    * Re-composite #base. `drawTiles` blits the tiles into the context it is given (identity
    * transform, replace semantics). In fallback mode the result is layered over a painted ground
    * with the bloom and the live layers.
    */
   composite(drawTiles: (ctx: CanvasRenderingContext2D) => void, bloom: HTMLCanvasElement | null, bloomAlpha: number): void;
+  /**
+   * Show #base under a CSS transform (CSS px, origin top-left; '' = none): a camera gesture frame
+   * that moves the last composite instead of redrawing it. A cross-fade started meanwhile freezes
+   * #base with the same transform.
+   */
+  transformBase(css: string): void;
   /** Rebuild #base from the last tile composite plus the live layers (fallback mode only). */
   recomposeLive(bloom: HTMLCanvasElement | null, bloomAlpha: number): void;
   /**
@@ -172,6 +184,7 @@ export function createCompositor(root: HTMLElement, ledger: CanvasLedgerExt): Co
   let W = 1, H = 1;
   let ground: Ground = 'night';
   let dimmed = false;
+  let blankDry = false, blankWet = false;
   // fallback: the last tile composite, kept so live frames only redo the cheap layering
   let tilesCanvas: HTMLCanvasElement | null = null;
 
@@ -184,8 +197,8 @@ export function createCompositor(root: HTMLElement, ledger: CanvasLedgerExt): Co
     base.style.mixBlendMode = mode;
     dry.style.mixBlendMode = blendFor(ground);
     wet.style.mixBlendMode = blendFor(ground);
-    dry.style.visibility = b ? 'hidden' : 'visible';
-    wet.style.visibility = b ? 'hidden' : 'visible';
+    dry.style.visibility = b || blankDry ? 'hidden' : 'visible';
+    wet.style.visibility = b || blankWet ? 'hidden' : 'visible';
     bloomA.style.mixBlendMode = 'plus-lighter';
     bloomB.style.mixBlendMode = 'plus-lighter';
     if (b) { bloomA.style.visibility = 'hidden'; bloomB.style.visibility = 'hidden'; }
@@ -269,6 +282,20 @@ export function createCompositor(root: HTMLElement, ledger: CanvasLedgerExt): Co
       ctx.restore();
     },
 
+    transformBase(css) {
+      const s = base.style;
+      if (s.transform === css) return;
+      s.transformOrigin = '0 0';
+      s.transform = css;
+    },
+
+    setBlank(layer, blank) {
+      if (layer === 'dry') blankDry = blank; else blankWet = blank;
+      const el = layer === 'dry' ? dry : wet;
+      const v = blitting() || blank ? 'hidden' : 'visible';
+      if (el.style.visibility !== v) el.style.visibility = v;
+    },
+
     setDim(on, animate) {
       if (dimmed === on) return;
       dimmed = on;
@@ -293,6 +320,9 @@ export function createCompositor(root: HTMLElement, ledger: CanvasLedgerExt): Co
       s.position = 'absolute'; s.left = '0'; s.top = '0'; s.width = '100%'; s.height = '100%';
       s.pointerEvents = 'none'; s.display = 'block';
       s.mixBlendMode = blendFor(from);
+      // the frozen picture keeps the transform #base was shown with (a transform-only gesture frame)
+      s.transformOrigin = '0 0';
+      s.transform = base.style.transform;
       f.setAttribute('aria-hidden', 'true');
       const fctx = f.getContext('2d')!;
       fctx.drawImage(base, 0, 0);

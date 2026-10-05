@@ -7,6 +7,8 @@
  * returns null, or the canvas comes back 0×0) fails, after one evict-and-retry.
  */
 
+import { rstats } from './stats';
+
 export type DeviceClass = 'phone' | 'tablet' | 'desktop';
 
 const MB = 1024 * 1024;
@@ -102,6 +104,7 @@ export function createLedger(cls?: DeviceClass, make?: () => HTMLCanvasElement):
       if (!c) return null;
       recs.set(c, { bytes: need, tag });
       bytes += need;
+      rstats.c.canvasAlloc++;
       return c;
     },
     resize(c: HTMLCanvasElement, w: number, h: number): boolean {
@@ -110,6 +113,7 @@ export function createLedger(cls?: DeviceClass, make?: () => HTMLCanvasElement):
       if (!r) { r = { bytes: c.width * c.height * 4, tag: 'adopted' }; recs.set(c, r); bytes += r.bytes; }
       if (sizeOk(c, W, H)) return true;
       const need = W * H * 4;
+      rstats.c.canvasResize++;
       budget(need - r.bytes);
       // an evictor may have freed this very canvas; it is being resized, so it is live: re-track it
       if (!recs.has(c)) { r = { bytes: c.width * c.height * 4, tag: r.tag }; recs.set(c, r); bytes += r.bytes; }
@@ -127,6 +131,7 @@ export function createLedger(cls?: DeviceClass, make?: () => HTMLCanvasElement):
     free(c: HTMLCanvasElement): void {
       const r = recs.get(c);
       if (r) { bytes -= r.bytes; recs.delete(c); }
+      if (c.width || c.height) rstats.c.canvasFree++;
       c.width = 0; c.height = 0;
     },
     onPressure(fn: (needBytes: number) => void): void { evictors.push(fn); },

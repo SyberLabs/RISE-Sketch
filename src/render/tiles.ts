@@ -26,6 +26,7 @@
  */
 import type { AABB, Camera, Cooked, Ground, StrokeId, StrokeRecipe } from '../core/types';
 import { drawCooked, inkTableFor, regionMatrix } from './raster';
+import { rstats } from './stats';
 
 /** Tile edge in device px. */
 export const TILE_PX = 512;
@@ -129,6 +130,8 @@ export interface Tile {
    */
   skipped: Map<StrokeId, Rect | null> | null;
   used: number;
+  /** Bumped whenever the tile's pixels or displayability change (see TileCache.contentRev). */
+  rev: number;
 }
 
 const FULL: Readonly<Rect> = { x0: 0, y0: 0, x1: TILE_PX, y1: TILE_PX };
@@ -160,6 +163,12 @@ export class TileCache {
    * derived layers built from the composite (bloom) are stale.
    */
   inkChanged = false;
+  /**
+   * Bumped whenever any tile's pixels or displayability change (draws, clears, renders finishing,
+   * tiles dropped or lost). Equal revisions mean every tile shows what it showed before, so a
+   * composite of the same tiles is the same picture (the renderer's transform-only gesture frames).
+   */
+  contentRev = 0;
   ground: Ground;
   private view: TileView = { cam: { cx: 0, cy: 0, scale: 1, rot: 0 }, cssW: 1, cssH: 1, dpr: 1 };
   private stamp = 1;
@@ -170,6 +179,10 @@ export class TileCache {
   private qbox: AABB = { x0: 0, y0: 0, x1: 0, y1: 0 };
   private vbox: AABB = { x0: 0, y0: 0, x1: 0, y1: 0 };
   private missing = new Uint8Array(64);
+  private nMissing = 0;
+  /** Visible current-level cells the last drawInto had no displayable tile for. */
+  lastDrawMissing = 0;
+  private scratch: Tile[] = [];
   private work = new Set<Tile>();
   private bytesNow = 0;
   /** The tile whose canvas is being allocated (never evicted by the pressure callback). */
@@ -231,14 +244,21 @@ export class TileCache {
     const t: Tile = {
       key: keyOf(level, ix, iy), level, ix, iy, x0: ix * size, y0: iy * size, size, dens,
       canvas: null, ctx: null, ready: false, needFull: true, failed: false,
-      rects: [], adds: new Map(), job: null, skipped: null, used: this.stamp,
+      rects: [], adds: new Map(), job: null, skipped: null, used: this.stamp, rev: 0,
     };
     this.tiles.set(t.key, t);
     this.work.add(t);
     return t;
   }
 
+  /** A tile's pixels or displayability changed. */
+  private bump(t: Tile): void {
+    this.contentRev++;
+    t.rev++;
+  }
+
   private release(t: Tile): void {
+    this.bump(t);
     if (t.canvas) { this.src.free(t.canvas); this.bytesNow -= TILE_BYTES; }
     t.canvas = null; t.ctx = null;
   }
@@ -271,6 +291,7 @@ export class TileCache {
   }
 
   private paintBackground(t: Tile, r: Rect): void {
+    this.bump(t);
     const ctx = t.ctx!;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -392,8 +413,10 @@ export class TileCache {
 
   /** Mark a tile's pixels lost (context loss / discarded backing store). */
   markLost(canvas: HTMLCanvasElement): void {
+    this.contentRev++;
     for (const t of this.tiles.values()) {
       if (t.canvas !== canvas) continue;
+      t.rev++;
       t.ready = false; t.needFull = true; t.job = null; t.adds.clear(); t.rects.length = 0;
       this.work.add(t);
       this.changed = true;
@@ -403,7 +426,9 @@ export class TileCache {
 
   /** Every tile's pixels are suspect (long background on iPadOS, context restored). */
   markAllLost(): void {
+    this.contentRev++;
     for (const t of this.tiles.values()) {
+      t.rev++;
       t.ready = false; t.needFull = true; t.job = null; t.adds.clear(); t.rects.length = 0; t.failed = false;
       this.work.add(t);
     }
@@ -436,6 +461,10 @@ export class TileCache {
   private prio(t: Tile): number {
     if (!t.adds.size && !t.job && !t.needFull && !t.rects.length) return P_NONE;
     if (this.isVisible(t)) return t.adds.size ? P_ADD : P_VISIBLE;
+    // a first render the camera left behind on another level (a zoom that paused long enough to
+    // settle, then went on): it shows nothing until done, so it waits until its level is current
+    // again instead of rasterising for nobody (its snapshot and pending adds stay consistent)
+    if (t.job && !t.ready && t.level !== this.level) return P_NONE;
     if (t.needFull && !t.job) {
       // only the current level is worth a fresh render
       return this.isPrefetch(t) && t.level === this.level ? P_PREFETCH : P_NONE;
@@ -555,6 +584,7 @@ export class TileCache {
       if (!this.ensureCanvas(t)) { t.ready = true; return; }
       if (reuse) this.paintBackground(t, FULL);
       t.ready = false;
+      rstats.c.tileRenders++;
       t.job = { rect: FULL, rects: null, ids, i: 0, epoch: this.epoch, skip: null, inPlace: false, clip: false };
       return;
     }
@@ -564,6 +594,7 @@ export class TileCache {
       if (!this.ensureCanvas(t)) return;
     } else if (rects) for (const q of rects) this.paintBackground(t, q);
     else this.paintBackground(t, r);
+    rstats.c.rectRenders++;
     const whole = !rects && r.x0 === 0 && r.y0 === 0 && r.x1 === TILE_PX && r.y1 === TILE_PX;
     t.job = { rect: r, rects, ids, i: 0, epoch: this.epoch, skip: null, inPlace: t.ready, clip: !whole };
   }
@@ -593,6 +624,7 @@ export class TileCache {
   }
 
   private finish(t: Tile): void {
+    this.bump(t);
     t.job = null;
     t.ready = true;
     if (this.inView(t)) { this.changed = true; this.inkChanged = true; }
@@ -623,6 +655,8 @@ export class TileCache {
       ctx.clip();
     }
     this.draw(ctx, d, m, r, this.ground);
+    this.bump(t);
+    rstats.c.strokeDraws++;
     if (clip) ctx.restore();
     if (this.src.drawn) this.src.drawn(id, d.c, t);
   }
@@ -643,8 +677,8 @@ export class TileCache {
       if (t.level === this.level ? !this.isVisible(t) : !(nMissing > 0 && this.touches(t, vb) && this.coversMissing(t))) continue;
       let guard = 1 << 22;
       while (guard-- > 0 && t.ready) {
-        if (t.job) { this.advance(t); continue; }
-        if (all && (t.adds.size || t.rects.length)) { this.step(t); continue; }
+        if (t.job) { rstats.c.flushSteps++; this.advance(t); continue; }
+        if (all && (t.adds.size || t.rects.length)) { rstats.c.flushSteps++; this.step(t); continue; }
         break;
       }
     }
@@ -707,6 +741,7 @@ export class TileCache {
         n += miss;
       }
     }
+    this.nMissing = n;
     return n;
   }
 
@@ -729,9 +764,11 @@ export class TileCache {
    * from other levels first (farthest level first) where the current level has no complete tile,
    * then the current level. Every blit REPLACES its rectangle (clear, then draw), so overlapping
    * levels never add up. Destination rects are rounded on the shared grid, so neighbours meet
-   * without seams. Returns the number of tiles drawn.
+   * without seams. When every visible cell has a displayable tile, those replace-blits cover the
+   * whole viewport (the cell range spans it), so the context is not cleared first: each pixel is
+   * written once per composite instead of twice. Returns the number of tiles drawn.
    */
-  drawInto(ctx: CanvasRenderingContext2D, smoothing: ImageSmoothingQuality = 'medium'): number {
+  drawInto(ctx: CanvasRenderingContext2D, smoothing: ImageSmoothingQuality = 'medium', out?: Tile[]): number {
     const v = this.view;
     const k = v.cam.scale * v.dpr;
     const hx = v.cssW * 0.5 * v.dpr, hy = v.cssH * 0.5 * v.dpr;
@@ -742,27 +779,93 @@ export class TileCache {
     ctx.globalAlpha = 1;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = smoothing;
-    ctx.clearRect(0, 0, W, H);
-    const L = this.level, s = ++this.stamp;
-    const nMissing = this.computeMissing();
-    let drawn = 0;
-    if (nMissing > 0) {
-      const fb: Tile[] = [];
-      for (const t of this.tiles.values()) if (this.coversMissing(t)) fb.push(t);
-      fb.sort((a, b) => Math.abs(b.level - L) - Math.abs(a.level - L) || a.level - b.level);
-      for (const t of fb) { this.blit(ctx, t, k, hx, hy, W, H); t.used = s; drawn++; }
+    const list = this.display(out ?? this.scratch, true);
+    this.lastDrawMissing = this.nMissing;
+    const nFallback = this.nMissing > 0 ? list.length - this.countCurrent(list) : 0;
+    if (this.nMissing > 0) {
+      ctx.clearRect(0, 0, W, H);
+      rstats.c.fullClears++;
     }
-    for (let iy = this.vy0; iy <= this.vy1; iy++) {
-      for (let ix = this.vx0; ix <= this.vx1; ix++) {
-        const t = this.tiles.get(keyOf(L, ix, iy));
-        if (!t || !(t.ready || t.failed)) continue;
-        t.used = s;
-        if (this.blit(ctx, t, k, hx, hy, W, H)) drawn++;
-      }
+    let drawn = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (this.blit(ctx, list[i], k, hx, hy, W, H) || i < nFallback) drawn++;
     }
     ctx.restore();
     this.changed = false;
     return drawn;
+  }
+
+  /**
+   * The tiles a composite of the current view blits, in blit order: other levels standing in for
+   * missing current-level cells (farthest level first), then the current level's displayable
+   * cells. `mark` refreshes their LRU stamp.
+   */
+  private display(out: Tile[], mark: boolean): Tile[] {
+    out.length = 0;
+    const L = this.level;
+    if (this.computeMissing() > 0) {
+      for (const t of this.tiles.values()) if (this.coversMissing(t)) out.push(t);
+      out.sort((a, b) => Math.abs(b.level - L) - Math.abs(a.level - L) || a.level - b.level);
+    }
+    for (let iy = this.vy0; iy <= this.vy1; iy++) {
+      for (let ix = this.vx0; ix <= this.vx1; ix++) {
+        const t = this.tiles.get(keyOf(L, ix, iy));
+        if (t && (t.ready || t.failed)) out.push(t);
+      }
+    }
+    if (mark) { const s = ++this.stamp; for (const t of out) t.used = s; }
+    return out;
+  }
+
+  private countCurrent(list: readonly Tile[]): number {
+    let n = 0;
+    for (const t of list) if (t.level === this.level) n++;
+    return n;
+  }
+
+  /** True when a tile's blit rect (rounded on the shared grid) meets the current viewport. */
+  private onScreen(t: Tile): boolean {
+    const v = this.view, c = v.cam;
+    const k = c.scale * v.dpr, hx = v.cssW * 0.5 * v.dpr, hy = v.cssH * 0.5 * v.dpr;
+    const W = Math.round(v.cssW * v.dpr), H = Math.round(v.cssH * v.dpr);
+    const x0 = Math.round((t.x0 - c.cx) * k + hx), x1 = Math.round((t.x0 + t.size - c.cx) * k + hx);
+    const y0 = Math.round((t.y0 - c.cy) * k + hy), y1 = Math.round((t.y0 + t.size - c.cy) * k + hy);
+    return !(x1 <= 0 || y1 <= 0 || x0 >= W || y0 >= H || x1 <= x0 || y1 <= y0);
+  }
+
+  /**
+   * True when a composite of the current view would blit exactly the tiles of `ref` (a previous
+   * drawInto's list) that are on screen now, in the same order: with no content change since
+   * (`contentRev`), it would show the same picture as that composite under the new camera.
+   */
+  sameDisplay(ref: readonly Tile[]): boolean {
+    const cur = this.display(this.scratch, false);
+    let j = 0;
+    for (const t of ref) {
+      if (!this.onScreen(t)) continue;
+      while (j < cur.length && !this.onScreen(cur[j])) j++;
+      if (j >= cur.length || cur[j] !== t) return false;
+      j++;
+    }
+    while (j < cur.length && !this.onScreen(cur[j])) j++;
+    return j === cur.length;
+  }
+
+  /** Record the revisions of `list`'s tiles into `out` (parallel array). */
+  revsOf(list: readonly Tile[], out: number[]): number[] {
+    out.length = 0;
+    for (const t of list) out.push(t.rev);
+    return out;
+  }
+
+  /** Every tile of `list` is still cached, displayable and unchanged since `revs` was taken. */
+  intact(list: readonly Tile[], revs: readonly number[]): boolean {
+    if (list.length !== revs.length) return false;
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      if (this.tiles.get(t.key) !== t || t.rev !== revs[i] || !(t.ready || t.failed) || t.job) return false;
+    }
+    return true;
   }
 
   /** Replace-blit one tile; empty tiles just clear their rect. */
@@ -774,6 +877,7 @@ export class TileCache {
     ctx.clearRect(x0, y0, x1 - x0, y1 - y0);
     if (!t.canvas) return false;
     ctx.drawImage(t.canvas, 0, 0, TILE_PX, TILE_PX, x0, y0, x1 - x0, y1 - y0);
+    rstats.c.tileBlits++;
     return true;
   }
 

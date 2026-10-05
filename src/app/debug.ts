@@ -10,6 +10,7 @@ import { VERSION } from './version';
 import { prefKeys, prefKey } from '../persist/prefs';
 import { cook } from '../ink/cook';
 import { paintGround } from '../render/ground';
+import { readStats } from '../render/stats';
 
 export { VERSION };
 
@@ -124,6 +125,7 @@ export function installDebug(app: App): void {
     },
     exportPng: async () => (await app.ctl.exportPng(false)) ?? { width: 0, height: 0, bytes: 0 },
     perf: reset => rt.perf.read(reset),
+    renderStats: opts => readStats(opts),
     probe: (sx, sy) => probe(app, sx, sy),
     async wipe() {
       try { await rt.autosave.flush(); } catch { /* nothing to keep */ }

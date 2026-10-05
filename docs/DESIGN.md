@@ -948,10 +948,10 @@ Bottom to top:
 | # | Element | Contents | Blend |
 |---|---|---|---|
 | 0 | `#ground` (div) | CSS ground (§6.1) | — |
-| 1 | `#base` | Committed tiles composited under the camera transform. Re-composited only on a camera or tile change. | CSS `plus-lighter` (Night) / `multiply` (Paper) |
+| 1 | `#base` | Committed tiles composited under the camera transform. Re-composited only on a camera or tile change; a gesture frame whose last composite still covers the viewport (a zoom in, or a return towards it) moves it by CSS transform instead, and the settle re-composites. | CSS `plus-lighter` (Night) / `multiply` (Paper) |
 | 2 | `#bloomA`, `#bloomB` (Night only) | ¼-resolution blurred ink, double-buffered (§6.7) | CSS `plus-lighter`, opacity .30 |
 | 3 | `#dry` | Settled live polys; committed strokes that are still baking; the **lifted selection** | Same as `#base` |
-| 4 | `#wet` | Unsettled tail, hot window, pool window, young growth, prediction, halo, and animating strokes (reveal, un-grow, fold-out, restyle morph). Cleared by dirty rects built from per-poly boxes. | Same as `#base` |
+| 4 | `#wet` | Unsettled tail, hot window, pool window, young growth, prediction, halo, and animating strokes (reveal, un-grow, fold-out, restyle morph). Cleared by dirty rects built from per-poly boxes. `#dry` and `#wet` are hidden while blank, so pan and zoom frames neither clear nor blend empty layers. | Same as `#base` |
 | 5 | `#overlay` | Cursor, predicted tip, weld ring, lasso, eraser ring and doom mask, selection bounds and outlines. `desynchronized: true`, DPR ≤ 2. | Normal |
 
 **Selection dimming.** While a selection is lifted, `#base` and the bloom canvases go to CSS opacity .45. No tile re-renders are needed.
@@ -1055,7 +1055,7 @@ There are two reveal kinds, both applied at tessellation. **Neither calls an ope
 - **Source:** the visible tiles, drawn at ¼ resolution into a scratch canvas. That is 20–40 small `drawImage` calls.
 - **Blur:** a dual-filter chain of three 2× downsamples followed by three 2× upsamples, using `drawImage` with `imageSmoothingQuality = 'high'`. It never uses `ctx.filter`, which Safari does not support reliably.
 - **Double buffer:** after each bake, the new bloom renders into the back buffer and cross-fades in over 400 ms. Unchanged regions are identical in both buffers, so only the new stroke's glow fades in: the ink *cures* into light.
-- **Camera gestures:** during a gesture, the bloom canvases follow a CSS transform. They recompute on settle.
+- **Camera gestures:** during a gesture, the bloom canvases follow a CSS transform. They recompute once the gesture ends (not when a pause mid-gesture lets tiles render).
 - **Scope:** Night only. Live layers are not bloomed; the hot trail stands in for that glow.
 
 ### 6.8 Caching
@@ -1082,7 +1082,7 @@ There are two reveal kinds, both applied at tessellation. **Neither calls an ope
 - Fit uses the content box plus a 6% margin.
 - Rotation is P1. In P0, `camera.rot` and `recipe.rot` are 0.
 - **During pan or zoom**, only cached tiles are composited, and stale tiles stay visible.
-- **150 ms after the last camera change**, the current level renders centre-out in time slices, with a one-tile prefetch ring.
+- **150 ms after the last camera change**, the current level renders centre-out in time slices, with a one-tile prefetch ring. A gesture that ends (navEnd, a glide's last step) settles at once. A first render left behind on another level pauses until that level is current again.
 - **Invalidation** (remove, restyle, lift) re-renders only the dirty sub-rect of each affected tile. That means clip, clear, and redraw the strokes whose boxes intersect it.
 
 **Memory: `render/ledger.ts` (CanvasLedger)** counts every canvas byte: tiles, live layers, bloom, sheets, export.
@@ -1501,7 +1501,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 - **Input:** the timestamp sanitiser, the wheel burst classifier, tap / double-tap / 2-finger-tap classification, and the pen-mode palm rules.
 
 **e2e (`scripts/e2e.mjs` on `harness.mjs`):**
-- **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps.
+- **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps. The suite drives the **debug variant** (`vite build --mode debug` → `dist-debug/index.html`, which it builds itself): the same app with `window.__rise` compiled in. The production file (`build:single`) has no debug hooks (`__DEBUG__` is a build-time constant), so the `prod-file` scenario only checks that it boots, draws, logs no errors and exposes nothing.
 - **Golden fixtures in other engines:** Firefox via puppeteer-core BiDi; the step reports SKIPPED when `FIREFOX_PATH` is absent. WebKit (Playwright) is P1.
 - **Scenarios:**
   - control-budget DOM counts in every §1.2 state
@@ -1656,6 +1656,13 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 | Single-file bundle | ≤ 200 KB minified JS+CSS, ≤ 65 KB gzipped, no network requests | build |
 | Memory | Canvases: phone 160, tablet 256, desktop 512 MB (ledger). `Cooked`: 48, 96, 192 MB. | Devices |
 | Supported document | 2,000 strokes and 20 M cooked points at these budgets. Larger documents work with cook-on-demand and LRU churn. | e2e stress |
+
+**Single-file bundle, status (2026-10-05).** `dist-single/index.html` is 469 kB minified (444 kB JS + 24 kB CSS) and 170 kB gzipped, down from 488 / 175 kB. The budget above is **not met**. What the build already does:
+- Debug-only code (`app/debug.ts`, the perf counters, `live.inspect()`, `RTree.validate()`) sits behind the build-time `__DEBUG__` flag and is absent from production builds. e2e uses the debug variant (§7.6).
+- `scripts/shrink.ts` runs in every build. Using the TypeScript checker, it inlines every cross-module `const enum` read, which oxc cannot do file by file, and gives `private`/`protected` members `$`-prefixed short names.
+- The modulepreload polyfill is off.
+
+Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What is left is live code: per-file attribution from a source-mapped build puts the largest modules at render/live 45 kB, ink/cook 20 kB, renderer 17 kB, tessellate 14 kB and controller 14 kB, with each Form operator between 2.5 and 9.5 kB. Reaching 200 / 65 kB would mean cutting features or mangling public property names, which is unsafe here because names reach `.rise` JSON, IndexedDB, intents and the DOM. The budget needs to be revised, or features moved behind lazy loading (which the single-file format inlines anyway).
 
 **Scheduler.** One rAF loop, which runs only while work is pending. Each frame:
 1. Drain input.

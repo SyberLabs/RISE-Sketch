@@ -1,9 +1,11 @@
 node_modules
 dist
 dist-single
+dist-debug
 e2e-out
 *.log
 
 # per-lane / scratch builds
 dist-lane*
 *.stackdump
+.claude/

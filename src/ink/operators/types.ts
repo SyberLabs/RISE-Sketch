@@ -292,8 +292,19 @@ export class UnitGeom {
   bOff: Int32Array = new Int32Array(8); bCnt: Int32Array = new Int32Array(8); bGen: Uint8Array = new Uint8Array(8); bLen: Float64Array = new Float64Array(8); nB = 0;
   /** Untapered width (doc), pressure, crowding at the unit; unit ceiling; operator scalar. */
   w = 0; p = 0; c = 0; ceil = 0; k = 0;
+  /**
+   * Optional per-point operator data, `stride` values per point, parallel to px / py / pa
+   * (Sprout v2 keeps each point's crotch clearance here). addPt never touches it: an operator
+   * that uses it sizes it with auxFit and fills it itself.
+   */
+  aux: Float64Array = new Float64Array(0);
 
   reset(): void { this.nPts = 0; this.nB = 0; }
+
+  /** Make aux hold at least n points of `stride` values (contents kept). */
+  auxFit(n: number, stride: number): void {
+    if (n * stride > this.aux.length) this.aux = grow64(this.aux, n * stride);
+  }
 
   addPt(x: number, y: number, a: number): void {
     const n = this.nPts;

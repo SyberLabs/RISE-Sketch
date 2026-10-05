@@ -12,6 +12,8 @@ import type { FormOps } from '../src/ink/operators/types';
 export { Hand, scribble, mulberry32 };
 
 export interface FormOpts {
+  /** Operator version (default 1: the frozen v1 fixtures). */
+  v?: number;
   form: FormId; base?: number; nib?: NibId; size?: number; device?: Device; z?: number;
   closed?: boolean; radial?: boolean; pools?: number[]; seed?: number; s0?: number; cut?: number; resume?: Float32Array | null;
 }
@@ -28,7 +30,7 @@ export function formRecipe(rows: Float32Array, o: FormOpts): StrokeRecipe {
     pools[i * PL.STRIDE + PL.S] = pl[2 * i]; pools[i * PL.STRIDE + PL.A] = pl[2 * i + 1];
     pools[i * PL.STRIDE + PL.T0] = 0; pools[i * PL.STRIDE + PL.T1] = 0;
   }
-  return { ...r, form: { form: o.form, v: 1, base: o.base ?? (o.form === 'line' ? 0 : 2) }, pools, radial: o.radial ?? false };
+  return { ...r, form: { form: o.form, v: o.v ?? 1, base: o.base ?? (o.form === 'line' ? 0 : 2) }, pools, radial: o.radial ?? false };
 }
 
 /** A long, varied pen stroke: speed changes, corners, a hold, curves, a fast flick. */

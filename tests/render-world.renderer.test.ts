@@ -10,6 +10,7 @@ import type { Glyphs } from '../src/render/types';
 import { createRenderer, type RendererImpl } from '../src/render/renderer';
 import { createLedger } from '../src/render/ledger';
 import { DIM, DIM_MS } from '../src/render/compositor';
+import { rstats } from '../src/render/stats';
 import {
   FakeDoc, FakeEl, FakeLive, FakeOverlay, FakeScene, cookOf, events, find, installDom, recipeAt, type DomRig,
 } from './render-world.dom';
@@ -373,5 +374,75 @@ describe('busy', () => {
     for (let k = 0; k < 6; k++) await Promise.resolve();
     R.frame();
     expect(find('live.grow')).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('camera gestures (DESIGN §6.9, §9 pan / zoom frame)', () => {
+  const baseBlits = (from: number): number => events.slice(from).filter(e => e.el?.label === 'base' && e.op === 'drawImage').length;
+
+  it('a zoom-in frame moves the last composite by CSS transform; the settle re-composites', async () => {
+    const R = rig();
+    await seed(R, [recipeAt(1, 300, 200), recipeAt(2, 700, 400)]);
+    const from = events.length;
+    const x0 = rstats.c.transformOnly;
+    R.r.setCamera({ ...CAM, scale: 1.1 }, 'gesture');
+    R.frame();
+    expect(baseBlits(from)).toBe(0);
+    expect(R.el('base').style.transform).toMatch(/scale\(1\.1/);
+    // back to where #base was drawn: no transform, still no canvas work
+    R.r.setCamera(CAM, 'gesture');
+    R.frame();
+    expect(baseBlits(from)).toBe(0);
+    expect(R.el('base').style.transform).toBe('');
+    expect(rstats.c.transformOnly - x0).toBe(2);
+    R.r.setCamera({ ...CAM, scale: 1.1 }, 'gesture');
+    R.frame();
+    R.r.setCamera({ ...CAM, scale: 1.1 }, 'settled');
+    await R.idle();
+    expect(baseBlits(from)).toBeGreaterThan(0);
+    expect(R.el('base').style.transform).toBe('');
+  });
+
+  it('a pan or a zoom out exposes area the last composite lacks: those frames re-composite', async () => {
+    const R = rig();
+    await seed(R, [recipeAt(1, 300, 200)]);
+    let from = events.length;
+    R.r.setCamera({ ...CAM, cx: CAM.cx + 40 }, 'gesture');
+    R.frame();
+    expect(baseBlits(from)).toBeGreaterThan(0);
+    from = events.length;
+    R.r.setCamera({ ...CAM, cx: CAM.cx + 40, scale: 0.9 }, 'gesture');
+    R.frame();
+    expect(baseBlits(from)).toBeGreaterThan(0);
+    expect(R.el('base').style.transform || '').toBe('');
+  });
+
+  it('a transform-only #base is composited for the current camera before a snapshot reads it', async () => {
+    const R = rig();
+    await seed(R, [recipeAt(1, 300, 200)]);
+    R.r.setCamera({ ...CAM, scale: 1.2 }, 'gesture');
+    R.frame();
+    expect(R.el('base').style.transform).not.toBe('');
+    const from = events.length;
+    void R.r.snapshot(0);
+    expect(baseBlits(from)).toBeGreaterThan(0);
+    expect(R.el('base').style.transform).toBe('');
+  });
+
+  it('the glow waits for the gesture to end and renders once; a settled camera settles at once', async () => {
+    const R = rig();
+    await seed(R, [recipeAt(1, 300, 200)]);
+    const b0 = rstats.c.bloomRenders;
+    R.r.setCamera({ ...CAM, cx: CAM.cx + 40 }, 'gesture');
+    R.frame(20);  // longer than SETTLE_MS: missing tiles render, the glow keeps following by transform
+    expect(R.r.debug().settled).toBe(true);
+    expect(rstats.c.bloomRenders).toBe(b0);
+    R.r.setCamera({ ...CAM, cx: CAM.cx + 40 }, 'settled');  // the gesture ends where it stood
+    expect(R.r.debug().settled).toBe(true);
+    await R.idle();
+    expect(rstats.c.bloomRenders).toBe(b0 + 1);
+    // a settled camera move (fit, reset) renders without waiting out the settle delay
+    R.r.setCamera({ ...CAM, cx: CAM.cx + 900 }, 'settled');
+    expect(R.r.debug().settled).toBe(true);
   });
 });

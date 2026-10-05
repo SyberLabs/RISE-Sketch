@@ -1,0 +1,4 @@
+# Normalise text to LF everywhere (test fixtures compare bytes; avoids CRLF churn on Windows)
+* text=auto eol=lf
+*.png binary
+*.rise text eol=lf
