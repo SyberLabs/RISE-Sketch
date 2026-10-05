@@ -7,7 +7,7 @@ export function state(patch: Partial<AppState> = {}): AppState {
       nib: 'brush', lastNib: 'brush',
       sizes: { pen: 2.5, brush: 9, chisel: 12, charcoal: 7 },
       ink: 'moss', custom: null, recents: [],
-      form: 'sprout', base: { line: 0, echo: 2, sprout: 2, drift: 2, ripple: 2 },
+      form: 'sprout', base: { line: 0, echo: 2, sprout: 2, drift: 2, ripple: 2, craze: 2, plume: 2, caustic: 2, burin: 2, plait: 2, orbit: 2 },
       mode: 'draw', mirror: null,
     },
     ground: 'night', selection: [], selectionRect: null, canUndo: false, canRedo: false, hasInk: false,

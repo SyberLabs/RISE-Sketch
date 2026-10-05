@@ -19,7 +19,10 @@ export function defaultTool(): ToolState {
     sizes: { pen: NIBS.pen.S, brush: NIBS.brush.S, chisel: NIBS.chisel.S, charcoal: NIBS.charcoal.S },
     ink: 'moss', custom: null, recents: [],
     form: 'sprout',
-    base: { line: FORMS.line.baseDefault, echo: FORMS.echo.baseDefault, sprout: FORMS.sprout.baseDefault, drift: FORMS.drift.baseDefault, ripple: FORMS.ripple.baseDefault },
+    base: {
+      line: FORMS.line.baseDefault, echo: FORMS.echo.baseDefault, sprout: FORMS.sprout.baseDefault, drift: FORMS.drift.baseDefault, ripple: FORMS.ripple.baseDefault,
+      craze: FORMS.craze.baseDefault, plume: FORMS.plume.baseDefault, caustic: FORMS.caustic.baseDefault, burin: FORMS.burin.baseDefault, plait: FORMS.plait.baseDefault, orbit: FORMS.orbit.baseDefault,
+    },
     mode: 'draw',
     mirror: null,
   };

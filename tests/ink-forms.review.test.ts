@@ -20,7 +20,7 @@ import {
 // cooks are heavy; other suites may share the CPU, so 5 s is not enough under load
 vi.setConfig({ testTimeout: 60000 });
 
-const ALL: FormId[] = ['line', 'echo', 'sprout', 'drift'];
+const ALL: FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'];
 
 /** A long, heavy, wide stroke that spends Sprout's and Drift's causal budgets. */
 function bigStroke(): Hand {

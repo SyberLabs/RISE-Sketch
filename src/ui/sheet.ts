@@ -297,7 +297,11 @@ export function sameOpt(a: TileOption | null, b: TileOption | null): boolean {
   }
 }
 
-/** Tiles of a chip sheet for a state (DESIGN §4): ≤ 9 tiles; labels always shown. Pure. */
+/**
+ * Tiles of a chip sheet for a state (DESIGN §4): ≤ 9 tiles, except the Form sheet, which offers
+ * all ten Forms (an accepted exception; it lays out in two rows, see tileCols). Labels always
+ * shown. Pure.
+ */
 export function tileSpecs(kind: ChipKind, s: AppState): TileSpec[] {
   const t = s.tool;
   if (kind === 'stroke') {
@@ -342,7 +346,7 @@ export function tileSpecs(kind: ChipKind, s: AppState): TileSpec[] {
     return out;
   }
   return P0_FORMS.map((form, i): TileSpec => ({
-    key: form, label: FORM_NAMES[form], aria: FORM_NAMES[form], tip: `${FORM_NAMES[form]} · ${i + 1}`,
+    key: form, label: FORM_NAMES[form], aria: FORM_NAMES[form], tip: `${FORM_NAMES[form]} · ${(i + 1) % 10}`,
     opt: { k: 'form', form }, checked: t.form === form, intent: { k: 'pickForm', form }, drag: false,
   }));
 }
@@ -366,11 +370,14 @@ export function rovingNext(i: number, n: number, key: string, cols: number): num
   }
 }
 
-/** Grid columns for a tile sheet (phones use a grid; elsewhere one row). */
+/**
+ * Grid columns for a tile sheet (phones use a grid; elsewhere one row, or two balanced rows
+ * past 9 tiles: the ten-Form sheet is 5 + 5).
+ */
 export function tileCols(layout: Layout, n: number): number {
   if (layout === 'phone') return n > 4 ? 3 : 4;
   if (layout === 'phone-landscape') return n > 4 ? 3 : 2;
-  return n;
+  return n > 9 ? Math.ceil(n / 2) : n;
 }
 
 const GROUP_LABEL: Record<ChipKind, string> = { stroke: 'Nib', color: 'Ink', form: 'Form' };

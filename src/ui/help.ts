@@ -48,6 +48,7 @@ export function keyRows(isMac: boolean, L: (code: string) => string): HelpRow[] 
   const alt = isMac ? '⌥' : 'Alt+';
   return [
     { keys: [`${L('Digit1')}–${L('Digit4')}`], action: 'Form: Line, Echo, Sprout, Drift' },
+    { keys: [`${L('Digit5')}–${L('Digit9')}`, L('Digit0')], action: 'Form: Craze, Plume, Caustic, Burin, Plait / Orbit' },
     { keys: [L('KeyB'), `${sh}${L('KeyB')}`], action: 'Next / previous nib' },
     { keys: [L('KeyC'), `${sh}${L('KeyC')}`], action: 'Next / previous ink' },
     { keys: [L('KeyG')], action: 'Night / Paper' },

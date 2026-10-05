@@ -6,6 +6,8 @@ import type { Cooked, DraftStroke, FormId, NibId, Device, StrokeRecipe } from '.
 import { PL, S } from '../src/core/types';
 import { fnv1a } from '../src/core/det';
 import { Hand, recipe, scribble, mulberry32 } from './ink-instrument.fixtures';
+import { cook, createIncrementalCook } from '../src/ink/cook';
+import type { FormOps } from '../src/ink/operators/types';
 
 export { Hand, scribble, mulberry32 };
 
@@ -180,4 +182,81 @@ export function inkBoxContains(c: Cooked, origin: readonly [number, number]): bo
     if (x < c.inkBox.x0 - 1e-6 || x > c.inkBox.x1 + 1e-6 || y < c.inkBox.y0 - 1e-6 || y > c.inkBox.y1 + 1e-6) return false;
   }
   return true;
+}
+
+// ================================================================ per-Form drivers (ported from the forms lab harness)
+
+/** Options of a test stroke for a Form's operator (the lab harness's stroke options). */
+export interface OpsStrokeOpts {
+  base?: number; nib?: NibId; size?: number; device?: Device; z?: number;
+  closed?: boolean; radial?: boolean; pools?: number[]; seed?: number; noP?: boolean;
+  origin?: readonly [number, number];
+}
+
+/**
+ * A committed recipe over a Hand gesture, drawn with a shipped Form's operator (its id and
+ * version). Defaults match the forms lab: base = the operator's baseDefault, seed 11.
+ */
+export function opsRecipe(ops: FormOps, h: Hand, o: OpsStrokeOpts = {}): StrokeRecipe {
+  const rows = h.rows(o.z ?? 1, !!o.noP);
+  const base = o.base ?? ops.baseDefault;
+  const r0 = formRecipe(rows, {
+    form: ops.id, base, nib: o.nib, size: o.size, device: o.device, z: o.z,
+    closed: o.closed, radial: o.radial, pools: o.pools, seed: o.seed ?? 11,
+  });
+  return { ...r0, form: { form: ops.id, v: ops.v, base }, origin: o.origin ?? r0.origin };
+}
+
+/** One-shot cook of a test stroke (≡ incremental finish, by construction). */
+export function opsCook(ops: FormOps, h: Hand, o: OpsStrokeOpts = {}): { r: StrokeRecipe; c: Cooked } {
+  const r = opsRecipe(ops, h, o);
+  return { r, c: cook(r) };
+}
+
+export interface OpsLiveStage { r: StrokeRecipe; c: Cooked; ghost: Cooked | null; fraction: number }
+
+/** Live views of a stroke at several fractions of its rows (optionally a pool near the tip at the last one). */
+export function opsLive(ops: FormOps, h: Hand, fractions: number[], o: OpsStrokeOpts & { poolAtTip?: number } = {}): OpsLiveStage[] {
+  const r = opsRecipe(ops, h, o);
+  return fractions.map((fr, i) => {
+    const fd = new Feeder(r);
+    const ic = createIncrementalCook(fd.d);
+    const stop = Math.floor(fd.total * fr);
+    while (fd.fed < stop) { const n0 = fd.fed; fd.feed(4); ic.append(fd.fed - n0); }
+    if (o.poolAtTip && i === fractions.length - 1) { fd.setPools([ic.spine().L - 4, o.poolAtTip]); ic.regrow(0, 1e9); }
+    const v = ic.view();
+    return { r, c: v.geom, ghost: v.ghost, fraction: fr };
+  });
+}
+
+/**
+ * Incremental cooking under any append chunking, hold schedule and closure flicker must finish
+ * bit-identical to the one-shot cook. Null when it holds, else the first difference.
+ */
+export function opsIncremental(ops: FormOps, h: Hand, o: OpsStrokeOpts & { chunks?: number[]; holds?: number[][]; flickerClosure?: boolean } = {}): string | null {
+  const r = opsRecipe(ops, h, o);
+  const chunks = o.chunks ?? [1, 3, 7, 25, 64, 500];
+  for (const k of chunks) {
+    const fd = new Feeder(r);
+    const ic = createIncrementalCook(fd.d);
+    let step = 0;
+    while (fd.fed < fd.total) {
+      const n0 = fd.fed; fd.feed(k); ic.append(fd.fed - n0);
+      step++;
+      if (o.holds && step % 3 === 0) {
+        const L = ic.spine().L;
+        const hold = o.holds[step % o.holds.length];
+        if (hold) { fd.setPools([Math.max(0, L - hold[0]), hold[1]]); ic.regrow(0, 1e9); }
+      }
+      if (o.flickerClosure && step % 5 === 0) ic.setClosing(step % 10 === 0);
+    }
+    if (o.pools) { fd.setPools(o.pools); ic.regrow(0, 1e9); }
+    ic.setClosing(!!o.closed);
+    const frozen = fd.freeze(!!o.closed);
+    const inc = ic.finish(frozen);
+    const full = cook(frozen);
+    const d = cookedDiff(inc, full);
+    if (d) return `chunk ${k}: ${d}`;
+  }
+  return null;
 }

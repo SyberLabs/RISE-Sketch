@@ -19,7 +19,7 @@ interface Item { r: StrokeRecipe; c: Cooked; color: ColorStyle; ghost?: Cooked |
 
 const modules = import.meta.glob<LabForm>('./*.form.ts');
 const q = new URLSearchParams(location.search);
-const formName = q.get('form') ?? '_smoke';
+const formName = q.get('form') ?? 'craze';
 const view = q.get('view') ?? 'forms';
 const ground: Ground = view === 'paper' ? 'paper' : 'night';
 const loader = modules[`./${formName}.form.ts`];
@@ -68,7 +68,10 @@ function mk(h: Hand, o: LabStrokeOpts, ox: number, oy: number, k = 0): Item {
   return { r, c, color: assignVariant(ink, k, null, null) };
 }
 function mkShipped(h: Hand, form: FormId, ox: number, oy: number, k: number): Item {
-  const INK: Record<FormId, InkId> = { line: 'graphite', echo: 'indigo', sprout: 'moss', drift: 'rose', ripple: 'ochre' };
+  const INK: Record<FormId, InkId> = {
+    line: 'graphite', echo: 'indigo', sprout: 'moss', drift: 'rose', ripple: 'ochre',
+    craze: 'oxide', plume: 'ochre', caustic: 'spectral', burin: 'graphite', plait: 'indigo', orbit: 'rose',
+  };
   const r0 = formRecipe(h.rows(), { form, base: FORMS[form].baseDefault, seed: 11 + k });
   const r: StrokeRecipe = { ...r0, origin: [ox, oy] };
   return { r, c: cook(r), color: assignVariant(INK[form], k, null, null) };

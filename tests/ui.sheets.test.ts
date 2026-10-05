@@ -39,15 +39,17 @@ describe('tile specs', () => {
     expect(sel[7].label).toBe('Selection');
     expect(sel[8].label).toBe('Recent');
   });
-  it('Form: Line · Echo · Sprout · Drift with their number keys', () => {
+  it('Form: all ten Forms with their number keys (1–9, 0)', () => {
     const t = tileSpecs('form', state());
-    expect(t.map(x => x.label)).toEqual(['Line', 'Echo', 'Sprout', 'Drift']);
-    expect(t.map(x => x.tip)).toEqual(['Line · 1', 'Echo · 2', 'Sprout · 3', 'Drift · 4']);
+    expect(t.map(x => x.label)).toEqual(['Line', 'Echo', 'Sprout', 'Drift', 'Craze', 'Plume', 'Caustic', 'Burin', 'Plait', 'Orbit']);
+    expect(t.map(x => x.tip)).toEqual(['Line · 1', 'Echo · 2', 'Sprout · 3', 'Drift · 4', 'Craze · 5', 'Plume · 6', 'Caustic · 7', 'Burin · 8', 'Plait · 9', 'Orbit · 0']);
+    expect(t[9].intent).toEqual({ k: 'pickForm', form: 'orbit' });
     expect(t[2].checked).toBe(true);
     expect(t[0].intent).toEqual({ k: 'pickForm', form: 'line' });
   });
-  it('every sheet stays within 9 tiles', () => {
-    for (const k of ['stroke', 'color', 'form'] as const) expect(tileSpecs(k, state()).length).toBeLessThanOrEqual(9);
+  it('every sheet stays within 9 tiles, except the ten-Form sheet (accepted exception)', () => {
+    for (const k of ['stroke', 'color'] as const) expect(tileSpecs(k, state()).length).toBeLessThanOrEqual(9);
+    expect(tileSpecs('form', state()).length).toBe(10);
   });
 });
 
@@ -74,6 +76,11 @@ describe('roving focus', () => {
     expect(tileCols('phone-landscape', 4)).toBe(2);
     expect(tileCols('desktop', 9)).toBe(9);
     expect(tileCols('tablet', 4)).toBe(4);
+    // ten tiles: two rows of five on larger screens, the phone grid stays three wide (scrolls)
+    expect(tileCols('desktop', 10)).toBe(5);
+    expect(tileCols('tablet', 10)).toBe(5);
+    expect(tileCols('phone', 10)).toBe(3);
+    expect(tileCols('phone-landscape', 10)).toBe(3);
   });
 });
 

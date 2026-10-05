@@ -48,7 +48,7 @@ function line(x0: number, y0: number, x1: number, y1: number, n: number): Float3
 const tool = (over: Partial<ToolState> = {}): ToolState => ({
   nib: 'brush', lastNib: 'brush', sizes: { pen: 2.5, brush: 9, chisel: 12, charcoal: 7 },
   ink: 'moss', custom: null, recents: [], form: 'sprout',
-  base: { line: 0, echo: 2, sprout: 2, drift: 2, ripple: 2 }, mode: 'draw', mirror: null, ...over,
+  base: { line: 0, echo: 2, sprout: 2, drift: 2, ripple: 2, craze: 2, plume: 2, caustic: 2, burin: 2, plait: 2, orbit: 2 }, mode: 'draw', mirror: null, ...over,
 });
 
 describe('last-stroke use rule (DESIGN §3.4)', () => {
@@ -153,7 +153,7 @@ describe('glyph caching', () => {
     expect(offLog.length).toBe(painted);
     expect(log.filter(c => c === 'drawImage').length).toBe(1);
     expect(log.filter(c => c === 'fill').length).toBe(0);
-    g.chip(cv, 'form', tool({ base: { line: 0, echo: 2, sprout: 3, drift: 2, ripple: 2 } }), 'night', false);
+    g.chip(cv, 'form', tool({ base: { line: 0, echo: 2, sprout: 3, drift: 2, ripple: 2, craze: 2, plume: 2, caustic: 2, burin: 2, plait: 2, orbit: 2 } }), 'night', false);
     expect(calls.length).toBe(2);
     // the colour chip never cooks
     g.chip(fakeCanvas(80, 56, 40, log), 'color', tool(), 'paper', false);

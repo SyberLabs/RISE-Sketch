@@ -25,7 +25,10 @@ export const NIB_NAMES: Readonly<Record<NibId, string>> = { pen: 'Pen', brush: '
 export const INK_NAMES: Readonly<Record<InkId, string>> = {
   graphite: 'Graphite', indigo: 'Indigo', oxide: 'Oxide', ochre: 'Ochre', moss: 'Moss', rose: 'Rose', spectral: 'Spectral', custom: 'Custom ink',
 };
-export const FORM_NAMES: Readonly<Record<FormId, string>> = { line: 'Line', echo: 'Echo', sprout: 'Sprout', drift: 'Drift', ripple: 'Ripple' };
+export const FORM_NAMES: Readonly<Record<FormId, string>> = {
+  line: 'Line', echo: 'Echo', sprout: 'Sprout', drift: 'Drift', ripple: 'Ripple',
+  craze: 'Craze', plume: 'Plume', caustic: 'Caustic', burin: 'Burin', plait: 'Plait', orbit: 'Orbit',
+};
 const GROUND_NAMES = { night: 'Night', paper: 'Paper' } as const;
 
 // ============================================================================ amount maths (pure)
@@ -101,7 +104,7 @@ export function chipTip(which: ChipKind, s: AppState): string {
     case 'color':
       return `Color · ${INK_NAMES[t.ink]} · C · drag ↔ hue, ↕ tone`;
     case 'form':
-      return `Form · ${FORM_NAMES[t.form]} · 1–4 · drag ↕ to deepen`;
+      return `Form · ${FORM_NAMES[t.form]} · 1–0 · drag ↕ to deepen`;
   }
 }
 

@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import type { FormId, StrokeRecipe } from '../src/core/types';
 import { S } from '../src/core/types';
 import { cook, createInkCook } from '../src/ink/cook';
+import { FORMS } from '../src/ink/operators/registry';
 import { continuationSamples, RESUME } from '../src/ink/spine';
 import { formRecipe, longStroke, loopStroke, tapStroke, scribble, Hand, Feeder, cookedHash } from './ink-forms.fixtures';
 
@@ -21,7 +22,7 @@ function fixtures(): Record<string, StrokeRecipe> {
   const out: Record<string, StrokeRecipe> = {};
   const chisel = new Hand(0, 0, { jitter: 0.2, seed: 11, alt: 0.6, az: 0.4, p: 0.3, c: 0.3, cs: -0.2 });
   chisel.moveTo(80, 40, 0.5).moveTo(10, 120, 2.0, 0.1).moveTo(200, 90, 0.7, 0.9);
-  for (const form of ['line', 'echo', 'sprout', 'drift'] as FormId[]) {
+  for (const form of ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'] as FormId[]) {
     const base = form === 'line' ? 1.5 : 2;
     out[`${form}/pen-brush-long`] = formRecipe(longStroke(3).rows(), { form, base });
     out[`${form}/pools`] = formRecipe(longStroke(5).rows(), { form, base: base - 1, pools: [150, 1.5, 420, 2.25, 700, 0.5] });
@@ -31,7 +32,7 @@ function fixtures(): Record<string, StrokeRecipe> {
     out[`${form}/closed-loop`] = formRecipe(loopStroke(70).rows(), { form, base, closed: true });
     out[`${form}/tap`] = formRecipe(tapStroke(60).rows(), { form, base, radial: true });
     out[`${form}/bloom`] = formRecipe(tapStroke(800).rows(), { form, base, radial: true, pools: [0, 1.75] });
-    out[`${form}/max-depth`] = formRecipe(longStroke(7).rows(), { form, base: form === 'line' ? 5 : form === 'drift' ? 6 : form === 'sprout' ? 4 : 5 });
+    out[`${form}/max-depth`] = formRecipe(longStroke(7).rows(), { form, base: FORMS[form].dMax });
     const light = new Hand(50, 50, { jitter: 0.05, seed: 9, p: 0.15 });
     light.hold(60).moveTo(51, 50.5, 0.05);
     out[`${form}/tap-light`] = formRecipe(light.rows(), { form, base: 2.5, radial: true });

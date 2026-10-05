@@ -149,7 +149,7 @@ describe('help', () => {
       expect(actions).toContain(want);
     }
     const keys = rows.flatMap(r => r.keys);
-    for (const k of ['1–4', 'B', 'Shift+B', 'C', 'G', 'E', '[', ']', '−', '=', 'R', 'Ctrl+Z', 'Ctrl+Y', 'Ctrl+A', 'Esc', 'Shift+1', 'Shift+0', 'P', '?', 'Ctrl+S', 'Ctrl+O', 'Ctrl+E']) {
+    for (const k of ['1–4', '5–9', '0', 'B', 'Shift+B', 'C', 'G', 'E', '[', ']', '−', '=', 'R', 'Ctrl+Z', 'Ctrl+Y', 'Ctrl+A', 'Esc', 'Shift+1', 'Shift+0', 'P', '?', 'Ctrl+S', 'Ctrl+O', 'Ctrl+E']) {
       expect(keys).toContain(k);
     }
   });

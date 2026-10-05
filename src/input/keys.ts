@@ -11,7 +11,8 @@
  *  - Shift is ignored where it cannot mean anything else: `[ ] - =` (so `+` deepens
  *    too), Delete/Backspace, Escape. Numpad +/− also set depth.
  *  - `?` is accepted with AltGr (layouts that need it) but not with Mod alone.
- *  - P1 bindings (Digit5, Mod+D, Mod+Shift+E, M, arrows) return null.
+ *  - Digit1–Digit9 and Digit0 pick the ten Forms in sheet order (P0_FORMS); Shift+Digit0 is 100 %.
+ *  - P1 bindings (Mod+D, Mod+Shift+E, M, arrows) return null.
  */
 import type { KeyAction } from './types';
 
@@ -26,7 +27,7 @@ export interface KeyLike {
 
 // Shared immutable results: mapping a key allocates nothing.
 const A = {
-  form: [0, 1, 2, 3].map(index => Object.freeze({ k: 'form', index }) as KeyAction),
+  form: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(index => Object.freeze({ k: 'form', index }) as KeyAction),
   nibNext: Object.freeze({ k: 'nib', dir: 1 }) as KeyAction,
   nibPrev: Object.freeze({ k: 'nib', dir: -1 }) as KeyAction,
   inkNext: Object.freeze({ k: 'ink', dir: 1 }) as KeyAction,
@@ -80,7 +81,12 @@ export function keyAction(e: KeyLike, isMac: boolean): KeyAction | null {
     case 'Digit2': return s ? null : A.form[1];
     case 'Digit3': return s ? null : A.form[2];
     case 'Digit4': return s ? null : A.form[3];
-    case 'Digit0': return s ? A.resetView : null;
+    case 'Digit5': return s ? null : A.form[4];
+    case 'Digit6': return s ? null : A.form[5];
+    case 'Digit7': return s ? null : A.form[6];
+    case 'Digit8': return s ? null : A.form[7];
+    case 'Digit9': return s ? null : A.form[8];
+    case 'Digit0': return s ? A.resetView : A.form[9];
     case 'KeyB': return s ? A.nibPrev : A.nibNext;
     case 'KeyC': return s ? A.inkPrev : A.inkNext;
     case 'KeyG': return s ? null : A.ground;
