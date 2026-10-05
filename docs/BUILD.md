@@ -164,15 +164,17 @@ ceiling; lift guard restores earlier values); learner percentile + lock rules; p
 ## 3. ink-forms  (pure; starts after ink-instrument finishes)
 
 **Files:** `src/ink/noise.ts`, `src/ink/operators/{types,registry,line.v1,echo.v1,sprout.v1,drift.v1}.ts`,
-`src/ink/cook.ts`. (`ink/operators/types.ts` is yours: the Operator interface may deviate from the
+`src/ink/cook.ts`. (Added after this plan: `sprout.v2.ts` and the six lab Forms
+`{craze,plume,caustic,burin,plait,orbit}.v1.ts`, see DESIGN §2.3.5 and §2.3.10–§2.3.15.) (`ink/operators/types.ts` is yours: the Operator interface may deviate from the
 DESIGN §7.2 sketch as long as the exported API below holds.)
 **Spec:** DESIGN §2.3 (all), §3.2 (wake/reveal data), §6.6, §7.4, §7.5, §9 rules 9.
 
 ```ts
 // ink/operators/registry.ts
 export interface FormMeta { id: FormId; name: string; dMax: number; baseDefault: number; locality: 'local' | 'global'; p0: boolean }
-export const FORMS: Record<FormId, FormMeta>;   // line 0–5 (0), echo 0–5 (2), sprout 0–4 (2), drift 0–6 (2), ripple meta (p0:false)
-export const CURRENT_V: Record<FormId, number>; // all 1
+export const FORMS: Record<FormId, FormMeta>;   // line 0–5 (0), echo 0–5 (2), sprout 0–4 (2), drift 0–6 (2), ripple meta (p0:false);
+                                                // since added: craze 0–4, plume 0–3, caustic 0–4, burin 0–4, plait 0–4, orbit 0–4 (all base 2)
+export const CURRENT_V: Record<FormId, number>; // all 1, except sprout: 2 (since Sprout v2)
 
 // ink/cook.ts
 export const createIncrementalCook: CreateIncrementalCook;   // core/types.ts IncrementalCook
@@ -520,7 +522,9 @@ Paper ground) and check the visible-control counts.
 ## 11. app  (wave 2, integration)
 
 **Files:** `src/app/{store,controller,draft,selection,replay,firstrun,debug}.ts`, `src/main.ts`,
-`src/export/png.ts`, `src/assets/seed.ts`, `scripts/e2e.mjs`. Resolves `docs/contract-requests/*`.
+`src/export/png.ts`, `src/assets/seed.ts`, `scripts/e2e.mjs`. (As built, the app layer is
+`src/app/{types,boot,runtime,store,tool,controller,draft,erase,edits,selection,view,replay,library,docs,hints,perf,debug,version}.ts`
+with no `firstrun.ts`: DESIGN §7.1.) Resolves `docs/contract-requests/*`.
 Wires: doc + history + scene + kitchen + renderer + input + ui + persistence + learner + frame loop;
 owns the stroke lifecycle (DESIGN §7.4), selection, restyle, peel undo, erase, sampling, replay,
 first-run seed, export, view chip state, hints, toasts, `?debug` → `window.__rise`.
