@@ -6,3 +6,4 @@ e2e-out
 
 # per-lane / scratch builds
 dist-lane*
+*.stackdump
