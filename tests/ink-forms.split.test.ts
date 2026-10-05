@@ -42,9 +42,10 @@ function lastTrunkPt(c: Cooked): [number, number] {
 }
 
 describe('split pieces', () => {
-  for (const form of ['line', 'echo', 'sprout', 'drift'] as FormId[]) {
-    it(`${form}: the pieces meet on one station and growth continues`, () => {
-      const r = formRecipe(longStroke(4).rows(), { form, base: form === 'line' ? 3 : 2, nib: 'pen', size: 3 });
+  // every P0 Form at v1, plus Sprout v2
+  for (const [form, v] of [['line', 1], ['echo', 1], ['sprout', 1], ['drift', 1], ['sprout', 2]] as [FormId, number][]) {
+    it(`${v === 1 ? form : `${form}@${v}`}: the pieces meet on one station and growth continues`, () => {
+      const r = formRecipe(longStroke(4).rows(), { v, form, base: form === 'line' ? 3 : 2, nib: 'pen', size: 3 });
       const total = Math.floor(r.samples.length / S.STRIDE);
       const { a, b, snap } = split(r, Math.floor(total * 0.55));
       const ca = cook(a), cb = cook(b);

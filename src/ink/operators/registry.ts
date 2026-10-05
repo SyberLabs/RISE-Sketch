@@ -8,6 +8,7 @@ import type { FormOps } from './types';
 import { line } from './line.v1';
 import { echo } from './echo.v1';
 import { sprout } from './sprout.v1';
+import { sprout as sprout2 } from './sprout.v2';
 import { drift } from './drift.v1';
 import { craze } from './craze.v1';
 import { plume } from './plume.v1';
@@ -39,11 +40,17 @@ export const FORMS: Record<FormId, FormMeta> = {
 
 /** Operator version new strokes are drawn with. */
 export const CURRENT_V: Record<FormId, number> = {
-  line: 1, echo: 1, sprout: 1, drift: 1, ripple: 1,
+  line: 1, echo: 1, sprout: 2, drift: 1, ripple: 1,
   craze: 1, plume: 1, caustic: 1, burin: 1, plait: 1, orbit: 1,
 };
 
 const V1: Record<FormId, FormOps> = { line, echo, sprout, drift, ripple: line, craze, plume, caustic, burin, plait, orbit };
+
+/**
+ * Later shipped versions, by Form then version. Sprout v2 draws every branch from where it
+ * clears its parent's ribbon (no additive overlap on Night); v1 recipes keep cooking with v1.
+ */
+const LATER: Partial<Record<FormId, Record<number, FormOps>>> = { sprout: { 2: sprout2 } };
 
 /** Operators registered at runtime by exact (form, version): experiments and future versions. */
 const EXTRA: Map<string, FormOps> = new Map();
@@ -60,12 +67,12 @@ export function registerOperator(form: FormId, v: number, ops: FormOps): () => v
 }
 
 /**
- * The operator for a Form and version. Exact runtime registrations win; otherwise unknown
- * versions fall back to v1, and Ripple (P1, no operator yet) cooks as Line, so every
+ * The operator for a Form and version. Exact runtime registrations win, then the shipped
+ * later versions (LATER); otherwise unknown versions fall back to v1, and Ripple (P1, no operator yet) cooks as Line, so every
  * recipe still renders.
  */
 export function operatorFor(form: FormId, v: number): FormOps {
-  return EXTRA.get(form + '@' + v) ?? V1[form] ?? line;
+  return EXTRA.get(form + '@' + v) ?? LATER[form]?.[v] ?? V1[form] ?? line;
 }
 
 /**
