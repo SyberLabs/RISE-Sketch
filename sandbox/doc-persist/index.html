@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Persistence sandbox</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { color-scheme: dark; --bg: #0d0f12; --fg: #d9dde3; --dim: #8a929c; --ok: #7fd18b; --bad: #ff7a7a; }
+    body { margin: 0; padding: 24px; background: var(--bg); color: var(--fg); font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+    h1 { font: 600 16px system-ui, sans-serif; margin: 0 0 4px; }
+    p { color: var(--dim); margin: 0 0 16px; }
+    ol { padding-left: 22px; margin: 0; }
+    li.ok::marker { color: var(--ok); }
+    li.bad { color: var(--bad); }
+    .row { display: flex; gap: 24px; align-items: flex-start; margin-top: 16px; }
+    figure { margin: 0; color: var(--dim); }
+    img { display: block; border: 1px solid #2a2f36; margin-bottom: 4px; }
+    #drop { width: 160px; height: 60px; border: 1px dashed #444; display: grid; place-items: center; color: var(--dim); }
+    #drop[data-drop] { border-color: var(--ok); }
+  </style>
+</head>
+<body>
+  <h1>doc-persist sandbox</h1>
+  <p id="phase">starting…</p>
+  <ol id="log"></ol>
+  <div class="row">
+    <figure><img id="snap" alt="snapshot" width="320" height="200"><figcaption>snapshot read back</figcaption></figure>
+    <figure><img id="thumb" alt="thumbnail"><figcaption>96 px thumbnail</figcaption></figure>
+    <div id="drop">drop target</div>
+    <div><button id="pick">Open…</button> <button id="save">Save</button></div>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

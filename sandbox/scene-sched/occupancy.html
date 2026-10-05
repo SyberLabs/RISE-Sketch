@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>scene-sched: occupancy</title>
+  <link rel="icon" href="data:,">
+  <style>
+    body { font: 12px/1.5 ui-monospace, monospace; background: #15171c; color: #d8dbe2; margin: 12px; }
+    canvas { display: block; background: #0d0e12; border: 1px solid #2a2d36; }
+    #out { margin-top: 8px; white-space: pre; }
+  </style>
+</head>
+<body>
+  <canvas id="c" width="1100" height="640"></canvas>
+  <div id="out">running…</div>
+  <script type="module" src="./occupancy.ts"></script>
+</body>
+</html>

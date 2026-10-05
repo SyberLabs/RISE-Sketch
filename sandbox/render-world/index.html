@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Render world sandbox</title>
+  <link rel="icon" href="data:,">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 12px/1.35 system-ui, sans-serif; }
+    #stage { position: fixed; inset: 0; }
+    #hud { position: fixed; left: 8px; bottom: 6px; z-index: 10; color: rgba(255,255,255,.6); pointer-events: none; white-space: pre; }
+    #gallery { position: fixed; inset: 0; overflow: auto; display: none; }
+    .gal { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; min-height: 100%; }
+    .side { padding: 16px; }
+    .side h2 { margin: 0 0 10px; font: 600 13px system-ui; letter-spacing: .02em; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: flex-start; }
+    .cell { display: flex; flex-direction: column; align-items: center; gap: 4px; border-radius: 10px; padding: 6px; }
+    .cell span { font-size: 11px; }
+    canvas.tile { width: 96px; height: 64px; display: block; }
+    canvas.chip { width: 40px; height: 28px; display: block; }
+    canvas.thumb { width: 96px; height: 96px; display: block; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="gallery"></div>
+  <div id="hud"></div>
+  <script>
+    // ?noplus=1: pretend CSS plus-lighter is unsupported (exercises the blit fallback)
+    if (/[?&]noplus=1/.test(location.search)) {
+      const orig = CSS.supports.bind(CSS);
+      CSS.supports = (a, b) => (String(b).includes('plus-lighter') || String(a).includes('plus-lighter') ? false : orig(a, b));
+    }
+  </script>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

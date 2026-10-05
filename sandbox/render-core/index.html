@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Render core sandbox</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 12px/1.3 system-ui, sans-serif; }
+    #grid { display: grid; width: 100vw; height: 100vh; gap: 0; }
+    .panel { position: relative; overflow: hidden; isolation: isolate; }
+    .panel > .ground { position: absolute; inset: 0; }
+    .panel > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .label { position: absolute; left: 10px; top: 8px; z-index: 5; color: rgba(255,255,255,.55); letter-spacing: .02em; pointer-events: none; }
+    .paper .label { color: rgba(40,30,20,.55); }
+  </style>
+</head>
+<body>
+  <div id="grid"></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

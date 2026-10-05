@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Procedural Ink</title>
+<style>
+  :root{
+    --ground:#12141a;
+    --ground-2:#171a22;
+    --line:#2a2f3b;
+    --text:#c9cfdb;
+    --text-dim:#7a8397;
+    --hot:#8fb3ff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ground);}
+  body{
+    font-family:ui-sans-serif,-apple-system,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  #view{
+    position:fixed;inset:0;display:block;
+    touch-action:none;               /* required: stops scroll/zoom stealing pen input */
+    cursor:crosshair;
+  }
+
+  #panel{
+    position:fixed;top:16px;left:16px;width:262px;
+    background:rgba(19,22,29,.86);
+    backdrop-filter:blur(14px);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 14px 12px;
+    font-size:12.5px;line-height:1.45;
+    user-select:none;
+    transition:opacity .18s ease, transform .18s ease;
+    max-height:calc(100vh - 32px);
+    overflow-y:auto;
+  }
+  #panel.hidden{opacity:0;transform:translateX(-14px);pointer-events:none}
+  #panel h1{
+    font-size:13px;font-weight:600;margin:0 0 2px;letter-spacing:.01em;
+  }
+  #panel .sub{color:var(--text-dim);font-size:11.5px;margin:0 0 12px}
+
+  .ops{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:12px}
+  .ops button{
+    all:unset;text-align:left;padding:6px 8px;border-radius:6px;
+    border:1px solid var(--line);color:var(--text-dim);
+    font-size:11.5px;cursor:pointer;
+  }
+  .ops button:hover{color:var(--text);border-color:#3a4152}
+  .ops button[aria-pressed="true"]{
+    background:var(--ground-2);color:var(--hot);border-color:#3d4a6b;
+  }
+  .ops button:focus-visible{outline:2px solid var(--hot);outline-offset:1px}
+
+  .row{margin-bottom:9px}
+  .row label{display:flex;justify-content:space-between;color:var(--text-dim);font-size:11.5px;margin-bottom:3px}
+  .row label b{font-weight:500;color:var(--text);font-variant-numeric:tabular-nums}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;margin:0;cursor:ew-resize;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:2px}
+  input[type=range]::-moz-range-track{height:2px;background:var(--line);border-radius:2px}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:var(--text);
+    margin-top:-4.5px;border:none;
+  }
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--text);border:none}
+  input[type=range]:focus-visible{outline:2px solid var(--hot);outline-offset:2px;border-radius:4px}
+
+  .acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+  .acts button{
+    all:unset;padding:5px 9px;border-radius:6px;border:1px solid var(--line);
+    color:var(--text-dim);font-size:11.5px;cursor:pointer;
+  }
+  .acts button:hover{color:var(--text);border-color:#3a4152}
+  .acts button:focus-visible{outline:2px solid var(--hot);outline-offset:1px}
+
+  #status{
+    position:fixed;bottom:14px;left:16px;font-size:11.5px;color:var(--text-dim);
+    user-select:none;pointer-events:none;
+  }
+  #status b{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+  #hint{
+    position:fixed;bottom:14px;right:16px;font-size:11.5px;color:var(--text-dim);
+    user-select:none;pointer-events:none;text-align:right;
+  }
+  @media (prefers-reduced-motion:reduce){#panel{transition:none}}
+  @media (max-width:640px){#panel{width:calc(100vw - 32px)}#hint{display:none}}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="panel">
+  <h1>Procedural Ink</h1>
+  <p class="sub">Your stroke is the seed. The operator grows it.</p>
+
+  <div class="ops" id="ops"></div>
+
+  <div class="row"><label>Depth <b id="vDepth">3</b></label>
+    <input type="range" id="depth" min="1" max="6" step="1" value="3"></div>
+  <div class="row"><label><span id="lShape">Roughness</span> <b id="vShape">0.28</b></label>
+    <input type="range" id="shape" min="0" max="1" step="0.01" value="0.28"></div>
+  <div class="row"><label><span id="lDens">Density</span> <b id="vDens">0.5</b></label>
+    <input type="range" id="dens" min="0" max="1" step="0.01" value="0.5"></div>
+  <div class="row"><label>Nib width <b id="vWidth">7.0</b></label>
+    <input type="range" id="width" min="1" max="30" step="0.5" value="7"></div>
+  <div class="row"><label>Pressure response <b id="vPress">1.0</b></label>
+    <input type="range" id="press" min="0" max="2" step="0.05" value="1"></div>
+  <div class="row"><label>Ink <b id="vPal">graphite</b></label>
+    <input type="range" id="pal" min="0" max="3" step="1" value="0"></div>
+
+  <div class="acts">
+    <button id="bAll">Apply to all</button>
+    <button id="bUndo">Undo</button>
+    <button id="bClear">Clear</button>
+    <button id="bSave">Save PNG</button>
+  </div>
+</div>
+
+<div id="status">Ready. Draw with the pen.</div>
+<div id="hint">1&ndash;5 operators &nbsp; [ ] depth &nbsp; U undo &nbsp; H panel</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * 0. Canvas plumbing
+ * ------------------------------------------------------------------ */
+const view = document.getElementById('view');
+const vctx = view.getContext('2d');
+const baked = document.createElement('canvas');       // committed strokes live here
+const bctx  = baked.getContext('2d');
+
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 0, H = 0;
+
+function sizeCanvases(){
+  W = window.innerWidth; H = window.innerHeight;
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  for (const [c, x] of [[view, vctx], [baked, bctx]]){
+    c.width  = Math.round(W * DPR);
+    c.height = Math.round(H * DPR);
+    c.style.width = W + 'px'; c.style.height = H + 'px';
+    x.setTransform(DPR, 0, 0, DPR, 0, 0);
+    x.lineCap = 'round'; x.lineJoin = 'round';
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 1. Parameters and palettes
+ * ------------------------------------------------------------------ */
+const OPS = [
+  {id:'raw',    name:'Bare nib',  shape:'Wobble',    dens:'Smoothing'},
+  {id:'rough',  name:'Roughen',   shape:'Roughness', dens:'Asymmetry'},
+  {id:'gen',    name:'Self-Koch', shape:'Bias',      dens:'Generator detail'},
+  {id:'lsys',   name:'Sprout',    shape:'Angle',     dens:'Sprout spacing'},
+  {id:'flow',   name:'Attractor', shape:'Field scale', dens:'Filament length'}
+];
+
+const PALETTES = ['graphite','oxide','moss','spectral'];
+
+const P = { op:'rough', depth:3, shape:0.28, dens:0.5, width:7, press:1.0, pal:0 };
+const clone = o => JSON.parse(JSON.stringify(o));
+
+// hue anchor per palette; strokeHue drifts so successive strokes separate slightly
+function inkColor(pal, strokeHue, depthFrac, posFrac, pressure){
+  const p = Math.max(0, Math.min(1, pressure));
+  switch(PALETTES[pal]){
+    case 'graphite': {
+      const l = 92 - 26*depthFrac - 10*(1-p);
+      return `hsl(${218 + strokeHue*0.12} 14% ${l}%)`;
+    }
+    case 'oxide': {
+      const h = 32 - 20*depthFrac + strokeHue*0.08;
+      return `hsl(${h} ${58 + 14*p}% ${72 - 30*depthFrac}%)`;
+    }
+    case 'moss': {
+      const h = 96 + 40*depthFrac + strokeHue*0.1;
+      return `hsl(${h} ${34 + 22*p}% ${74 - 28*depthFrac}%)`;
+    }
+    default: { // spectral: hue rides arc position
+      const h = (strokeHue + posFrac*220 + depthFrac*60) % 360;
+      return `hsl(${h} ${62 + 16*p}% ${68 - 16*depthFrac}%)`;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 2. Small maths helpers
+ * ------------------------------------------------------------------ */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const dist = (a,b) => Math.hypot(b.x-a.x, b.y-a.y);
+const lerp = (a,b,t) => a + (b-a)*t;
+
+// arc-length resample, carrying pressure and tilt
+function resample(pts, step){
+  if (pts.length < 2) return pts.slice();
+  const out = [pts[0]];
+  let carry = 0;
+  for (let i=1;i<pts.length;i++){
+    // Step along the input segment. carry is the arc already walked since the
+    // last emitted point, so a stroke that folds back on itself accumulates
+    // real length instead of a chord measured to the previous vertex.
+    const a = pts[i-1], b = pts[i];
+    const d = dist(a,b);
+    if (d < 1e-6) continue;
+    let t = (step - carry) / d;
+    while (t <= 1){
+      out.push({
+        x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t),
+        p: lerp(a.p ?? .5, b.p ?? .5, t),
+        w: lerp(a.w ?? 1, b.w ?? 1, t),
+        tx: lerp(a.tx ?? 0, b.tx ?? 0, t),
+        ty: lerp(a.ty ?? 0, b.ty ?? 0, t)
+      });
+      t = t + step/d;
+    }
+    carry = (1 - (t - step/d)) * d;
+  }
+  const last = pts[pts.length-1];
+  if (dist(out[out.length-1], last) > step*0.4) out.push(last);
+  return out;
+}
+
+// Chaikin corner cutting, keeps endpoints
+function smooth(pts, rounds){
+  let cur = pts;
+  for (let r=0;r<rounds;r++){
+    if (cur.length < 3) break;
+    const nx = [cur[0]];
+    for (let i=0;i<cur.length-1;i++){
+      const a = cur[i], b = cur[i+1];
+      nx.push({x:a.x*.75+b.x*.25, y:a.y*.75+b.y*.25, p:a.p*.75+b.p*.25, tx:a.tx, ty:a.ty});
+      nx.push({x:a.x*.25+b.x*.75, y:a.y*.25+b.y*.75, p:a.p*.25+b.p*.75, tx:b.tx, ty:b.ty});
+    }
+    nx.push(cur[cur.length-1]);
+    cur = nx;
+  }
+  return cur;
+}
+
+// cumulative arc length, normalised 0..1
+function arcParam(pts){
+  const t = [0];
+  for (let i=1;i<pts.length;i++) t.push(t[i-1] + dist(pts[i-1], pts[i]));
+  const L = t[t.length-1] || 1;
+  return {t: t.map(v => v/L), length: L};
+}
+
+function samplePressure(sk, u){
+  const i = Math.max(0, Math.min(sk.length-1, Math.round(u * (sk.length-1))));
+  return sk[i].p;
+}
+
+/* ------------------------------------------------------------------ *
+ * 3. The skeleton: raw pen samples cleaned into a drawable spine
+ * ------------------------------------------------------------------ */
+function nibWidth(pressure, par){
+  const shaped = Math.pow(Math.max(0.02, pressure), 1.3);
+  const k = par.press * 0.85;
+  return Math.max(0.4, par.width * (1 - k + k*(0.18 + 1.0*shaped)));
+}
+
+// taper the ends so strokes do not begin and end with a blunt slab
+function taperEnds(pts){
+  const tail = Math.min(9, Math.floor(pts.length/4));
+  for (let i=0;i<tail;i++){
+    const f = (i+1)/(tail+1);
+    pts[i].w *= f; pts[pts.length-1-i].w *= f;
+  }
+  return pts;
+}
+
+function prepare(stroke, par){
+  // the live preview raises step on long strokes so a frame stays affordable
+  const step = par.step || 2.4;
+  let pts = stroke.pts.map(q => ({x:q.x, y:q.y, p:q.p, tx:q.tx, ty:q.ty}));
+  pts = resample(pts, step);
+  pts = smooth(pts, 2);
+  pts = resample(pts, step);
+  for (const q of pts) q.w = nibWidth(q.p, par);
+  return taperEnds(pts);
+}
+
+/* ------------------------------------------------------------------ *
+ * 4. Operators. Each returns {polys, note}
+ *    poly = {pts:[{x,y,w}], depth: 0..1, alpha, u0}
+ * ------------------------------------------------------------------ */
+const MAX_SEG = 42000;
+const PREVIEW_PTS = 900;      // live preview: skeleton points
+const PREVIEW_SEG = 9000;     // live preview: total segment points
+
+function opRaw(sk, par, rnd){
+  const wob = par.shape * 3.0;
+  const pts = sk.map((q,i) => {
+    if (wob < 0.01) return {x:q.x, y:q.y, w:q.w};
+    const a = rnd()*Math.PI*2;
+    return {x:q.x + Math.cos(a)*wob*q.p, y:q.y + Math.sin(a)*wob*q.p, w:q.w};
+  });
+  return {polys:[{pts, depth:0, alpha:1, u0:0}], note:`${pts.length} pts`};
+}
+
+function opRough(sk, par, rnd){
+  // Recursive midpoint displacement. It has to start from a coarse spine,
+  // otherwise every segment is 2px long and the displacement is invisible.
+  const ap = arcParam(sk);
+  // ~14 spine segments for a normal stroke, but cap the spacing so a very long
+  // stroke keeps its gesture instead of collapsing to a 14-segment scrawl
+  const coarse = resample(sk, Math.min(Math.max(11, ap.length / 14), 60));
+  if (coarse.length < 2) return opRaw(sk, par, rnd);
+  const cap = arcParam(coarse);
+  let cur = coarse.map((q,i) => ({x:q.x, y:q.y, u:cap.t[i]}));
+
+  const rough = par.shape * 0.44;
+  const asym  = (par.dens - 0.5) * 2;           // -1..1, pushes bumps to one side
+  for (let d=0; d<par.depth; d++){
+    if (cur.length * 2 > (par.budget || MAX_SEG)) break;
+    const nx = [cur[0]];
+    const decay = Math.pow(0.68, d);
+    for (let i=0;i<cur.length-1;i++){
+      const a = cur[i], b = cur[i+1];
+      const dx = b.x-a.x, dy = b.y-a.y;
+      const L = Math.hypot(dx,dy) || 1e-6;
+      const u = (a.u + b.u) * 0.5;
+      const press = samplePressure(sk, u);
+      let amp = L * rough * decay * (rnd()*2 - 1) * (0.4 + 1.2*press);
+      amp += L * rough * decay * asym * 0.7;
+      nx.push({x:(a.x+b.x)/2 - dy/L*amp, y:(a.y+b.y)/2 + dx/L*amp, u});
+      nx.push(b);
+    }
+    cur = nx;
+  }
+
+  const pts = cur.map(q => {
+    const pr = samplePressure(sk, q.u);
+    return {x:q.x, y:q.y, w: nibWidth(pr, par)};
+  });
+  taperEnds(pts);
+  return {polys:[{pts, depth:0, alpha:1, u0:0}], note:`${pts.length} pts`};
+}
+
+function opGen(sk, par, rnd){
+  // The stroke becomes its own Koch generator: every segment of the curve is
+  // replaced by a similarity-mapped copy of the whole stroke.
+  const detail = Math.round(5 + par.dens * 11);          // generator vertex count
+  const g0 = resample(sk, Math.max(2, arcParam(sk).length / detail));
+  if (g0.length < 3) return opRaw(sk, par, rnd);
+
+  const a = g0[0], b = g0[g0.length-1];
+  const chord = dist(a,b);
+  if (chord < 12) return opRough(sk, par, rnd);          // closed loop: no usable chord
+
+  // normalise generator so a->(0,0), b->(1,0)
+  const ang = Math.atan2(b.y-a.y, b.x-a.x);
+  const ca = Math.cos(-ang), sa = Math.sin(-ang);
+  const G = g0.map(q => {
+    const dx = (q.x-a.x)/chord, dy = (q.y-a.y)/chord;
+    return {x: dx*ca - dy*sa, y: dx*sa + dy*ca};
+  });
+
+  const nSeg = G.length - 1;
+  let depth = par.depth;
+  while (Math.pow(nSeg, depth) > (par.budget || MAX_SEG) && depth > 1) depth--;
+  // A generator much longer than its chord multiplies the curve's size at every
+  // level, so cap depth by the growth ratio instead of letting it fly off screen.
+  const ratio = arcParam(g0).length / chord;
+  while (ratio > 1.02 && Math.pow(ratio, depth) > 40 && depth > 1) depth--;
+
+  const bias = (par.shape - 0.5) * 2;                    // flips bumps side to side
+  let curve = [{x:a.x, y:a.y}, {x:b.x, y:b.y}];
+  for (let d=0; d<depth; d++){
+    const nx = [];
+    for (let i=0;i<curve.length-1;i++){
+      const s = curve[i], e = curve[i+1];
+      const dx = e.x-s.x, dy = e.y-s.y;
+      const flip = (bias < 0 && (i % 2 === 1)) ? -1 : 1;
+      for (let k=0;k<G.length-1;k++){
+        const g = G[k];
+        const gy = g.y * flip * (1 + bias*0.4);
+        nx.push({x: s.x + g.x*dx - gy*dy, y: s.y + g.x*dy + gy*dx});
+      }
+    }
+    nx.push(curve[curve.length-1]);
+    curve = nx;
+  }
+
+  // width follows the original pressure profile, remapped onto the fractal
+  const ap = arcParam(curve);
+  const meanW = sk.reduce((s,q)=>s+q.w,0)/sk.length;
+  const pts = curve.map((q,i) => {
+    const u = ap.t[i];
+    const pr = samplePressure(sk, u);
+    const w = Math.max(0.35, meanW * (0.35 + 0.9*pr) * Math.pow(0.78, depth-1));
+    return {x:q.x, y:q.y, w};
+  });
+  return {polys:[{pts, depth:0, alpha:1, u0:0}], note:`depth ${depth}, ${pts.length} pts`};
+}
+
+function opLsys(sk, par, rnd){
+  // A real L-system. The stroke is the axis; sprouts grow from sample points.
+  const RULES = [
+    'F[+F]F[-F]F',
+    'F[+F][-F]F',
+    'FF[+F][-F][++F][--F]'
+  ];
+  if (sk.length < 3) return opRaw(sk, par, rnd);   // no tangent without both neighbours
+  const rule = RULES[Math.min(2, Math.floor(par.dens*2.999))];
+  const ap = arcParam(sk);
+  const spacing = lerp(70, 16, par.dens);
+  let nSprout = Math.max(1, Math.floor(ap.length / spacing));
+
+  // Expand the axiom, backing depth off until the real cost fits: every F emits
+  // a point, every bracket seeds a fresh run, and the trunk costs sk.length.
+  const cap = par.budget || MAX_SEG;
+  let depth = Math.min(par.depth, 4), s, perSprout;
+  for (;;){
+    s = 'F';
+    for (let d=0; d<depth; d++){
+      let t = '';
+      for (const ch of s) t += (ch === 'F') ? rule : ch;
+      s = t;
+    }
+    perSprout = (s.match(/F/g) || []).length + (s.match(/[\[\]]/g) || []).length + 1;
+    if (depth <= 1 || sk.length + perSprout * (nSprout + 1) <= cap) break;
+    depth--;
+  }
+  // depth is at its floor, so trim sprouts instead to leave room for the trunk
+  nSprout = Math.min(nSprout, Math.max(1, Math.floor((cap - sk.length) / perSprout)));
+
+  const angle = lerp(12, 46, par.shape) * Math.PI/180;
+  const stepLen = Math.max(1.2, lerp(26, 7, par.dens) * Math.pow(0.55, depth-1));
+  const polys = [];
+
+  for (let k=0; k<=nSprout; k++){
+    const u = k/nSprout;
+    const idx = Math.max(1, Math.min(sk.length-2, Math.round(u*(sk.length-1))));
+    const q = sk[idx];
+    const tanx = sk[idx+1].x - sk[idx-1].x, tany = sk[idx+1].y - sk[idx-1].y;
+    const tl = Math.hypot(tanx,tany) || 1;
+    // sprout along the normal; pen tilt biases which side and how far it leans
+    const side = (k % 2 === 0) ? 1 : -1;
+    const tiltLean = (q.tx || 0) / 90 * 0.7;
+    let hx = (-tany/tl)*side, hy = (tanx/tl)*side;
+    const lean = tiltLean + (rnd()-0.5)*0.5;
+    const cl = Math.cos(lean), sl = Math.sin(lean);
+    [hx, hy] = [hx*cl - hy*sl, hx*sl + hy*cl];
+
+    const scale = (0.4 + 1.3*q.p) * (0.6 + 0.8*rnd());
+    const base = Math.max(0.5, q.w);
+    const stack = [];
+    let px = q.x, py = q.y, dx = hx, dy = hy, sd = 0;
+    let run = [{x:px, y:py, w:base}];
+
+    for (const ch of s){
+      if (ch === 'F'){
+        const L = stepLen * scale * Math.pow(0.86, sd);
+        px += dx*L; py += dy*L;
+        run.push({x:px, y:py, w: Math.max(0.35, base * Math.pow(0.66, sd))});
+      } else if (ch === '+' || ch === '-'){
+        const t2 = (ch === '+' ? 1 : -1) * angle * (0.75 + rnd()*0.5);
+        const c2 = Math.cos(t2), s2 = Math.sin(t2);
+        [dx, dy] = [dx*c2 - dy*s2, dx*s2 + dy*c2];
+      } else if (ch === '['){
+        if (run.length > 1) polys.push({pts:run, depth:Math.min(1, sd/4), alpha:0.92, u0:u});
+        stack.push({px, py, dx, dy, sd});
+        run = [{x:px, y:py, w: Math.max(0.35, base*Math.pow(0.66, sd+1))}];
+        sd++;
+      } else if (ch === ']'){
+        if (run.length > 1) polys.push({pts:run, depth:Math.min(1, sd/4), alpha:0.92, u0:u});
+        const st = stack.pop();
+        if (st){ px=st.px; py=st.py; dx=st.dx; dy=st.dy; sd=st.sd; }
+        run = [{x:px, y:py, w: Math.max(0.35, base*Math.pow(0.66, sd))}];
+      }
+    }
+    if (run.length > 1) polys.push({pts:run, depth:Math.min(1, sd/4), alpha:0.92, u0:u});
+  }
+
+  // keep the drawn line visible as the trunk
+  polys.push({pts: sk.map(q=>({x:q.x,y:q.y,w:q.w})), depth:0, alpha:1, u0:0});
+  return {polys, note:`${rule}, depth ${depth}`};
+}
+
+function opFlow(sk, par, rnd){
+  // Each point on the stroke releases a filament that rides a smooth vector
+  // field, so the mark keeps the gesture but grows a wake.
+  const seed = rnd()*10;
+  const S = lerp(0.4, 3.2, par.shape);
+  const steps = Math.round(lerp(18, 150, par.dens));
+  const src = resample(sk, Math.max(2.5, 260/ (steps+30) * 3));
+  const field = (x,y) => {
+    const s = 0.0032 * S;
+    const a = seed*0.37 + 1.4, b = seed*0.21 + 1.9;
+    const vx = Math.sin(a + y*s) - Math.cos(b + x*s*1.31);
+    const vy = Math.sin(b + x*s) - Math.cos(a + y*s*1.09);
+    const m = Math.hypot(vx,vy) || 1;
+    return [vx/m, vy/m];
+  };
+
+  const polys = [];
+  let budget = (par.budget || MAX_SEG) - sk.length;   // the trunk below is part of it
+  for (let i=0;i<src.length && budget>0;i++){
+    const q = src[i];
+    const n = Math.max(6, Math.round(steps * (0.35 + 0.9*q.p)));
+    let x = q.x, y = q.y;
+    const run = [{x, y, w: Math.max(0.4, q.w*0.55)}];
+    for (let s2=0; s2<n; s2++){
+      const [vx, vy] = field(x, y);
+      const jitter = (rnd()-0.5)*0.28;
+      const cj = Math.cos(jitter), sj = Math.sin(jitter);
+      x += (vx*cj - vy*sj)*1.7;
+      y += (vx*sj + vy*cj)*1.7;
+      const f = 1 - s2/n;
+      run.push({x, y, w: Math.max(0.28, q.w*0.55*f*f)});
+    }
+    if (run.length > budget) break;      // never commit a filament the budget cannot hold
+    budget -= run.length;
+    polys.push({pts:run, depth:0, alpha:0.38, u0:0});
+  }
+  // the budget usually halts the loop early, so spread depth and hue across the
+  // filaments actually drawn rather than across the ones we hoped to draw
+  const nFil = polys.length;
+  polys.forEach((p, i) => { p.depth = 0.15 + 0.85*(i/nFil); p.u0 = i/nFil; });
+  polys.push({pts: sk.map(q=>({x:q.x,y:q.y,w:q.w*0.8})), depth:0, alpha:1, u0:0});
+  return {polys, note:`${nFil} filaments`};
+}
+
+const OPFN = {raw:opRaw, rough:opRough, gen:opGen, lsys:opLsys, flow:opFlow};
+
+function cook(stroke, par){
+  const sk = prepare(stroke, par);
+  if (sk.length < 2) return {polys:[], note:'too short'};
+  const rnd = mulberry32(stroke.seed);
+  return (OPFN[par.op] || opRaw)(sk, par, rnd);
+}
+
+/* ------------------------------------------------------------------ *
+ * 5. Renderer
+ * ------------------------------------------------------------------ */
+function ribbon(ctx, pts){
+  const n = pts.length;
+  if (n < 2) return;
+  ctx.beginPath();
+  // outbound edge
+  for (let i=0;i<n;i++){
+    const a = pts[Math.max(0,i-1)], b = pts[Math.min(n-1,i+1)];
+    let dx = b.x-a.x, dy = b.y-a.y;
+    const m = Math.hypot(dx,dy) || 1; dx/=m; dy/=m;
+    const w = pts[i].w*0.5;
+    const X = pts[i].x - dy*w, Y = pts[i].y + dx*w;
+    if (i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+  }
+  // return edge
+  for (let i=n-1;i>=0;i--){
+    const a = pts[Math.max(0,i-1)], b = pts[Math.min(n-1,i+1)];
+    let dx = b.x-a.x, dy = b.y-a.y;
+    const m = Math.hypot(dx,dy) || 1; dx/=m; dy/=m;
+    const w = pts[i].w*0.5;
+    ctx.lineTo(pts[i].x + dy*w, pts[i].y - dx*w);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function paint(ctx, result, stroke, par, globalAlpha){
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const poly of result.polys){
+    if (poly.pts.length < 2) continue;
+    const midP = poly.pts[Math.floor(poly.pts.length/2)].w / Math.max(0.6, par.width);
+    ctx.globalAlpha = poly.alpha * globalAlpha * 0.9;
+    ctx.fillStyle = inkColor(par.pal, stroke.hue, poly.depth, poly.u0, midP);
+    ribbon(ctx, poly.pts);
+  }
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ * 6. Document state
+ * ------------------------------------------------------------------ */
+const strokes = [];      // committed: {pts, seed, hue, par}
+let live = null;         // in progress
+let hueCounter = 0;
+let hover = null;        // {x,y,r} pen hover indicator
+let dirty = true;
+
+// committed geometry is cached, so erase and undo only have to repaint
+const cooked = s => s.geom || (s.geom = cook(s, s.par));
+
+function rebake(){
+  bctx.setTransform(1,0,0,1,0,0);
+  bctx.clearRect(0,0,baked.width,baked.height);
+  bctx.setTransform(DPR,0,0,DPR,0,0);
+  let segs = 0;
+  for (const s of strokes){
+    const r = cooked(s);
+    segs += r.polys.reduce((a,p)=>a+p.pts.length,0);
+    paint(bctx, r, s, s.par, 1);
+  }
+  dirty = true;
+  setStatus(`${strokes.length} stroke${strokes.length===1?'':'s'}, <b>${segs.toLocaleString()}</b> points`);
+}
+
+function frame(){
+  if (dirty || live){
+    vctx.setTransform(1,0,0,1,0,0);
+    vctx.clearRect(0,0,view.width,view.height);
+    vctx.setTransform(DPR,0,0,DPR,0,0);
+    vctx.drawImage(baked, 0, 0, W, H);
+
+    if (live && live.pts.length > 1){
+      // preview at reduced depth so the pen never lags behind the hand
+      const par = clone(P);
+      par.depth = Math.max(1, Math.min(par.depth, P.op === 'raw' ? 1 : 2));
+      if (P.op === 'flow') par.dens = Math.min(par.dens, 0.35);
+      // coarsen the skeleton and cap segments so preview cost stays flat as the
+      // stroke grows, instead of climbing with every point the pen adds
+      par.step = Math.max(2.4, live.len / PREVIEW_PTS);
+      par.budget = PREVIEW_SEG;
+      const r = cook(live, par);
+      paint(vctx, r, live, par, 0.72);
+    }
+    if (hover){
+      vctx.save();
+      vctx.strokeStyle = 'rgba(143,179,255,.5)';
+      vctx.lineWidth = 1;
+      vctx.beginPath();
+      vctx.arc(hover.x, hover.y, hover.r, 0, Math.PI*2);
+      vctx.stroke();
+      vctx.restore();
+    }
+    dirty = false;
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ------------------------------------------------------------------ *
+ * 7. Pen input
+ * ------------------------------------------------------------------ */
+let usingPen = false;
+let lastT = 0, lastPt = null, speedPressure = 0.5;
+
+function readEvent(e){
+  const isPen = e.pointerType === 'pen';
+  if (isPen) usingPen = true;
+  let p = e.pressure;
+  if (!isPen || p === 0 || p == null){
+    // mouse and trackpad report a flat 0.5, so derive pressure from speed
+    const now = performance.now();
+    if (lastPt){
+      const d = Math.hypot(e.clientX-lastPt.x, e.clientY-lastPt.y);
+      const dt = Math.max(1, now - lastT);
+      const v = d/dt;                          // px per ms
+      const target = Math.max(0.12, Math.min(1, 1 - v*0.42));
+      speedPressure += (target - speedPressure) * 0.25;
+    }
+    lastT = now; lastPt = {x:e.clientX, y:e.clientY};
+    p = speedPressure;
+  }
+  return {
+    x: e.clientX, y: e.clientY,
+    p: Math.max(0.02, Math.min(1, p)),
+    tx: e.tiltX || 0, ty: e.tiltY || 0
+  };
+}
+
+const isEraser = e => e.pointerType === 'pen' && ((e.buttons & 32) !== 0 || e.button === 5);
+
+function eraseAt(x, y, r){
+  let removed = false;
+  for (let i=strokes.length-1;i>=0;i--){
+    const s = strokes[i];
+    for (const q of s.pts){
+      if (Math.hypot(q.x-x, q.y-y) < r){ strokes.splice(i,1); removed = true; break; }
+    }
+  }
+  return removed;
+}
+
+let erasing = false;
+
+view.addEventListener('pointerdown', e => {
+  if (live || erasing) return;      // a second pointer must not clobber the stroke in progress
+  view.setPointerCapture(e.pointerId);
+  const q = readEvent(e);
+  if (isEraser(e)){
+    erasing = true;
+    if (eraseAt(q.x, q.y, 26)) rebake();
+    return;
+  }
+  live = {pts:[q], len:0, seed:(Math.random()*1e9)|0, hue:(hueCounter += 47) % 360, par:clone(P)};
+  hover = null;
+  dirty = true;
+});
+
+view.addEventListener('pointermove', e => {
+  if (erasing){
+    const q = readEvent(e);
+    if (eraseAt(q.x, q.y, 26)) rebake();
+    return;
+  }
+  if (!live){
+    if (e.pointerType === 'pen'){
+      hover = {x:e.clientX, y:e.clientY, r: P.width*0.6 + 4};
+      dirty = true;
+    }
+    return;
+  }
+  // coalesced events recover the full 200Hz+ tablet report rate
+  const batch = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ce of (batch.length ? batch : [e])){
+    const q = readEvent(ce);
+    live.len += dist(q, live.pts[live.pts.length-1]);
+    live.pts.push(q);
+  }
+});
+
+function endStroke(){
+  if (erasing){ erasing = false; return; }
+  if (!live) return;
+  const s = live; live = null;
+  if (s.pts.length > 1){
+    strokes.push(s);
+    const r = cooked(s);
+    paint(bctx, r, s, s.par, 1);
+    const segs = r.polys.reduce((a,p)=>a+p.pts.length,0);
+    setStatus(`${OPS.find(o=>o.id===s.par.op).name}: ${r.note}, <b>${segs.toLocaleString()}</b> points`);
+  }
+  dirty = true;
+}
+view.addEventListener('pointerup', endStroke);
+view.addEventListener('pointercancel', endStroke);
+view.addEventListener('pointerleave', () => { hover = null; dirty = true; });
+view.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ------------------------------------------------------------------ *
+ * 8. Controls
+ * ------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const opsBox = $('ops');
+OPS.forEach((o, i) => {
+  const b = document.createElement('button');
+  b.textContent = `${i+1}. ${o.name}`;
+  b.setAttribute('aria-pressed', o.id === P.op ? 'true' : 'false');
+  b.onclick = () => setOp(o.id);
+  opsBox.appendChild(b);
+});
+
+function setOp(id){
+  P.op = id;
+  [...opsBox.children].forEach((b,i) => b.setAttribute('aria-pressed', OPS[i].id === id ? 'true':'false'));
+  const o = OPS.find(x => x.id === id);
+  $('lShape').textContent = o.shape;
+  $('lDens').textContent  = o.dens;
+}
+
+function bind(id, key, fmt){
+  const el = $(id), out = $('v' + id[0].toUpperCase() + id.slice(1));
+  const sync = () => {
+    P[key] = parseFloat(el.value);
+    if (out) out.textContent = fmt ? fmt(P[key]) : P[key];
+  };
+  el.addEventListener('input', sync);
+  sync();
+}
+bind('depth','depth', v => v);
+bind('shape','shape', v => v.toFixed(2));
+bind('dens','dens',   v => v.toFixed(2));
+bind('width','width', v => v.toFixed(1));
+bind('press','press', v => v.toFixed(2));
+bind('pal','pal',     v => PALETTES[v]);
+
+$('bAll').onclick   = () => { for (const s of strokes){ s.par = clone(P); s.geom = null; } rebake(); };
+$('bUndo').onclick  = () => { strokes.pop(); rebake(); };
+$('bClear').onclick = () => { strokes.length = 0; rebake(); setStatus('Cleared.'); };
+$('bSave').onclick  = () => {
+  const out = document.createElement('canvas');
+  out.width = baked.width; out.height = baked.height;
+  const o = out.getContext('2d');
+  o.fillStyle = '#12141a'; o.fillRect(0,0,out.width,out.height);
+  o.drawImage(baked, 0, 0);
+  const a = document.createElement('a');
+  a.download = `procedural-ink-${Date.now()}.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+  setStatus('Saved PNG.');
+};
+
+function setStatus(html){ $('status').innerHTML = html; }
+
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+  const k = e.key.toLowerCase();
+  if (k >= '1' && k <= '5'){ setOp(OPS[+k - 1].id); return; }
+  if (k === '[' || k === ']'){
+    const el = $('depth');
+    el.value = Math.max(1, Math.min(6, +el.value + (k === ']' ? 1 : -1)));
+    el.dispatchEvent(new Event('input'));
+    return;
+  }
+  if (k === 'u'){ strokes.pop(); rebake(); }
+  if (k === 'c'){ strokes.length = 0; rebake(); }
+  if (k === 'a'){ $('bAll').click(); }
+  if (k === 's'){ $('bSave').click(); }
+  if (k === 'h'){ $('panel').classList.toggle('hidden'); }
+});
+
+let rt;
+addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => { sizeCanvases(); rebake(); }, 140);
+});
+
+sizeCanvases();
+setOp(P.op);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
