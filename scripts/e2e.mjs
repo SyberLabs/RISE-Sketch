@@ -1,28 +1,51 @@
 #!/usr/bin/env node
-// Rise end-to-end suite (DESIGN §7.6). Runs against the single-file build via file:// with
+// Rise end-to-end suite (DESIGN §7.6). Runs against the debug single-file build via file:// with
 // ?debug, driving real pen / mouse / touch input through CDP and asserting through
 // window.__rise (src/app/types.ts RiseDebug).
 //
-//   npm run build:single && node scripts/e2e.mjs [--only name,name] [--keep] [--out dir] [--url URL]
+//   node scripts/e2e.mjs [--only name,name] [--keep] [--out dir] [--url URL] [--no-build]
+//
+// The production single file (`npm run build:single`, dist-single/) carries no debug hooks:
+// window.__rise is compiled in only when __DEBUG__ is set (vite.config.ts). So the suite first runs
+// `vite build --mode debug`, which writes the same app plus the hooks to dist-debug/index.html, and
+// drives that. `--no-build` reuses an existing dist-debug/; `--url` points elsewhere (no build).
+// The `prod-file` scenario also builds dist-single/ and checks that the shipped file boots
+// cleanly and exposes nothing.
 //
 // Screenshots land in e2e-out/ for visual review. Exit code 1 on any failure.
 //
 // Persistence: headless Chrome gives file:// pages a working IndexedDB, so reload-persist runs
 // against the single-file build directly. Where a browser refuses IndexedDB on file:// (the app
 // then shows the not-autosaving dot and toast, DESIGN §8), run the suite over http instead:
-//   npx vite preview --outDir dist-single --port 5191 --strictPort   (in the background), then
-//   node scripts/e2e.mjs --url http://localhost:5191/
-import { mkdirSync, writeFileSync } from 'node:fs';
+//   npx vite build --mode debug && npx vite preview --outDir dist-debug --port 5191 --strictPort
+//   (in the background), then node scripts/e2e.mjs --url http://localhost:5191/
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { launch, penStroke, mouseStroke, pinch, tap, wheel, key, wave, circle, line, sleep, measureFrames } from './harness.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
 const ONLY = (arg('--only', '') || '').split(',').filter(Boolean);
 const OUT = resolve(arg('--out', 'e2e-out'));
-const URL = (arg('--url', '') || pathToFileURL(resolve('dist-single/index.html')).href) + '?debug';
+const URL_ARG = arg('--url', '');
+const URL = (URL_ARG || pathToFileURL(resolve('dist-debug/index.html')).href) + '?debug';
+const PROD = resolve('dist-single/index.html');
+const wants = name => !ONLY.length || ONLY.includes(name);
 mkdirSync(OUT, { recursive: true });
+
+/** `vite build --mode <mode>` with the local vite; exits on failure. */
+function build(mode) {
+  console.log(`Building --mode ${mode} …`);
+  const r = spawnSync(process.execPath, [resolve('node_modules/vite/bin/vite.js'), 'build', '--mode', mode, '--logLevel', 'warn'], { stdio: 'inherit' });
+  if (r.status !== 0) { console.error(`vite build --mode ${mode} failed`); process.exit(1); }
+}
+if (!URL_ARG && !argv.includes('--no-build')) {
+  build('debug');
+  if (wants('prod-file')) build('single');
+}
+if (!URL_ARG && !existsSync(resolve('dist-debug/index.html'))) { console.error('dist-debug/index.html missing: run without --no-build'); process.exit(1); }
 
 const W = 1280, H = 820;
 const results = [];
@@ -78,6 +101,36 @@ async function scenario(name, fn, opts) {
 
 // ---------------------------------------------------------------------------------------------
 console.log(`Rise e2e → ${URL}`);
+
+// The shipped single file (no debug hooks, so no window.__rise to drive): it boots with its
+// chrome, a pen stroke changes the picture, nothing is logged as an error, and `?debug` exposes
+// nothing.
+if (wants('prod-file') && !URL_ARG) {
+  const t0 = Date.now();
+  let env;
+  try {
+    assert(existsSync(PROD), 'dist-single/index.html missing');
+    env = await launch({ width: W, height: H, url: pathToFileURL(PROD).href + '?debug' });
+    const { page, cdp } = env;
+    await page.waitForFunction(() => document.querySelector('#stage canvas') && document.querySelector('#chrome button'), { timeout: 15000 });
+    await sleep(800);
+    const before = await page.screenshot();
+    await penStroke(cdp, wave(300, 400, 900, 90, 60));
+    await sleep(1500);
+    const after = await page.screenshot({ path: `${OUT}/prod-file.png` });
+    assert(!Buffer.from(before).equals(Buffer.from(after)), 'a stroke changes the picture');
+    assert(await page.evaluate(() => typeof window.__rise) === 'undefined', 'the production file exposes no window.__rise');
+    const errs = env.errors.filter(e => !/favicon/.test(e));
+    assert(errs.length === 0, 'console/page errors:\n  ' + errs.join('\n  '));
+    results.push({ name: 'prod-file', ok: true, ms: Date.now() - t0 });
+    console.log(`  PASS prod-file (${Date.now() - t0} ms)`);
+  } catch (e) {
+    results.push({ name: 'prod-file', ok: false, ms: Date.now() - t0, err: String(e && e.stack || e) });
+    console.log(`  FAIL prod-file: ${e && e.message}`);
+  } finally {
+    if (env) await env.browser.close();
+  }
+}
 
 await scenario('boot-budget', async ({ page, cdp }) => {
   const c0 = await controls(page);

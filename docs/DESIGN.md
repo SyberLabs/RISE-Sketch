@@ -1501,7 +1501,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 - **Input:** the timestamp sanitiser, the wheel burst classifier, tap / double-tap / 2-finger-tap classification, and the pen-mode palm rules.
 
 **e2e (`scripts/e2e.mjs` on `harness.mjs`):**
-- **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps.
+- **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps. The suite drives the **debug variant** (`vite build --mode debug` → `dist-debug/index.html`, which it builds itself): the same app with `window.__rise` compiled in. The production file (`build:single`) has no debug hooks (`__DEBUG__` is a build-time constant), so the `prod-file` scenario only checks that it boots, draws, logs no errors and exposes nothing.
 - **Golden fixtures in other engines:** Firefox via puppeteer-core BiDi; the step reports SKIPPED when `FIREFOX_PATH` is absent. WebKit (Playwright) is P1.
 - **Scenarios:**
   - control-budget DOM counts in every §1.2 state
@@ -1656,6 +1656,13 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 | Single-file bundle | ≤ 200 KB minified JS+CSS, ≤ 65 KB gzipped, no network requests | build |
 | Memory | Canvases: phone 160, tablet 256, desktop 512 MB (ledger). `Cooked`: 48, 96, 192 MB. | Devices |
 | Supported document | 2,000 strokes and 20 M cooked points at these budgets. Larger documents work with cook-on-demand and LRU churn. | e2e stress |
+
+**Single-file bundle, status (2026-10-05).** `dist-single/index.html` is 469 kB minified (444 kB JS + 24 kB CSS) and 170 kB gzipped, down from 488 / 175 kB. The budget above is **not met**. What the build already does:
+- Debug-only code (`app/debug.ts`, the perf counters, `live.inspect()`, `RTree.validate()`) sits behind the build-time `__DEBUG__` flag and is absent from production builds. e2e uses the debug variant (§7.6).
+- `scripts/shrink.ts` runs in every build. Using the TypeScript checker, it inlines every cross-module `const enum` read, which oxc cannot do file by file, and gives `private`/`protected` members `$`-prefixed short names.
+- The modulepreload polyfill is off.
+
+Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What is left is live code: per-file attribution from a source-mapped build puts the largest modules at render/live 45 kB, ink/cook 20 kB, renderer 17 kB, tessellate 14 kB and controller 14 kB, with each Form operator between 2.5 and 9.5 kB. Reaching 200 / 65 kB would mean cutting features or mangling public property names, which is unsafe here because names reach `.rise` JSON, IndexedDB, intents and the DOM. The budget needs to be revised, or features moved behind lazy loading (which the single-file format inlines anyway).
 
 **Scheduler.** One rAF loop, which runs only while work is pending. Each frame:
 1. Drain input.

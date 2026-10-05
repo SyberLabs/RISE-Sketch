@@ -95,8 +95,9 @@ export class RTree<T> {
 
   get size(): number { return this.where.size; }
 
-  /** Structural self-check for tests: throws on a broken invariant. Returns the tree height. */
+  /** Structural self-check for tests: throws on a broken invariant. Returns the tree height (0, unchecked, in production builds). */
   validate(): number {
+    if (!__DEBUG__) return 0; // test-only: production builds drop the walk
     let leafDepth = -1;
     let count = 0;
     const walk = (n: RNode<T>, depth: number): void => {
