@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // Pan / zoom benchmark (DESIGN §9 "Pan / zoom frame ≤ 3 ms CPU, ≤ 8 ms total").
 //
-//   npm run build:single && node scripts/bench-zoom.mjs [--reps 3] [--only storm,sweep,pan,pinch]
-//                                                       [--json out.json] [--url URL]
-//                                                       [--doc strokes.rise] [--top]
+//   node scripts/bench-zoom.mjs [--reps 3] [--only storm,sweep,pan,pinch] [--json out.json]
+//                               [--url URL] [--no-build] [--doc strokes.rise] [--top]
 //
-// Draws the e2e stress-300 document (300 strokes, four Forms) on the single-file build, then runs
+// Like scripts/e2e.mjs, it needs the window.__rise hooks, which only the debug build has: it runs
+// `vite build --mode debug` and drives dist-debug/index.html. `--no-build` reuses an existing
+// dist-debug/; `--url` points elsewhere (no build).
+//
+// Draws the e2e stress-300 document (300 strokes, four Forms) on the debug single-file build, then runs
 // camera gestures and reports, per gesture and per phase (burst = while input arrives, settle =
 // after the last event until the renderer is idle):
 //   - rAF frame intervals p50 / p95 / max (what the e2e stress scenario measures),
@@ -18,6 +21,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { launch, penStroke, line, sleep } from './harness.mjs';
 
 const argv = process.argv.slice(2);
@@ -28,7 +32,14 @@ const JSON_OUT = arg('--json', '');
 // --doc file.rise: load these strokes instead of drawing (written on the first run if missing)
 const DOC = arg('--doc', '');
 const TOP = argv.includes('--top');
-const URL = (arg('--url', '') || pathToFileURL(resolve('dist-single/index.html')).href) + '?debug';
+const URL_ARG = arg('--url', '');
+const URL = (URL_ARG || pathToFileURL(resolve('dist-debug/index.html')).href) + '?debug';
+if (!URL_ARG && !argv.includes('--no-build')) {
+  console.log('Building --mode debug …');
+  const r = spawnSync(process.execPath, [resolve('node_modules/vite/bin/vite.js'), 'build', '--mode', 'debug', '--logLevel', 'warn'], { stdio: 'inherit' });
+  if (r.status !== 0) { console.error('vite build --mode debug failed'); process.exit(1); }
+}
+if (!URL_ARG && !existsSync(resolve('dist-debug/index.html'))) { console.error('dist-debug/index.html missing: run without --no-build'); process.exit(1); }
 const CX = 640, CY = 410;
 
 const R = (page, fn, ...a) => page.evaluate(fn, ...a);

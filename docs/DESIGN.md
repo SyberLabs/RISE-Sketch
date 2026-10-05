@@ -1858,7 +1858,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 | Live frame CPU (incremental cook, regrow, tessellate, path build), p95 | ≤ 4 ms (≤ 12 ms at 4× throttle) | e2e CPU |
 | Live frame total, including raster, p95 | ≤ 10 ms | Devices |
 | Rise frame | Same as the live frame | Both |
-| Pan / zoom frame | ≤ 3 ms CPU, ≤ 8 ms total | Both; `scripts/bench-zoom.mjs` reports frame intervals, `renderer.frame` CPU and the `render/stats.ts` work counters per gesture phase, trend-only under SwiftShader. It reads `window.__rise`, so point it at the debug build (`npm run build:debug`, then `--url` to `dist-debug/index.html`); its default, `dist-single/`, no longer has the hooks. |
+| Pan / zoom frame | ≤ 3 ms CPU, ≤ 8 ms total | Both; `scripts/bench-zoom.mjs` reports frame intervals, `renderer.frame` CPU and the `render/stats.ts` work counters per gesture phase, trend-only under SwiftShader. It reads `window.__rise`, so like e2e it builds and drives the debug variant (`dist-debug/`) itself; `--no-build` reuses it. |
 | Bake slices | ≤ 6 ms per frame; no dropped frames | Devices |
 | Erase, undo, lift → tiles updated (≤ 500 strokes in view, warm cache) | ≤ 100 ms, then the 200 ms un-grow | Devices |
 | Settle → visible tiles complete | ≤ 400 ms for ≤ 200 strokes in view, warm cache | Devices |
