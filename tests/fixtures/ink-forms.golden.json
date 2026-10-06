@@ -141,5 +141,18 @@
   "sprout@2/tap-light": "c3047eac",
   "sprout@2/base0-pools": "b96b3b78",
   "sprout@2/split-a": "4333cae3",
-  "sprout@2/split-b": "fcbf95dc"
+  "sprout@2/split-b": "fcbf95dc",
+  "drift@2/pen-brush-long": "8e7aaff0",
+  "drift@2/pools": "7b9d24bf",
+  "drift@2/mouse-pen-nib": "fc0ee28d",
+  "drift@2/touch": "0ff4fae3",
+  "drift@2/chisel-z2.5": "72e5315d",
+  "drift@2/closed-loop": "7e4cbf5e",
+  "drift@2/tap": "70b408c6",
+  "drift@2/bloom": "175e3ee5",
+  "drift@2/max-depth": "0f934d11",
+  "drift@2/tap-light": "14617569",
+  "drift@2/base0-pools": "f7093893",
+  "drift@2/split-a": "57b54574",
+  "drift@2/split-b": "262368df"
 }

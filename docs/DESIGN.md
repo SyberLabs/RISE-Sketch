@@ -4,21 +4,29 @@
 
 This is the build spec for Rise (`rise-sketch`). It replaces the v1 draft and settles the three critiques of it (clutter, feasibility, delight). Section 13 logs every critique point with its verdict and a one-line reason. Where this document and the draft disagree, this document wins.
 
-**Repo baseline (verified):**
+**Status (2026-10-05).** P0 is built (§11 lists what is not), plus six Forms beyond the original plan.
+- **Forms:** ten in the app. Line, Echo, Sprout and Drift as specified; Craze, Plume, Caustic, Burin, Plait and Orbit promoted from the forms lab (`lab/forms`) with unchanged geometry (§2.3.10–§2.3.15). Ripple is still P1. New Sprout and Drift strokes cook with v2 operators (§2.3.5, §2.3.6); old documents keep v1.
+- **Tests:** `npx vitest run` passes 1105 tests in 71 files under `tests/` (the forms lab has its own suite, §7.6).
+- **e2e:** `scripts/e2e.mjs` has 24 scenarios (23 on the debug build, plus `prod-file`), §7.6.
+- **Not met:** the single-file bundle budget (§9).
+- The user-facing summary is `README.md` at the repo root.
+
+**Repo baseline** (verified when this spec was written; the scripts are as they stand today):
 - **Toolchain:** Vite 8.3.2, TypeScript 5.9 (strict), vite-plugin-singlefile 2.3.3, vitest 5.0.3, puppeteer-core 25.12. All are dev-only; there are **zero runtime dependencies**.
 - **Scripts:**
   - `dev`
-  - `build` runs `tsc --noEmit && vite build`
-  - `build:single` writes the self-contained `dist-single/index.html`, which opens by double-click
-  - `typecheck`, `test`
-  - `e2e` runs `scripts/e2e.mjs`, which is not written yet
+  - `build` runs `npm run typecheck && vite build`
+  - `build:single` (`vite build --mode single`) writes the self-contained `dist-single/index.html`, which opens by double-click
+  - `build:debug` (`vite build --mode debug`) writes `dist-debug/index.html`: the same file with the `?debug` hooks compiled in (§7.6)
+  - `typecheck` runs the app, pure and test configs; `test` runs vitest
+  - `e2e` runs `scripts/e2e.mjs`; `bench:zoom` runs `scripts/bench-zoom.mjs` (§9)
 - **Harness:** `scripts/harness.mjs` drives Chrome through CDP (pen pressure and tilt, mouse, multi-touch) with SwiftShader raster.
-- **Existing `src/core/` modules:**
+- **`src/core/` modules that predate the build:**
   - `det.ts`: fdlibm-port `dsin`/`dcos`/`datan2`/`dexp`/`dlog`/`dpow`, the addressed-hash `rnd`, `Ch` channels, `fnv1a`
   - `geom.ts`, `mat.ts`, `num.ts`, `pool.ts`
   - `oklab.ts`, which is presentation-only and allowed to use `Math.*` (§7.5)
-  - `types.ts`, a placeholder that §7.2 defines
-- **Existing tests:** `tests/det.test.ts`, `tests/core.test.ts`.
+  - `types.ts`, which §7.2 defines
+- **Tests that predate the build:** `tests/det.test.ts`, `tests/core.test.ts`.
 
 **Units used throughout**
 
@@ -88,7 +96,7 @@ Rise is a drawing instrument in which every mark is alive.
 | Conditional | **Redo** appears after an undo and stays until the next new command. The **view chip** appears when zoom ≠ 100%, or when the document has ink but none is in view. **Absolute max 7.** |
 | Selection | **6**: the 3 chips, Undo, Redo, Delete. Menu and the view chip hide. |
 | Drawing | **0** |
-| Any sheet | At most 9 tiles plus one two-way switch |
+| Any sheet | At most 9 tiles plus one two-way switch. **Exception:** the Form sheet shows all 10 Forms, in two rows of 5 on desktop (§13). |
 | Toast | One at a time, with at most one action, and only for the events listed in §4 |
 | Sliders / numeric readouts | **0 / 1** |
 
@@ -114,7 +122,7 @@ Rise is a drawing instrument in which every mark is alive.
 
 | Question | Decision | Reason |
 |---|---|---|
-| Forms in P0 | **Line, Echo, Sprout, Drift**. Ripple is P1. | Depth 0 of every Form is the bare nib, so "Bare" is not a separate Form. |
+| Forms in P0 | **Line, Echo, Sprout, Drift**. Ripple is P1. *Since shipped:* **Craze, Plume, Caustic, Burin, Plait, Orbit**, promoted from the forms lab (§2.3.10–§2.3.15). | Depth 0 of every Form is the bare nib, so "Bare" is not a separate Form. The six lab Forms each add a primitive the first four lack (network, vane, optics, hatching, weave, kinematics). |
 | Depth model | **Base depth per Form** (tool state, bent by dragging the Form chip) **plus local pools where the user holds** | Pools are a new expressive freedom, and they keep rising local and cheap. |
 | Stationary contact | **Tap** gives a radial seed at base depth. **Hold** gives a radial seed that rises. | Holding always means rise, everywhere. |
 | Selecting | **Never with the drawing contact.** Modifier-click on desktop, a finger tap in pen mode, a double-tap on touch-only devices. | Keeps hold = rise unambiguous. |
@@ -140,7 +148,7 @@ Rise is a drawing instrument in which every mark is alive.
 |---|---|---|---|---|
 | **STROKE** | How the hand becomes a mark: the nib's material and the spine it lays down. | Nib: Pen, Brush, Chisel (Charcoal in P1); Erase | Size, remembered per nib | Pressure curve, smoothing, corners, width, tapers and endings, closure, chisel angle, dry-split |
 | **COLOR** | The light (Night) or pigment (Paper) the mark carries, and the ground beneath it. | Ink: 7, plus 2 recents. Ground: Night or Paper. | Hue (x) and tone (y), which creates a custom ink | Variant, lineage, pressure and depth tone, glow budget, hot ink |
-| **FORM** | What the seed grows into, and how far. | Form: Line, Echo, Sprout, Drift (Ripple in P1) | Base depth, remembered per Form | Roughness, asymmetry, generator, branch template, angle, side, spacing, field, filament length, response to crowding and to closed loops. Pools come from holding. |
+| **FORM** | What the seed grows into, and how far. | Form: Line, Echo, Sprout, Drift, Craze, Plume, Caustic, Burin, Plait, Orbit (Ripple in P1) | Base depth, remembered per Form | Roughness, asymmetry, generator, branch template, angle, side, spacing, field, filament length, plate size, barb sweep, lamp direction, hatch side, braid period, orbit radius, response to crowding and to closed loops. Pools come from holding. |
 
 ### 2.2 STROKE
 
@@ -241,7 +249,15 @@ Rise is a drawing instrument in which every mark is alive.
 | 2 | **Echo** | Self-Koch | Grows from it (trunk kept) | 0–5 (**2**) | The stroke repeats inside itself | **Global** | 32k points | P0 |
 | 3 | **Sprout** | L-system | Grows from it | 0–4 (**2**) | Buds appear and extend | Local (24 sp) | 900 per sprout; 24k per stroke, causal | P0 |
 | 4 | **Drift** | Attractor | Grows from it | 0–6 (**2**) | The wake lengthens | Local (12 sp) | 150 steps per filament; 30k per stroke, causal | P0 |
-| 5 | **Ripple** | new | Grows from it | 0–6 (**2**) | More contour rings | Local (24 sp) | 16k | P1 |
+| 5 | **Craze** | new (forms lab) | Cracks around it (a film) | 0–4 (**2**) | Transverse cracks → lengthwise splits → sub-plates → old seams widen | Local (60 sp) | 160 per plate; 10k per stroke, causal | P0 (added) |
+| 6 | **Plume** | new (forms lab) | Grows from it | 0–3 (**2**) | Barbs → barbules → down | Local (22 sp) | 80 per unit; 24k per stroke, causal | P0 (added) |
+| 7 | **Caustic** | new (forms lab) | Reflects off it | 0–4 (**2**) | Rays lengthen and brighten, then triple; the caustic gathers | Local (20 sp) | 40 per unit; 16k per stroke, causal | P0 (added) |
+| 8 | **Burin** | new (forms lab) | Shades beside it | 0–4 (**2**) | Hatch → doubled hatch → cross-hatch → second diagonal and stipple | Local (8 sp) | 40 per unit; 16k per stroke, causal | P0 (added) |
+| 9 | **Plait** | new (forms lab) | Transforms the seed (core strand) | 0–4 (**2**) | Strands arrive one per level, the core thins, then the carver's groove | Local (108 sp) | 220 per unit; 20k per stroke, causal | P0 (added) |
+| 0 | **Orbit** | new (forms lab) | Orbits it | 0–4 (**2**) | Loops → five-lobed frill → scalloped lace → swell | Local (54 sp) | 220 per orbit; 24k per stroke, causal | P0 (added) |
+| — | **Ripple** | new | Grows from it | 0–6 (**2**) | More contour rings | Local (24 sp) | 16k | P1 |
+
+The six lab Forms were designed and judged in `lab/forms` (briefs in `lab/forms/briefs/`), then promoted unchanged into `src/ink/operators/<name>.v1.ts`. Where a brief and the operator disagree, the operator's header comment records the decision and the operator wins. Ripple has no key and no operator yet: its recipes cook as Line.
 
 **Base depth** is tool state, kept per Form and persisted.
 - **Bending it:** drag the Form chip vertically: `Δbase = −Δy/40` levels, in quarter-level steps, clamped to [0, dMax]. With a selection, the drag applies to the selection instead (§3.4).
@@ -275,10 +291,16 @@ K(x) = smoothstep( 32,  0, x)   for x > 0     (moving on unloads the brush back 
 | Sprout | A generation-g branch at anchor j is drawn to length `ℓ_g·clamp(D_j − g + 1, 0, 1)`, where `D_j = d(s_j)` |
 | Drift | Each filament is drawn to `N(d)/150` of its ceiling length, so the last step is partial |
 | Ripple | Ring n+1 offset and alpha × `f` |
+| Craze | A generation-g crack is drawn to `len·clamp(D − g + 1, 0, 1)`; the plate's film fades in with `min(D, 1)`; gen 1–2 seams widen ×`(1 + 0.8·clamp(D − 3, 0, 1))` |
+| Plume | Barbs to `ℓ·clamp(D, 0, 1)`, barbules to `clamp(D − 1, 0, 1)`, down to `clamp(D − 2, 0, 1)` of their length |
+| Caustic | Ray length `ℓ_max·min(D, 1)·(1 + 0.6·max(0, D − 1))`; the side rays' alpha × `clamp(D − 2, 0, 1)`; the caustic's alpha follows how far the rays reach past their focus |
+| Burin | A family-g tick is drawn to `ℓ·clamp(D − g + 1, 0, 1)`; stipple dots ease in by width × `clamp(D − 3, 0, 1)` |
+| Plait | Strand m is drawn to `clamp(D − m, 0, 1)` of its unit arc; the groove eases in by width × `clamp(D − 3, 0, 1)`; the trunk's width multiplier is a continuous function of `d` |
+| Orbit | Epicycle k is weighted `f_k = clamp(D − k + 1, 0, 1)`; the swell is `1 + 0.5·clamp(D − 3, 0, 1)` |
 
-**Sprout and Drift growth units are cooked once at the unit's ceiling and then truncated to `d`.** A single code path does this, so rising never re-runs those operators. It only truncates and recomputes widths. Line re-cooks only the pool window. Echo re-cooks only its ghost.
+**Sprout and Drift growth units, and the chain units of the six lab Forms, are cooked once at the unit's ceiling and then truncated to `d`.** A single code path does this, so rising never re-runs those operators. It only truncates and recomputes widths. Line re-cooks only the pool window. Echo re-cooks only its ghost.
 
-**Hierarchy rule** (Echo, Sprout, Drift, Ripple):
+**Hierarchy rule** (every Form with growth; Burin, Plait and Orbit set their own Night alphas per family instead of `0.72^(g−1)`, and Orbit puts its whole trail in gen 1 with tone buckets 1/2/3 by thirds, §2.3.13–§2.3.15):
 - **Generation 0** (the seed or trunk) is always drawn and is never affected by crowding.
 - **Generation g ≥ 1** has alpha `α_form·0.72^(g−1)` on Night and `·0.78^(g−1)` on Paper.
 - Tone depth bucket `= min(g, 4)`, so `d01 = bucket/4`.
@@ -382,6 +404,11 @@ The demo's three rule strings are kept verbatim as **branch templates**. Depth n
 - **Budget:**
   - Each sprout is capped at 900 points at its ceiling; above that, its ceiling drops.
   - The stroke's causal total is 24k. Once it is spent, no new anchors are created, and the trunk continues.
+- **Sprout v2** (`sprout.v2.ts`; `CURRENT_V.sprout = 2`, so every new Sprout stroke uses it; v1 stays for the documents drawn with it, §7.5 rule 8):
+  - **Why.** Branches of different generations sit in different batches, so on Night a child ribbon lying on its parent *adds*. v1 started each branch on its parent's centreline, so every node stamped a white dash along the branch and every primary a bead on the trunk.
+  - **Fix.** A branch is drawn from where its centreline clears the parent's edge, and it widens only as the room allows: `w ≤ (2·(d − 0.2) − w_par)/|cos φ|` beside a parent, `w ≤ √((2·(d − 0.2))² − w_par²)` off a round end, until its own taper takes over. Every ancestor constrains, the tightest one per point. The crotch reads as one shape, the branch peeling off its parent's edge.
+  - Clearance is cooked once at the ceiling and is a function of position along the branch, so truncation stays exact. Branches of different trees that cross still add, like any two crossing lines of light.
+  - Everything else is v1: anchors, templates, angles, lengths, tropism, alphas, tones and budgets. The v1 width collar is gone.
 
 #### 2.3.6 Drift: attractor wake
 
@@ -399,6 +426,11 @@ The demo's three rule strings are kept verbatim as **branch templates**. Depth n
 - **Colour along the filament:** split into thirds by step index, with `d01` 0.2 / 0.5 / 0.8, so the wake deepens in colour as it fades.
 - **Trunk:** the spine at width ×0.8, α 1.
 - **Drift combs along existing ink** is P1 (§11).
+- **Drift v2** (`drift.v2.ts`, `CURRENT_V.drift = 2`; `drift.v1.ts` kept so old documents cook unchanged). Stations, field, momentum, jitter, step counts, lengths, tapers, tones, alphas and budgets are v1’s; only where a filament starts and how wide it may be near the trunk differ:
+  - Each filament starts just outside the trunk edge (half width + 0.2 sp), on the side the field pushes toward; where a corner or hairpin would put the start inside the trunk it is pushed further out. Radial seeds start their 24 filaments off the dot’s rim.
+  - Each point gets a width limit, computed once at the ceiling, from its room to the trunk edge over the stretch it pours off (s ± 6 sp). A filament leaving square to the stroke opens to full width at once; one running alongside stays a hairline on the edge until it peels away; one looping back under that stretch passes as a hairline.
+  - The limit depends only on position along the filament, so truncation stays a prefix and depth stays continuous; each filament writes exactly v1’s points.
+  - Result on Night: the trunk keeps its ink colour instead of adding into a near-white core. Filaments the field carries across a different part of the stroke still brighten where they cross (as with Sprout v2).
 
 #### 2.3.7 Ripple (P1)
 
@@ -420,6 +452,12 @@ A stroke with `L < 6 sp` is radial (`recipe.radial = true`).
 | Echo | A hexagonal snowflake of radius `(6 + S)·(0.6 + 0.8p)` sp. The generator is a 4-segment Koch bump of height `0.29·(0.6 + 0.8p)`, with bumps outward. |
 | Sprout | A bush burst: 5 primaries at `72°·i + 72°·r ± 12°`, using the bush template, capped at generation 3. |
 | Drift | Radial emission: 24 filaments at `15°·i` plus jitter, with momentum radially outward. |
+| Craze | A dried drop: a film disc of radius `R = (7 + 1.6S)·(0.65 + 0.75p)` sp, 6–8 radial cracks from a centre offset by up to `0.2R`, a ring crack at `0.55R`, short radials from ring to rim, then widening (§2.3.10). |
+| Plume | A tuft of 12 curled down barbs, fringed with barbules above depth 1, with 12 more between them above depth 2: a powder-down rosette. |
+| Caustic | A glint: 12 rays at `30°·i` plus a random rotation, from the dot's rim, tripled above depth 2, around a 4-cusp astroid caustic at `0.3·ℓ(D)`. |
+| Burin | A dot, then a stippled disc: ring k at radius `(3 + 0.4S)·k` sp of `6k` dots, easing in by width over `D ∈ [(k − 1)/2, k/2]` (a mezzotint rocker spot). |
+| Plait | A trefoil knot `x = sin t + 2 sin 2t, y = cos t − 2 cos 2t` of scale `(8 + 1.2S)·(0.5 + p)/3` sp per unit, with alternating over/under gaps; it ties itself as a prefix over depth 0–2 and takes its groove over 2–4. |
+| Orbit | A five-loop spirograph rose, `(1, 1)` and `(−4, 0.55)` scaled by `1.25R`, drawn as a prefix to `min(1, D/2)` of its parameter; its moon `(+6, 0.06)` fades in over depth 2–3, then it swells. |
 
 #### 2.3.9 Context: ink that knows about other ink
 
@@ -440,6 +478,12 @@ A stroke with `L < 6 sp` is radial (`recipe.radial = true`).
 | Sprout | Spacing ×`(1 + 1.2c)`; branch length ×`(1 − 0.3c)`; side away from ink via `CS` | P0 |
 | Drift | Station spacing ×`(1 + c)`; filament length ×`(1 − 0.5c)` | P0 |
 | Glow budget, all growth with g ≥ 1 | Alpha ×`1/(1 + 0.6c)` | P0 |
+| Craze | Band ×`(1 − 0.35c)`; the band shrinks on the side of nearby ink (`CS`) | P0 (added) |
+| Plume | Pitch ×`(1 + 0.6c)`; barbs ×`(1 − 0.5c)`; the vane facing ink narrows (`CS`) | P0 (added) |
+| Caustic | Unit spacing ×`(1 + c)`; rays toward side ink shorten (`CS`) | P0 (added) |
+| Burin | Spacing ×`(1 + 0.8c)`; ticks on the crowded side shorten (`CS`) | P0 (added) |
+| Plait | Period ×`(1 + 0.4c)`; the braid flattens on the crowded side (`CS`) | P0 (added) |
+| Orbit | Radius ×`(1 − 0.4c)`; loops lean away from side ink (`CS`) | P0 (added) |
 | Drift combs along existing ink (frozen orientation snapshot) | `normalize(curl + 1.2·T_ink)` | P1 |
 | Drift vortex inside a closed loop | The field turns tangential inside the loop | P1 |
 | Sprout collision | An F step stops on an occupied cell | P1 |
@@ -450,6 +494,122 @@ A stroke with `L < 6 sp` is radial (`recipe.radial = true`).
 - **Echo:** snowflake.
 - **Sprout:** grows outward automatically, because "convex side" means outward on a loop.
 - **Drift:** unchanged in P0.
+- **The six lab Forms** never read `closed`: every loop behaviour comes from curvature, so tight open curls behave the same way. Craze makes a cracked annulus; Plume an ocellus with a clear pupil; Caustic a nephroid inside the loop; Burin a shaded sphere; Plait a cord cut at the seam; Orbit a wreath that joins itself exactly.
+
+#### 2.3.10 Craze: the stroke as a drying film
+
+The stroke is a film that dries into a cellular **network** of cracks meeting in T-junctions, the one primitive the first four Forms lack. Night: a lava crust, brightest in the seams over the trunk. Paper: craquelure.
+
+- **Units.** Unit j is the transverse crack at `s_j` (gen 1) plus the plate behind it, `[s_{j−1}, s_j]`. The plate carries a faint film (a gen-0 ribbon at α 0.14, welded to its neighbours at the cracks), its lengthwise split (gen 2), one or two tertiary cracks across each sub-cell (gen 3) and a longitudinal in each tertiary cell (gen 4).
+- **Band and plates** (`p̄`, `c̄`, `v̄_n`, `κ̄` over ±12 sp; `fast = smoothstep(1.0, 2.4, v̄_n)`):
+  ```
+  h  = clamp(max(3.5, w/2 + (4 + S)·(0.55 + 0.8p))·(1 − 0.35c), 3.5, 38) sp            band half-width
+  h± = h·(1 − 0.4·max(0, ±CS))·(1 ± 0.4·tilt_across)      capped at 0.8/|κ̄| on the concave side
+  Λ  = clamp(2h·(0.8 + 0.7p)·(0.7 + 0.6r)·(1 − 0.4·fast)·(1 − 0.4·min(1, |κ̄|/0.05))·(corner ? 0.5 : 1), 6, 44) sp
+  ```
+  A corner station within ±6 sp also narrows the band ×0.7, so corners shatter.
+- **Cracks.** Each crack is a straight segment in band coordinates `(s, ν)` plus a low bow and a hat wobble that vanish at its ends, mapped through `pos(s) + ν·n(s)`. A child ends on its parent's drawn polyline, so the network welds exactly and nothing dangles except at the band edge. Transverse cracks shear up to 35° with pen tilt along the stroke, ±16° at random.
+- **Width and alpha.** Seams `clamp(0.26w, 0.8, 2.4)` sp, ×0.9/0.85/0.8 for gens 2–4, at α `0.55·hierarchy(g)·glow(c)`.
+- **Gesture grammar.** Pressure is film thickness: bigger plates and wider seams. Speed is a thin film: shorter plates, more wobble. Lean along the stroke shears the cracks; lean across spreads the band downhill. Curvature narrows plates. Nearby ink narrows the band toward the free side.
+- **Depth.** `dMax 4`, base 2. Gen g is drawn to `len·clamp(D − g + 1, 0, 1)`, centre-out for gen 1, old-to-new for gen 2. Above depth 3 the gen-1 and gen-2 seams widen ×`(1 + 0.8·clamp(D − 3, 0, 1))`. A hold is a patch of fine craquelure in a field of slabs.
+- **Radial seed:** a dried drop (§2.3.8).
+- **Closed loop:** a cracked annulus; the last partial plate stays whole.
+- **Budget:** 160 points per plate (the ceiling drops in 1/16 steps above it); 10k per stroke, causal. Reach 60 sp: a unit reads the spine on `[s_j − 60, s_j + 50]`.
+
+#### 2.3.11 Plume: the stroke as a rachis
+
+The stroke is a feather's shaft. A vane of dense, parallel, gently curved barbs grows from both edges; the entry taper is the bare quill. Nothing branches.
+
+- **Units.** Unit j is two barb pairs, at `s_j` and `s_j + Δ/2`, with pitch `Δ = clamp(3.1 + 0.07S, 3.1, 6.4)·(1 + 0.6c)` sp. Each barb is up to 4 substeps of ≤ 6 sp from a root on the shaft edge.
+- **Barbs.**
+  ```
+  θ0 = 62° − 30°·smoothstep(0.3, 2, v̄_n)   ± 18°·ρ per 8 sp group, ± 8°·ρ per barb       angle from the shaft
+  ℓ  = min(42, (8 + 1.6S)·(0.45 + 1.1p)·(1 − 0.5c))·vane(s)·(1 ± asym)·(1 − 0.5·max(0, σ·CS))   ± 30%·ρ
+  ```
+  `ρ = smoothstep(1.0, 2.4, v_n)`. `vane(s)` is a smooth 0.88–1.12 lattice over 24 sp cells. `asym` comes from pen tilt across the stroke, otherwise the outside of a curve is longer. The concave vane is capped at `0.8·sin θ0/|κ̄|`, which leaves a pupil inside a loop. Barbs curve 16°·(1 + 0.5ρ) toward the tip.
+- **Width and alpha.** Barbs `clamp(0.16w·E, 0.45, 1.4)` sp tapering to 0.3×, as Chisel polys at the nib angle for the chisel nib. Barbules and down are 0.35 and 0.55 sp hairlines. α `0.5·hierarchy(g)·glow(c)`. Barbules fade out as the pitch drops from 1.5 to 0.75 doc units (moiré guard).
+- **Gesture grammar.** Speed lays the barbs back and ruffles them into groups that sway together; slow is pristine. Pressure widens the vane. Lean makes flight-feather asymmetry. Curvature lengthens the outer vane. Nearby ink shortens barbs and narrows the vane facing it.
+- **Depth.** `dMax 3`, base 2. Barbs to `ℓ·clamp(D, 0, 1)`; barbule zigzags on the first pair of each unit to `clamp(D − 1, 0, 1)`; a wavy down barb (1.4ℓ) per side on the first pair to `clamp(D − 2, 0, 1)`. A hold turns the vane downy.
+- **Radial seed:** a tuft of down (§2.3.8).
+- **Closed loop:** an ocellus, a fringed eye with a clear pupil.
+- **Budget:** 80 points per unit (the ceiling drops above it); 24k per stroke, causal; 640 for the tuft. Reach 22 sp.
+
+#### 2.3.12 Caustic: the stroke as a mirror
+
+A lamp shines across the page from the side the pen leans toward, or from the top without tilt. The stroke is a polished mirror: reflected rays leave its lit face, and where it bends toward the lamp they gather on a caustic with a cusp at every curvature peak. Nothing grows from the stroke.
+
+- **Units.** Unit j is `Δ = 8·(1 + c)` sp of arc, holding 3 rays and a 5-point segment of the caustic.
+- **Optics** (per ray at arc s):
+  ```
+  L     lamp: pen  normalize(wt·(−tiltVec) + (1 − wt)·down), wt = smoothstep(0.1, 0.3, cos alt);  mouse / finger: down
+  r     = L − 2(L·n)n                                       reflected direction
+  ρ_f   = min(cos θ/(2|κ|), 400) sp, cos θ = |L·n|         focal distance; a real focus where −κ·(L·n) > 0
+  ℓ_max = (24 + 2.5S)·(0.6 + 0.8p)·(1 − 0.5·max(0, CS·sign(r·n)))
+  ℓ(D)  = ℓ_max·min(D, 1)·(1 + 0.6·max(0, D − 1))
+  α_ray = (0.14 + 0.18p)·min(1, ρ_f/12)·smoothstep(0, 0.12, cos θ)·glow(c)·(1 + 0.3·clamp(D − 1, 0, 1))
+  ```
+  Scatter is `±(0.02 + 0.25·smoothstep(0.6, 2.4, v_n))` rad on each ray.
+- **Caustic** (gen 1): the locus of real foci, drawn in runs that break at virtual points, beyond 140 sp, or across gaps over 40 sp. α 0.9 × how far the rays reach past the focus × `cos θ`, fading out for foci beyond about 100 sp. Width `0.35w·(0.5 + 0.5 cos θ)`, thinning with focal distance. Fast strokes break it into glints.
+- **Rays** (gen 2): `clamp(0.25w, 0.7, 2.4)` sp tapering to 0.4 sp over the drawn length.
+- **Gesture grammar.** Lean is the lamp: rolling the pen swings the whole fan. Curvature is the engine: tight concave bends focus close, straight runs hatch in parallel, corners cross rays in an X. Speed roughens the mirror from a razor caustic to glitter. Pressure brightens and lengthens the rays. Spectral ink disperses the fan along the stroke.
+- **Depth.** `dMax 4`, base 2. Rays lengthen and brighten (×1.3 by depth 2); above depth 2 a ±2.5° pair joins each ray at α × `clamp(D − 2, 0, 1)`, so a held spot blazes.
+- **Radial seed:** a glint (§2.3.8).
+- **Closed loop:** a crown outward from the near side, a nephroid inside.
+- **Budget:** 40 points per unit; 16k per stroke, causal. Reach 20 sp. Chisel uses the spine normal.
+
+#### 2.3.13 Burin: engraving that follows the form
+
+The stroke becomes an engraver's contour: short lozenge ticks (thin, thick, thin) laid **across** it on the side the light does not reach. A straight run reads as a lit cylinder, the inside of a bend as a sphere's far rim. Night: scratched film. Paper: a steel engraving, the Form's home.
+
+- **Units.** Unit j is one hatch station, `Δ = clamp(lerp(8.5, 4.5, p̄)·(1 + 0.8c̄), 3, 11)` sp, skipped within 3 sp of a corner (the engraver's open corner).
+- **Light.** Pen azimuth sets the light (`wt = smoothstep(0.1, 0.3, cos alt)`); otherwise the lamp is up-left. The shadow side is a continuous weight `smoothstep(−0.15, 0.15, σ·n·ℓ)`, so ticks migrate smoothly where the line turns. A sustained bend takes the sphere rule: its concave side is shaded on the far rim.
+- **Ticks.** Length `(5 + 1.3S/(1 + max(0, S − 10)/25))·(0.5 + p)·(1 − 0.4·fast)·(0.9 + 0.2r)` sp, `fast = smoothstep(1, 2.5, v_n)`; fast ticks also skew up to 25° toward the trailing tangent. They start 0.5 sp outside the trunk edge, are ray-cast against the stroke's own trunk within ±8 sp and stop short of it, and fade out inside tight bends. Width is a lozenge, `w_t·(0.25 + 0.75·4a(ℓ − a)/ℓ²)`, with belly `w_t = clamp(w·lerp(0.22, 0.4, p), 0.5, 2.4)` sp (pen: `clamp(0.6w, 0.5, 1.4)`).
+- **Families** (Night α 0.55 / 0.45 / 0.35 / 0.35 × glow): gen 1 the shadow hatch; gen 2 an infill tick (0.85ℓ) halfway to the next station (the tone doubles), plus a lit-side terminator tick on straight runs; gen 3 a +40° cross family; gen 4 the −40° family and 2 stipple dots.
+- **Gesture grammar.** Pressure tightens the spacing and fattens the belly, so pressing darkens the tone as on a plate. Speed skids the burin. Lean moves the light. Curvature fans the ticks and shades bends as spheres. Nearby ink widens the spacing and shortens ticks on the crowded side. Chisel ticks are Chisel polys at the nib's edge angle.
+- **Depth.** `dMax 4`, base 2. Family g is drawn to `ℓ·clamp(D − g + 1, 0, 1)`; dots ease in by width × `clamp(D − 3, 0, 1)`. A hold is a burnished patch.
+- **Radial seed:** a stippled disc (§2.3.8).
+- **Closed loop:** a sphere, hatched inside on the side away from the light.
+- **Budget:** 40 points per unit; 16k per stroke, causal. Reach 8 sp.
+
+#### 2.3.14 Plait: a woven cord along the line
+
+The stroke becomes a cord. As it rises the trunk thins to a core strand and strands twine around it in the 120° rhythm of a three-strand plait, passing **over and under** with the carved gaps of a knotwork panel. Over/under occlusion is a primitive no other Form has.
+
+- **Trunk.** Plait replaces the station trunk with a per-station width multiplier: the core thins to about `0.25w` (at most `1.2 + 0.1w` sp) by depth 1 and ×0.3 by depth 3. Depth 0 is bit-exactly the plain trunk.
+- **Braid** (`fast = smoothstep(1, 2.5, v̄_n)`):
+  ```
+  P   = clamp(clamp(2.5w + 22, 20, 72)·(1 + 1.4·fast)·(1 + 0.4c), 20, 96) sp      period
+  A   = A0·clamp(1 − A0·|κ̄|/0.8, 0.3, 1), A0 = min(0.9w + 2, 0.13P)          amplitude, capped again on tight bends; inner strands never fold
+  A±  = A·(1 ∓ 0.4·tilt_n)·(1 − 0.5·max(0, ±CS))
+  o_m = A±·sin(φ + 2πm/3)                                                       strand m's offset
+  ```
+  Crossings sit at `φ = π/6 + kπ/3`; each strand goes over, under, over, under per period. The under strand is removed for a gap around the crossing, with its ends eased to zero width, so nothing double-adds on Night.
+- **Units.** Unit j is half a period. A corner station cuts the cord about `2 + w/2` sp either side, and within 12 sp of a cut the amplitude gathers to 0.4 (a whipped end). There is no rng in the braid.
+- **Alpha.** Strands 0.8 × `0.88^m` × glow (peers, not a hierarchy; their tone buckets `m + 1` deepen the colour). The groove α 0.45, bucket 4.
+- **Gesture grammar.** Pressure (through `w`) makes a fat, long-period rope. Speed braids loose. Lean lays the cord over to one side. Curvature shrinks the amplitude; corners cut the cord. Nearby ink flattens the braid and lengthens the period. Chisel strands make a flat tablet-woven band.
+- **Depth.** `dMax 4`, base 2. Strand 0 arrives over `d ∈ (0, 1]`, strand 1 over `(1, 2]`, strand 2 over `(2, 3]`, each drawn as a prefix of its unit arc. Below depth 2 strand 0 is one unbroken strand (a two-ply twist). The carver's groove eases in over `(3, 4]`. A hold ties a thick knot.
+- **Radial seed:** a trefoil (§2.3.8).
+- **Closed loop:** the cord is cut at the seam.
+- **Budget:** 220 points per unit (the ceiling drops in 1/16 steps above it); 20k per stroke, causal. Reach 108 sp, so the braid trails the nib by about 30–40 sp.
+
+#### 2.3.15 Orbit: epicycles around the nib
+
+A satellite circles the nib as it travels; its trail, a trochoid in the spine's moving frame, curls along the stroke as one unbroken rope of loops. Rising adds epicycles, so every loop grows a lace edge, like a copperplate flourish. Orbit is kinematic: its shape is the hand's motion integrated.
+
+- **Units.** Unit j is one orbit over `[s_j, s_j + P_j]`, starting at phase 0 on `+t`, so orbits join at a bit-identical point.
+  ```
+  P    = clamp((10 + 2S)·(0.6 + 0.9·smoothstep(0.4, 2.4, v̄_n)), 10, 36) sp
+  R    = (3.5 + 1.1S)·(0.5 + p)·(1 − 0.5·smoothstep(1, 2.6, v_n))·(1 − 0.4c) sp
+  T(s) = pos(s) + swell(D)·Σ_k f_k(D)·R·ρ_k·M·(cos φ_k·t + sin φ_k·n),   φ_k = m_k·2π(s − s_j)/P_j
+  (m_k, ρ_k) = (1, 1), (+6, 0.13), (+11, 0.04);   f_k = clamp(D − k + 1, 0, 1);   swell = 1 + 0.5·clamp(D − 3, 0, 1)
+  ```
+  `M` squashes the circle along the pen's lean (`1 − 0.6·cos alt`). The normal component on the side of nearby ink is scaled by `1 − 0.6·|CS|`.
+- **Width and alpha.** Brush `0.32w'·(0.5 + 0.8v̂)`, thick on the outer sweep and thin at the inner cusp; pen `0.5w`; `w' = max(w, 0.4S)`; floor 0.35 sp. Over the trunk the width eases to 0.4×, so Night crossings stay off white. α `0.8·glow(c)`, eased in over depth 0–0.5. Each orbit is three polys by thirds, tone buckets 1/2/3, so every loop deepens in colour around itself.
+- **Gesture grammar.** Speed lengthens the period and shrinks the radius: slow hands make tight round loops, fast ones cusps and waves. Pressure sets the radius. Lean makes ellipses. Curvature spreads loops outside bends; a corner swings the satellite wide. Nearby ink shrinks the loops and leans them away.
+- **Depth.** `dMax 4`, base 2. The trail grows out of the trunk (a wobble, a wave, loops by depth 1); the five-lobed frill comes over (1, 2], the ten-fold scallop over (2, 3], the swell over (3, 4]. Each unit is cooked once at its ceiling and emitted as a weighted sum, so rising never re-cooks.
+- **Radial seed:** a spirograph rose (§2.3.8).
+- **Closed loop:** at lift the last orbit stretches to end exactly at `L`, so the wreath joins itself. On an open stroke the last orbit fades over 10 sp, so the satellite lands on the nib.
+- **Budget:** 220 points per orbit (≤ 216 samples); 24k per stroke, causal. Reach 54 sp.
 
 ### 2.4 COLOR
 
@@ -615,6 +775,7 @@ The rise frame has the same budget as the live frame. There is no rise-specific 
 | Line | 160 ms | **Morph:** points lerp from the spine to their displaced position |
 | Sprout | 280 ms per generation | **Prefix:** each branch extends from its base. A child starts when its parent reaches 60%. |
 | Drift | 240 ms | **Prefix** of each filament by arc |
+| Craze, Plume, Caustic, Burin, Plait, Orbit | 240 ms | **Prefix** of each poly by arc |
 | Echo | `clamp(350 + 120·d, 350, 1100)` ms at lift | **Morph:** per-vertex fold-out from parent anchors |
 
 Reveal never calls an operator. It is a prefix or a lerp applied at tessellation.
@@ -654,6 +815,20 @@ The `?` sheet prints the grammar in one line:
 | Closing a loop | Weld ring; tapers dropped | Seamless weld | Snowflake | Grows outward | — | — |
 | Zoom | Finer nib | Finer coastline | Finer crystal | Finer sprouts | Field wavelength | — |
 | Nearby ink | Seed is never dimmed | — | — | Grows away from neighbours; sparser and shorter | Sparser and shorter | Lineage keeps the family; glow budget on growth |
+
+The six lab Forms, on the same rows (§2.3.10–§2.3.15):
+
+| Gesture | Craze | Plume | Caustic | Burin | Plait | Orbit |
+|---|---|---|---|---|---|---|
+| Speed | Thin film: finer, more jagged crazing | Barbs laid back and ruffled in swaying groups | Rougher mirror: razor caustic → glitter | Burin skids: ticks shorten and lean back | Braids loose (longer period) | Longer period, smaller radius: loops → cusps and waves |
+| Pressure | Thick film: bigger plates, wider seams | Wider vane | Brighter, longer rays | Tighter spacing, fatter belly: darker tone | Fat, long-period rope | Larger loops |
+| Hold | Pools → fine craquelure, widened seams | Pools → barbules and down | Pools → rays lengthen, brighten and triple | Pools → cross-hatch and stipple | Pools → a thick knot | Pools → lace and swell |
+| Ease off during a hold (pen) | Settle | Settle | Settle | Settle | Settle | Settle |
+| Lean (tilt/azimuth) | Along: cracks shear; across: band spreads downhill | Flight-feather asymmetry | **The lamp**: the fan swings with the pen | **The light**: ticks move to the shadow side | The cord lies over | Loops squash into ellipses |
+| Curvature | Plates narrow; corners shatter | Outer vane longer; pupil inside | Concave bends focus; corners cross in an X | Ticks fan; bends shade as spheres; open corners | Amplitude shrinks; corners cut the cord | Loops spread outside bends; corners swing wide |
+| Closing a loop | Cracked annulus | Ocellus | Nephroid inside, crown outside | Shaded sphere | Cut cord at the seam | Wreath that joins itself |
+| Zoom | Finer crazing | Finer plumage | Finer focus | Finer engraving | Finer braid | Smaller loops |
+| Nearby ink | Band narrows toward the free side | Shorter barbs; the vane facing ink narrows | Rays toward ink shorten | Wider spacing; shorter ticks toward ink | Flatter on the crowded side; longer period | Smaller loops leaning away |
 
 All of this is personal: the learner maps *your* lightest and heaviest touch, *your* typical speed and *your* hand's tremor onto the full range.
 
@@ -747,7 +922,7 @@ The recipes are the same on both grounds. Each ink has designed ramps for each, 
 | **Delete** | just above the selection's bounds; on phones, the leading dock slot | selection only | hidden | — | Deletes the selection (un-grow). |
 | Stroke sheet | grows out of its chip | — | — | ✓ | Pen · Brush · Chisel (· Charcoal P1) · Erase, as labelled live tiles. Drag the active tile vertically to set size. |
 | Color sheet | grows out of its chip | — | — | ✓ | 7 inks and 2 recents as labelled tiles, plus the Night \| Paper switch |
-| Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift (· Ripple P1) as labelled live tiles. Re-tapping the selection's Form tile reseeds it. Mirror toggle (P1). |
+| Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift · Craze · Plume · Caustic · Burin · Plait · Orbit (· Ripple P1) as labelled live tiles: ten, in two rows of five on desktop and tablet, a 3-column grid on phones (the one sheet over the 9-tile cap, §13). Tooltips name the key (1–9, 0). Re-tapping the selection's Form tile reseeds it. Mirror toggle (P1). |
 | Menu sheet | top-left | — | — | ✓ | Items listed above. Recent: the last 12 documents with date, a 96 px thumbnail, open, and delete. |
 | Help sheet | full sheet | — | — | `?`, F1 or the menu | Ink Grammar; Keys (desktop) or Gestures (touch), with labels from `navigator.keyboard.getLayoutMap()` where it exists; **Reset calibration** |
 | Toast | above the dock | — | — | listed events only | **New:** "New canvas. The last one is in Recent." **Open / drop:** "Opened ⟨title⟩". **Export:** a progress toast with **Cancel** while it takes > 300 ms, then "Image saved". **Autosave failure:** "Not autosaving" with **Save**. **Pen mode:** on the first finger pan of a session, "Fingers pan while a pen is in use" with **Draw with fingers**. 6 s; one at a time. |
@@ -784,8 +959,10 @@ Desktop, at rest (first run):
 Desktop, Form sheet open (tiles are your last stroke, grown):
 ```
               +-------------------------------------------------------+
-              |  [~~~~~~]   [/\/\/\]   [Y.Y.Y.]   [))))))]             |
-              |    Line       Echo     *Sprout     Drift               |
+              |  [~~~~~~]   [/\/\/\]   [Y.Y.Y.]   [))))))]   [#|#|#]   |
+              |    Line       Echo     *Sprout     Drift      Craze    |
+              |  [\\\\\\]   [>>>>>>]   [//////]   [XXXXXX]   [@@@@@@]  |
+              |   Plume     Caustic     Burin      Plait      Orbit    |
               +----------------------------v--------------------------+
                              +-------------------+
                              |  [~]   [o]  ([Y]) |    drag [Y] up = deeper base, down = shallower
@@ -901,7 +1078,7 @@ Phone, landscape:
 
 | Key (`e.code`) | Action |
 |---|---|
-| `Digit1`–`Digit4` (`Digit5` in P1) | Form: Line, Echo, Sprout, Drift (Ripple) |
+| `Digit1`–`Digit9`, `Digit0` | Form, in sheet order: Line, Echo, Sprout, Drift, Craze, Plume, Caustic, Burin, Plait, Orbit. Ripple (P1) has no key yet. |
 | `KeyB` / `Shift+KeyB` | Next / previous nib (never cycles into Erase) |
 | `KeyC` / `Shift+KeyC` | Next / previous ink |
 | `KeyG` | Night / Paper |
@@ -1028,12 +1205,18 @@ Edge cases:
 | **Echo** | A crystal of light that folds out of your own gesture | An engraved snowflake |
 | **Sprout** | Bioluminescent botany curling upward (tropism), leaning away from neighbours | Haeckel-plate botany in glazes |
 | **Drift** | Silk and smoke. Divergence-free filaments, deepening in hue along the wake, pouring from where you held. | Hair-fine ink currents at α 0.30 |
+| **Craze** | A cooling lava crust: the seams over the trunk are the hottest light, the seams beyond it faint glowing hairlines | Craquelure: the same seams multiply darker over the pigment, like old varnish |
+| **Plume** | A vane of warm light, a soft translucent sheet with the rachis brightest; loop eyes glow round a dark pupil | A pen-and-ink quill study; down as faint grey wisps |
+| **Caustic** | Its home: hairline rays add up where they fold, so the caustic burns; Spectral ink disperses the fan like a prism | Engraver's reflection hatching with a burnished caustic line |
+| **Burin** | Scratched film; a triple crossing is a bright knot, never a white patch | Its home: a steel engraving, the lozenge swell exactly the burin's cut |
+| **Plait** | A cord of light; over-crossings are bright lozenges, the gaps keep the cord off white | Its home: a carved stone knot; over-crossings read as the carver's shadow |
+| **Orbit** | A rope of light-loops, each deepening in colour around itself | A copperplate flourish, the nib loading and unloading around every loop |
 | **Ripple** (P1) | Interference moiré glow | Survey-map contours |
 
 ### 6.6 Growth animation (implementation)
 
 There are two reveal kinds, both applied at tessellation. **Neither calls an operator.**
-- **Prefix** (Sprout, Drift, and un-grow): draw each poly up to arc `f·len`, with an interpolated end point. `Cooked.pts` carries the per-point arc `a` for this.
+- **Prefix** (Sprout, Drift, the six lab Forms, and un-grow): draw each poly up to arc `f·len`, with an interpolated end point. `Cooked.pts` carries the per-point arc `a` for this.
 - **Morph** (Line in the live window, Echo fold-out): each point is drawn at `lerp(from, to, f)`.
   - For Line, `from` is the spine position.
   - For Echo, `from` is the point's position on its parent segment.
@@ -1081,7 +1264,8 @@ There are two reveal kinds, both applied at tessellation. **Neither calls an ope
 - Scale range is [0.05, 32]. Detents are listed in §5.
 - Fit uses the content box plus a 6% margin.
 - Rotation is P1. In P0, `camera.rot` and `recipe.rot` are 0.
-- **During pan or zoom**, only cached tiles are composited, and stale tiles stay visible.
+- **During pan or zoom**, only cached tiles are composited, and stale tiles stay visible. A camera-only gesture frame moves `#base` by CSS transform while its last composite still covers the viewport (§6.2); a composite skips the full clear when the visible tiles' blits cover the viewport. Animating strokes fast-forward, and the bloom waits for the gesture to end (§6.7).
+- **One settle per gesture.** A wheel burst, pinch or glide settles once, re-compositing `#base` and the bloom a single time.
 - **150 ms after the last camera change**, the current level renders centre-out in time slices, with a one-tile prefetch ring. A gesture that ends (navEnd, a glide's last step) settles at once. A first render left behind on another level pauses until that level is current again.
 - **Invalidation** (remove, restyle, lift) re-renders only the dirty sub-rect of each affected tile. That means clip, clear, and redraw the strokes whose boxes intersect it.
 
@@ -1108,9 +1292,12 @@ There are two reveal kinds, both applied at tessellation. **Neither calls an ope
 
 ### 7.1 Source tree
 
+The tree as built. It differs from the plan in four places: tessellation lives in `render/` (it is pure, so it also serves export and tests), the operator contract is a unit model (`ink/operators/types.ts`, see the deviation note there), the app layer is split finer than planned, and there is no `firstrun.ts` or `persist/snapshot.ts` (the seed lives in `app/replay.ts` and `app/hints.ts`, snapshots in `persist/autosave.ts`).
+
 ```
 src/
-  main.ts                     composition root: builds doc, scene, renderer, input, ui, app; no logic
+  main.ts                     composition root: boots app/boot.ts in #stage / #chrome; exposes window.__rise in debug builds; no logic
+  env.d.ts                    the build-time __DEBUG__ flag (§7.6, §9)
   styles.css                  :root tokens for both grounds; reduced-motion; forced-colors
   assets/seed.ts              first-run recorded seed (base64 Float32 samples + pools, ~1 KB)
   core/        (pure; lib ES2022, no DOM)
@@ -1125,15 +1312,15 @@ src/
     spine.ts                  incremental spine: resample 2.4 sp, corner-aware Chaikin, settled watermark
     envelope.ts               tapers, seated stop, ramp-down, closure weld
     nibs.ts                   width/geometry per nib; dry-split gating
-    tessellate.ts             ribbon / chisel / bristle / hairline outlines; prefix + morph; Bézier-ready edges
     depth.ts                  DepthField: base + pools, K kernel, ceilings
     rise.ts                   hold detector + pool integrator + Settle (fed filtered samples and a clock)
     noise.ts                  2D gradient noise with analytic derivatives, curl, tables
     color.ts                  INKS, ramps, assignVariant, lineage test, resolveInk -> InkTable (presentation)
-    operators/types.ts        Operator, Sink, OperatorState
-    operators/registry.ts     (FormId, v) -> Operator
-    operators/line.v1.ts  echo.v1.ts  sprout.v1.ts  drift.v1.ts  (ripple.v1.ts P1)
-    cook.ts                   createIncrementalCook(); cook(r) = createIncrementalCook(draftOf(r)).finish(r)
+    operators/types.ts        FormOps (trunk, chain of growth units, radial seed), Sink, UnitGeom, shared helpers
+    operators/registry.ts     FORMS metadata, CURRENT_V, operatorFor(FormId, v), registerOperator (forms lab, tests)
+    operators/line.v1.ts  echo.v1.ts  sprout.v1.ts  sprout.v2.ts  drift.v1.ts
+    operators/craze.v1.ts  plume.v1.ts  caustic.v1.ts  burin.v1.ts  plait.v1.ts  orbit.v1.ts   (ripple P1: cooks as Line)
+    cook.ts                   createIncrementalCook(); cook(r) = createIncrementalCook(draftOf(r)).finish(r); cookPreview, spineOf
   doc/         (pure)
     ids.ts  document.ts  commands.ts  history.ts  serialize.ts  migrate.ts
   scene/       (pure)
@@ -1143,29 +1330,50 @@ src/
     query.ts                  hit, sweep, lasso, lineage candidates, contentBox
     kitchen.ts                async cook queue, time-sliced (P1: ?worker&inline with in-thread fallback)
   render/      (DOM / Canvas2D)
-    types.ts                  Renderer, LiveLayer, Overlay, NibCursor, Halo
+    types.ts                  Renderer, LiveLayer, Overlay, NibCursor, Halo, Glyphs
+    tessellate.ts             (pure) ribbon / chisel / bristle / hairline outlines; prefix + morph; Bézier edges; any PathSink
     ledger.ts  camera.ts  ground.ts  batch.ts  raster.ts  tiles.ts  compositor.ts
     bloom.ts  live.ts  overlay.ts  glyphs.ts  renderer.ts
+    stats.ts                  render work counters (debug and bench-zoom only, §9)
   input/
+    types.ts (InputSink contract)  index.ts (binds DOM events; feeds the arbiter)
     pointer.ts (events -> InputSample; coalesced + predicted; timestamp sanitiser)
     devices.ts (pen mode, palm rules, device class)  arbiter.ts  gestures.ts (pinch, taps, double-tap)
     wheel.ts (burst classifier)  keys.ts (e.code map)
   sched/
     frame.ts (single on-demand rAF loop, measured frame interval)  jobs.ts (generator jobs, priorities)
   persist/
-    idb.ts  prefs.ts (localStorage `rise:*`, try/catch)  files.ts (.rise download/open/drop)  snapshot.ts
+    idb.ts (database `rise` v1)  prefs.ts (localStorage `rise:*`, try/catch)
+    files.ts (.rise download/open/drop; reads gzip)  autosave.ts (batched writes, snapshots, thumbnails, quota)
   export/
     png.ts  (svg.ts P1)
   ui/
-    dock.ts  chip.ts (tap/drag rule, dead zone, long-press label)  sheet.ts  menu.ts  recent.ts
+    index.ts (the whole chrome: reads AppState, dispatches Intents)
+    dock.ts  chip.ts (tap/drag rule, dead zone, long-press label, tooltip)  sheet.ts  menu.ts  recent.ts
     selectionbar.ts (Delete)  viewchip.ts  toast.ts  hints.ts  help.ts  announce.ts  icons.ts
   app/
-    types.ts (ToolState, Intent)  store.ts (observable; dispatch(intent))  controller.ts (intents -> Commands)
-    draft.ts (owns the stroke lifecycle, 7.4)  selection.ts (lift/drop, restyle previews)
-    replay.ts (drives recorded strokes through the live pipeline; Replay, first-run seed, e2e)
-    firstrun.ts  debug.ts (?debug only: HUD, counts, window.__rise)
+    types.ts                  ToolState, Intent, AppState, AppEvent, RiseDebug
+    boot.ts                   builds every service and wires them (§8 load sequence)
+    runtime.ts                the shared services; doc, history and scene swap together on New / Open
+    store.ts                  observable AppState, one-way event channel, dispatch(intent)
+    tool.ts                   tool state and first-run defaults; persisted in prefs
+    controller.ts             intents and classified gestures -> commands, tool changes, camera moves
+    draft.ts                  owns the stroke lifecycle (7.4)
+    erase.ts                  eraser sweep, doom mask, one `remove` per gesture
+    edits.ts                  undo / redo; each document change announced to the renderer as its animation
+    selection.ts              picking, lasso, lift/drop, restyle with live previews
+    view.ts                   camera gestures, fit / reset glides, detents, view chip
+    replay.ts                 drives recorded strokes through the live pipeline: Replay and the first-run seed
+    library.ts                New, Open / drop, Save project, Recent
+    docs.ts                   switching documents (fade, rebuild, autosave, snapshot under the tiles)
+    hints.ts                  the four hints
+    perf.ts                   CPU counters (debug builds; no-ops in production)
+    debug.ts                  ?debug in debug builds only: window.__rise for e2e and benchmarks
+    version.ts                the app string written into .rise files
 tests/   (see 7.6)
-scripts/ harness.mjs (exists)  e2e.mjs
+scripts/ harness.mjs  e2e.mjs  bench-zoom.mjs (§9)  shrink.ts (build plugin, §9)
+lab/forms/  the forms lab: prototype Forms, harness, gallery, briefs (not shipped)
+README.md   the user-facing guide
 ```
 
 ### 7.2 Key types
@@ -1176,7 +1384,10 @@ export type StrokeId = string;          // base36(ms).padStart(9,'0') + base36(c
 export type Device = 'pen' | 'mouse' | 'touch';
 export type NibId = 'pen' | 'brush' | 'chisel' | 'charcoal';
 export type InkId = 'graphite' | 'indigo' | 'oxide' | 'ochre' | 'moss' | 'rose' | 'spectral' | 'custom';
-export type FormId = 'line' | 'echo' | 'sprout' | 'drift' | 'ripple';
+export type FormId = 'line' | 'echo' | 'sprout' | 'drift' | 'ripple'
+  | 'craze' | 'plume' | 'caustic' | 'burin' | 'plait' | 'orbit';
+/** Forms offered in the UI, in sheet and number-key order (ripple is P1). */
+export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'];
 export type Ground = 'night' | 'paper';
 export type Vec2 = readonly [number, number];
 export type LCh = readonly [L: number, C: number, h: number];
@@ -1480,16 +1691,21 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 6. **Context reads only strokes earlier in z-order, and its result is stored.** Deleting a neighbour never changes another stroke.
 7. **Local operators use absolute arc length in sp** and never normalised `u`. Only Echo is `global`. Each growth unit is a pure function of the spine within `reach` of it, `d(s)` there, and its own rng address. That is what makes `regrow`, truncation and split pieces exact.
 8. **Operators are frozen by version.** To change a look, ship `line.v2.ts`. Never edit v1. Moving old strokes to a new look is an explicit restyle.
+   - `CURRENT_V` in `ink/operators/registry.ts` names the version new strokes are drawn with, and `operatorFor(form, v)` cooks every recipe with the version stored in `recipe.form.v`.
+   - Shipped: Sprout v2 (§2.3.5) and Drift v2 (§2.3.6).
+   - `registerOperator(form, v)` lets the forms lab and tests cook prototypes through the real pipeline at versions ≥ 100, which no shipped recipe uses.
 9. **Timestamps** are sanitised to be strictly increasing (`+0.25` ms minimum step). Predicted samples are never stored.
 10. **Precision:** samples are Float32 offsets from a Float64 origin. Files store base64 little-endian Float32, which round-trips exactly.
 11. **Device-adaptive cost changes presentation only:** reveal timing, tile level, prefetch, preview cadence. It never changes geometry.
 
 ### 7.6 Tests
 
+**Status (2026-10-05):** 1105 vitest tests in 71 files under `tests/`, all passing; 24 e2e scenarios. The forms lab has its own suite (`npx vitest run --config lab/vitest.config.ts`).
+
 **vitest (Node):**
 - **`det`:** bit-exact golden vectors, plus relative error ≤ 1e-12 against `Math.*` over Rise's ranges.
 - **`purity`:** import edges, the Math allow-list, and the bans.
-- **Golden hashes:** `fnv1a(Cooked)` per fixture per operator version. Fixtures cover every Form, pools, closed loops, radial seeds and split pieces.
+- **Golden hashes:** `fnv1a(Cooked)` per fixture per operator version (`tests/fixtures/ink-forms.golden.json`). Fixtures cover every Form, pools, closed loops, radial seeds and split pieces. Each lab Form and Sprout v2 also has its own behaviour file (`tests/ink-forms.<form>.test.ts`, `ink-forms.sprout2.test.ts`).
 - **Incremental ≡ full:** random chunk sizes, random hold and Settle schedules, and random closure toggles, for every Form. Equality is bitwise.
 - **Continuity:** `max |cook(d) − cook(d + 1/16)|` is bounded per Form. Line at d = 0 equals the spine ribbon. Sprout and Drift truncation equals a direct cook.
 - **Operator safety:** budgets respected, no NaN, `inkBox` contains every point, `genStart` is sorted.
@@ -1502,20 +1718,21 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 
 **e2e (`scripts/e2e.mjs` on `harness.mjs`):**
 - **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps. The suite drives the **debug variant** (`vite build --mode debug` → `dist-debug/index.html`, which it builds itself): the same app with `window.__rise` compiled in. The production file (`build:single`) has no debug hooks (`__DEBUG__` is a build-time constant), so the `prod-file` scenario only checks that it boots, draws, logs no errors and exposes nothing.
-- **Golden fixtures in other engines:** Firefox via puppeteer-core BiDi; the step reports SKIPPED when `FIREFOX_PATH` is absent. WebKit (Playwright) is P1.
-- **Scenarios:**
-  - control-budget DOM counts in every §1.2 state
-  - each Form, and radial seeds
-  - rise by hold (pen and mouse), and peel undo
-  - closure: preview equals committed
-  - erase sweep
-  - Mod-click and lasso, restyle, Delete
-  - 50 undo/redo steps
-  - reload with an identical `sceneHash`
-  - `.rise` round trip, and PNG export dimensions
-  - the first-run seed plays and dissolves
-  - the hand-off tolerance test
-  - a 300-stroke document with 20 pan/zoom steps
+- **Golden fixtures in other engines:** Firefox via puppeteer-core BiDi; the step reports SKIPPED when `FIREFOX_PATH` is absent. WebKit (Playwright) is P1. **Not built yet.**
+- **Scenarios** (24; `--only name,name` runs a subset):
+  - `prod-file`: the production file boots, draws, logs no errors and has no `window.__rise`
+  - `boot-budget`, `phone-layout`: control-budget DOM counts at rest, with ink and after an undo, on desktop and phone (the selection counts are checked in the selection scenarios)
+  - `draw-each-form` (the first four), `draw-new-forms` (the six lab Forms, their taps, and a `.rise` round trip of their ids), `radial-seeds`
+  - `rise-hold-pen`, `rise-hold-mouse`: rise by hold, and peel undo
+  - `closure`: preview equals committed
+  - `erase-sweep`
+  - `select-restyle-delete`, `lasso-restyle-bend`, `sample-alt-click`
+  - `undo-redo-50`
+  - `reload-persist` (identical `sceneHash`), `rise-file-roundtrip`, `export-png` (dimensions), `documents` (New, reopen and delete from Recent)
+  - `first-run-seed`, `hints`, `replay`
+  - `navigate`, `touch-pinch`
+  - `stress-300`: a 300-stroke document with 20 wheel zoom steps
+- **Not built yet:** the hand-off tolerance test (§6.2 Fidelity).
 - **Performance gates** are CPU-side only (§9). Raster numbers are trend-only in CI and gated on real devices.
 
 ---
@@ -1645,7 +1862,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 | Live frame CPU (incremental cook, regrow, tessellate, path build), p95 | ≤ 4 ms (≤ 12 ms at 4× throttle) | e2e CPU |
 | Live frame total, including raster, p95 | ≤ 10 ms | Devices |
 | Rise frame | Same as the live frame | Both |
-| Pan / zoom frame | ≤ 3 ms CPU, ≤ 8 ms total | Both |
+| Pan / zoom frame | ≤ 3 ms CPU, ≤ 8 ms total | Both; `scripts/bench-zoom.mjs` reports frame intervals, `renderer.frame` CPU and the `render/stats.ts` work counters per gesture phase, trend-only under SwiftShader. It reads `window.__rise`, so like e2e it builds and drives the debug variant (`dist-debug/`) itself; `--no-build` reuses it. |
 | Bake slices | ≤ 6 ms per frame; no dropped frames | Devices |
 | Erase, undo, lift → tiles updated (≤ 500 strokes in view, warm cache) | ≤ 100 ms, then the 200 ms un-grow | Devices |
 | Settle → visible tiles complete | ≤ 400 ms for ≤ 200 strokes in view, warm cache | Devices |
@@ -1657,7 +1874,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 | Memory | Canvases: phone 160, tablet 256, desktop 512 MB (ledger). `Cooked`: 48, 96, 192 MB. | Devices |
 | Supported document | 2,000 strokes and 20 M cooked points at these budgets. Larger documents work with cook-on-demand and LRU churn. | e2e stress |
 
-**Single-file bundle, status (2026-10-05).** `dist-single/index.html` is 469 kB minified (444 kB JS + 24 kB CSS) and 170 kB gzipped, down from 488 / 175 kB. The budget above is **not met**. What the build already does:
+**Single-file bundle, status (2026-10-05).** `dist-single/index.html` is 481 kB minified and 174.5 kB gzipped with Sprout v2 in; the shrink work below took it from 488 / 175 kB to 469 / 170 kB (444 kB JS + 24 kB CSS) before Sprout v2 added 12 kB. The budget above is **not met**. What the build already does:
 - Debug-only code (`app/debug.ts`, the perf counters, `live.inspect()`, `RTree.validate()`) sits behind the build-time `__DEBUG__` flag and is absent from production builds. e2e uses the debug variant (§7.6).
 - `scripts/shrink.ts` runs in every build. Using the TypeScript checker, it inlines every cross-module `const enum` read, which oxc cannot do file by file, and gives `private`/`protected` members `$`-prefixed short names.
 - The modulepreload polyfill is off.
@@ -1736,7 +1953,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 | **Phone** | width < 600 px, or coarse pointer with short side < 500 px | Bottom dock above `env(safe-area-inset-bottom)`: view chip (conditional) · three 48 px chips · Undo · Redo (conditional). Menu top-left at 44 px. Delete takes the view chip's slot during a selection. Sheets are bottom sheets (≤ 46% of the height, 3-column grid, swipe down to close). Long-press a chip for its name and drag. |
 | **Phone landscape** | phone and width > height | The dock goes vertical on the trailing edge, and sheets open from that edge. |
 | **Tablet** | coarse pointer, larger screen | Desktop layout with 48 px targets. Pen hover reveals the chrome. P2: drag the dock to any edge for handedness. |
-| **Desktop** | ≥ 1100 px wide and a fine pointer | 40 px chips. Sheets 7–9 tiles wide in one row. Tooltips after 600 ms that include the shortcut and the drag ("Form · Sprout · 1–4 · drag ↕ to deepen"). Nib cursor. |
+| **Desktop** | ≥ 1100 px wide and a fine pointer | 40 px chips. Sheets 7–9 tiles wide in one row; the ten-tile Form sheet is two rows of five. Tooltips after 600 ms that include the shortcut and the drag ("Form · Sprout · 1–0 · drag ↕ to deepen"). Nib cursor. |
 
 **Viewport handling:**
 - Canvases resize on `resize` and `visualViewport` changes, debounced 120 ms. Tiles are kept, since they are world-anchored.
@@ -1746,7 +1963,13 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 
 ## 11. v1 scope
 
-### P0: one focused build, in six milestones
+**Status (2026-10-05).**
+- **P0 is built**, all six milestones, except the items marked **Not built** in M6 below.
+- **Beyond the plan, shipped:** six more Forms (Craze, Plume, Caustic, Burin, Plait, Orbit, §2.3.10–§2.3.15) with keys 5–9 and 0 and a ten-tile Form sheet, and Sprout v2 (§2.3.5).
+- **Shipped after the build:** Drift v2 (§2.3.6).
+- **Still P1 and P2:** everything listed under those headings below. Ripple, Charcoal and paper tooth, tilt shading, view rotation, Mirror, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
+
+### P0: one focused build, in six milestones (built)
 
 **M1: Foundation**
 - Build: `tsconfig.pure.json` and a `typecheck` that runs both configs.
@@ -1800,8 +2023,16 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - PNG export with progress and Cancel.
 - Replay.
 - The full vitest suite (§7.6).
-- e2e: budget counts, each Form, rise, peel undo, closure, erase, selection, undo, reload hash, export, seed, hand-off tolerance, stress; Firefox golden run.
-- Performance pass on the three reference devices.
+- e2e: budget counts, each Form, rise, peel undo, closure, erase, selection, undo, reload hash, export, seed, stress (§7.6). **Not built:** the hand-off tolerance test and the Firefox golden run.
+- Performance pass on the three reference devices. **Not recorded** in the repo; CPU-side numbers come from e2e and `scripts/bench-zoom.mjs`.
+- Single-file bundle within its budget. **Not met** (§9).
+
+### Beyond the plan (shipped)
+
+- **Six Forms from the forms lab:** Craze, Plume, Caustic, Burin, Plait, Orbit (§2.3.10–§2.3.15), on keys 5–9 and 0, with a ten-tile Form sheet (§13).
+- **Sprout v2:** clean crotches, so branches no longer stack into white dashes on Night (§2.3.5).
+- **Cheaper pan and zoom:** transform-only gesture frames, one settle per gesture, blank layers skipped (§6.2, §6.7, §6.9).
+- **A debug build:** `__DEBUG__`, `build:debug` and the `prod-file` check (§7.6, §9).
 
 ### P1
 
@@ -1832,7 +2063,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - Cook and tile Worker.
 - WebKit golden run (Playwright).
 
-**Files:** SVG export; gzip `.rise`; File System Access and share.
+**Files:** SVG export; gzip `.rise` (opening one already works); File System Access and share.
 
 ### P2
 
@@ -2022,3 +2253,15 @@ Verdicts: **A** = accepted as proposed, **A\*** = accepted with a change (stated
 | Draft 4 × 4 colour buckets; 12 Spectral hues | 6 × 5, and 36 Spectral hues | Visible tone and hue steps once chunks split at bucket changes |
 | Erase as a tile only, with a sticky mode | Unchanged tile, plus a chip glyph that shows the mode | A mode the user cannot see is a trap |
 | Line depth range 0–6 | 0–5 | Level 6 hats (0.75 sp) alias at the 0.5 sp lattice floor |
+
+### After the build
+
+Decisions taken once P0 was running. Same verdict scale.
+
+| # | Point | Verdict | Reason |
+|---|---|---|---|
+| 1 | Promote six lab Forms (Craze, Plume, Caustic, Burin, Plait, Orbit) into the app | A | Each was judged in the forms lab against its brief and adds a primitive the first four lack. All are local chains, pass incremental ≡ full and need no change to `cook.ts`. They ship with unchanged geometry, as `v1` operators with their own golden hashes. |
+| 2 | The Form sheet shows ten tiles, over the 9-tile cap of §1.2 | A* | Accepted as the one exception. Ten Forms are ten kinds, and hiding some behind a second page or a "more" tile would add a control. The sheet lays out as two rows of five on desktop and tablet and a 3-column grid on phones; no other sheet may exceed 9. |
+| 3 | Number keys for ten Forms | A | `Digit1`–`Digit9` and `Digit0` follow sheet order, so the key is the tile's position. Ripple gets no key until it ships. `Shift+Digit1` and `Shift+Digit0` keep fit and 100%. |
+| 4 | Fix Sprout's white dashes on Night by editing `sprout.v1.ts` | R | §7.5 rule 8: operators are frozen by version. The fix ships as `sprout.v2.ts` with `CURRENT_V.sprout = 2`. Old documents keep cooking with v1 and look exactly as they were drawn; moving them to v2 is an explicit restyle. |
+| 5 | Drift v2: filaments emerge from the trunk edge | A | Shipped. Same versioning as Sprout v2: a new `drift.v2.ts`, v1 kept for old documents. |

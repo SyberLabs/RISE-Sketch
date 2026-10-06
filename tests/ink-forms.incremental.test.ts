@@ -16,8 +16,8 @@ import {
 // cooks are heavy; other suites may share the CPU, so 5 s is not enough under load
 vi.setConfig({ testTimeout: 60000 });
 
-/** Forms at v1, plus the later shipped versions (Sprout v2), as [form, version]. */
-const FORMS: [FormId, number][] = [['line', 1], ['echo', 1], ['sprout', 1], ['drift', 1], ['sprout', 2]];
+/** Forms at v1, plus the later shipped versions (Sprout v2, Drift v2), as [form, version]. */
+const FORMS: [FormId, number][] = [['line', 1], ['echo', 1], ['sprout', 1], ['drift', 1], ['sprout', 2], ['drift', 2]];
 const label = (form: FormId, v: number): string => (v === 1 ? form : `${form}@${v}`);
 
 interface Case { name: string; r: StrokeRecipe; closedAtEnd: boolean }
