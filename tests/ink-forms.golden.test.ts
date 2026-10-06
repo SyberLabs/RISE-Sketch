@@ -23,10 +23,11 @@ function fixtures(): Record<string, StrokeRecipe> {
   const out: Record<string, StrokeRecipe> = {};
   const chisel = new Hand(0, 0, { jitter: 0.2, seed: 11, alt: 0.6, az: 0.4, p: 0.3, c: 0.3, cs: -0.2 });
   chisel.moveTo(80, 40, 0.5).moveTo(10, 120, 2.0, 0.1).moveTo(200, 90, 0.7, 0.9);
-  // every Form at v1, plus the later versions (keyed form@v): Sprout v2
+  // every Form at v1, plus the later versions (keyed form@v): Sprout v2, Drift v2
   const variants: [FormId, number][] = [
     ...(['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'] as FormId[]).map((f): [FormId, number] => [f, 1]),
     ['sprout', 2],
+    ['drift', 2],
   ];
   for (const [form, v] of variants) {
     const key = v === 1 ? form : `${form}@${v}`;
