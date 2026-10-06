@@ -10,6 +10,7 @@ import { echo } from './echo.v1';
 import { sprout } from './sprout.v1';
 import { sprout as sprout2 } from './sprout.v2';
 import { drift } from './drift.v1';
+import { drift as drift2 } from './drift.v2';
 import { craze } from './craze.v1';
 import { plume } from './plume.v1';
 import { caustic } from './caustic.v1';
@@ -40,7 +41,7 @@ export const FORMS: Record<FormId, FormMeta> = {
 
 /** Operator version new strokes are drawn with. */
 export const CURRENT_V: Record<FormId, number> = {
-  line: 1, echo: 1, sprout: 2, drift: 1, ripple: 1,
+  line: 1, echo: 1, sprout: 2, drift: 2, ripple: 1,
   craze: 1, plume: 1, caustic: 1, burin: 1, plait: 1, orbit: 1,
 };
 
@@ -48,9 +49,10 @@ const V1: Record<FormId, FormOps> = { line, echo, sprout, drift, ripple: line, c
 
 /**
  * Later shipped versions, by Form then version. Sprout v2 draws every branch from where it
- * clears its parent's ribbon (no additive overlap on Night); v1 recipes keep cooking with v1.
+ * clears its parent's ribbon, Drift v2 pours every filament off the trunk's edge (no additive
+ * overlap on Night); v1 recipes keep cooking with v1.
  */
-const LATER: Partial<Record<FormId, Record<number, FormOps>>> = { sprout: { 2: sprout2 } };
+const LATER: Partial<Record<FormId, Record<number, FormOps>>> = { sprout: { 2: sprout2 }, drift: { 2: drift2 } };
 
 /** Operators registered at runtime by exact (form, version): experiments and future versions. */
 const EXTRA: Map<string, FormOps> = new Map();
