@@ -1,9 +1,9 @@
-# Rise
+# RISE Sketch
 
 **Your stroke is the seed. Hold still, and it rises.**
 
-Rise is a drawing instrument where every mark is alive. You draw a stroke, and a growth *Form*
-grows it — into coastline, crystal, botany, smoke, feathers, braids — a hand's breadth behind
+RISE Sketch is a drawing instrument where every mark is alive. You draw a stroke, and a growth *Form*
+grows it: into coastline, crystal, botany, smoke, feathers, braids, a hand's breadth behind
 the nib. There are no sliders. The ink reads your hand instead: speed, pressure, lean, stillness,
 zoom and the ink already on the page.
 
