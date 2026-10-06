@@ -5,7 +5,7 @@
 This is the build spec for Rise (`rise-sketch`). It replaces the v1 draft and settles the three critiques of it (clutter, feasibility, delight). Section 13 logs every critique point with its verdict and a one-line reason. Where this document and the draft disagree, this document wins.
 
 **Status (2026-10-05).** P0 is built (§11 lists what is not), plus six Forms beyond the original plan.
-- **Forms:** ten in the app. Line, Echo, Sprout and Drift as specified; Craze, Plume, Caustic, Burin, Plait and Orbit promoted from the forms lab (`lab/forms`) with unchanged geometry (§2.3.10–§2.3.15). Ripple is still P1. New Sprout strokes cook with Sprout v2 (§2.3.5); Drift v2 is in progress (§2.3.6).
+- **Forms:** ten in the app. Line, Echo, Sprout and Drift as specified; Craze, Plume, Caustic, Burin, Plait and Orbit promoted from the forms lab (`lab/forms`) with unchanged geometry (§2.3.10–§2.3.15). Ripple is still P1. New Sprout and Drift strokes cook with v2 operators (§2.3.5, §2.3.6); old documents keep v1.
 - **Tests:** `npx vitest run` passes 1105 tests in 71 files under `tests/` (the forms lab has its own suite, §7.6).
 - **e2e:** `scripts/e2e.mjs` has 24 scenarios (23 on the debug build, plus `prod-file`), §7.6.
 - **Not met:** the single-file bundle budget (§9).
@@ -426,7 +426,11 @@ The demo's three rule strings are kept verbatim as **branch templates**. Depth n
 - **Colour along the filament:** split into thirds by step index, with `d01` 0.2 / 0.5 / 0.8, so the wake deepens in colour as it fades.
 - **Trunk:** the spine at width ×0.8, α 1.
 - **Drift combs along existing ink** is P1 (§11).
-- **Drift v2** (filaments emerge from the trunk edge; v1 kept for old documents). In progress; details to follow.
+- **Drift v2** (`drift.v2.ts`, `CURRENT_V.drift = 2`; `drift.v1.ts` kept so old documents cook unchanged). Stations, field, momentum, jitter, step counts, lengths, tapers, tones, alphas and budgets are v1’s; only where a filament starts and how wide it may be near the trunk differ:
+  - Each filament starts just outside the trunk edge (half width + 0.2 sp), on the side the field pushes toward; where a corner or hairpin would put the start inside the trunk it is pushed further out. Radial seeds start their 24 filaments off the dot’s rim.
+  - Each point gets a width limit, computed once at the ceiling, from its room to the trunk edge over the stretch it pours off (s ± 6 sp). A filament leaving square to the stroke opens to full width at once; one running alongside stays a hairline on the edge until it peels away; one looping back under that stretch passes as a hairline.
+  - The limit depends only on position along the filament, so truncation stays a prefix and depth stays continuous; each filament writes exactly v1’s points.
+  - Result on Night: the trunk keeps its ink colour instead of adding into a near-white core. Filaments the field carries across a different part of the stroke still brighten where they cross (as with Sprout v2).
 
 #### 2.3.7 Ripple (P1)
 
@@ -1688,7 +1692,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 7. **Local operators use absolute arc length in sp** and never normalised `u`. Only Echo is `global`. Each growth unit is a pure function of the spine within `reach` of it, `d(s)` there, and its own rng address. That is what makes `regrow`, truncation and split pieces exact.
 8. **Operators are frozen by version.** To change a look, ship `line.v2.ts`. Never edit v1. Moving old strokes to a new look is an explicit restyle.
    - `CURRENT_V` in `ink/operators/registry.ts` names the version new strokes are drawn with, and `operatorFor(form, v)` cooks every recipe with the version stored in `recipe.form.v`.
-   - Shipped so far: Sprout v2 (§2.3.5). Drift v2 is in progress (§2.3.6).
+   - Shipped: Sprout v2 (§2.3.5) and Drift v2 (§2.3.6).
    - `registerOperator(form, v)` lets the forms lab and tests cook prototypes through the real pipeline at versions ≥ 100, which no shipped recipe uses.
 9. **Timestamps** are sanitised to be strictly increasing (`+0.25` ms minimum step). Predicted samples are never stored.
 10. **Precision:** samples are Float32 offsets from a Float64 origin. Files store base64 little-endian Float32, which round-trips exactly.
@@ -1962,7 +1966,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 **Status (2026-10-05).**
 - **P0 is built**, all six milestones, except the items marked **Not built** in M6 below.
 - **Beyond the plan, shipped:** six more Forms (Craze, Plume, Caustic, Burin, Plait, Orbit, §2.3.10–§2.3.15) with keys 5–9 and 0 and a ten-tile Form sheet, and Sprout v2 (§2.3.5).
-- **In progress:** Drift v2 (§2.3.6).
+- **Shipped after the build:** Drift v2 (§2.3.6).
 - **Still P1 and P2:** everything listed under those headings below. Ripple, Charcoal and paper tooth, tilt shading, view rotation, Mirror, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
 
 ### P0: one focused build, in six milestones (built)
@@ -2260,4 +2264,4 @@ Decisions taken once P0 was running. Same verdict scale.
 | 2 | The Form sheet shows ten tiles, over the 9-tile cap of §1.2 | A* | Accepted as the one exception. Ten Forms are ten kinds, and hiding some behind a second page or a "more" tile would add a control. The sheet lays out as two rows of five on desktop and tablet and a 3-column grid on phones; no other sheet may exceed 9. |
 | 3 | Number keys for ten Forms | A | `Digit1`–`Digit9` and `Digit0` follow sheet order, so the key is the tile's position. Ripple gets no key until it ships. `Shift+Digit1` and `Shift+Digit0` keep fit and 100%. |
 | 4 | Fix Sprout's white dashes on Night by editing `sprout.v1.ts` | R | §7.5 rule 8: operators are frozen by version. The fix ships as `sprout.v2.ts` with `CURRENT_V.sprout = 2`. Old documents keep cooking with v1 and look exactly as they were drawn; moving them to v2 is an explicit restyle. |
-| 5 | Drift v2: filaments emerge from the trunk edge | A | In progress. Same versioning as Sprout v2: a new `drift.v2.ts`, v1 kept for old documents. |
+| 5 | Drift v2: filaments emerge from the trunk edge | A | Shipped. Same versioning as Sprout v2: a new `drift.v2.ts`, v1 kept for old documents. |
