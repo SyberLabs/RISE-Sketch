@@ -1,3 +1,5 @@
+<img src="docs/assets/rise-sketch-logo.jpg" width="120" alt="RISE Sketch logo: a glowing blue pen nib over a curved stroke, on dark green">
+
 # RISE Sketch
 
 **Your stroke is the seed. Hold still, and it rises.**
