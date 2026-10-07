@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Rise: living procedural ink. Your stroke is the seed.",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
