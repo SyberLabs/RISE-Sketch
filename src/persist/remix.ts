@@ -270,8 +270,11 @@ export async function encodeRemix(text: string): Promise<string> {
       i = blobs.length;
       index.set(key + b64, i);
       const bytes = base64ToBytes(b64);
-      const grid = packGrid(bytesToF32(bytes), STRIDE[key]);
-      const packed = grid ?? packWords(bytes, key);
+      const words = packWords(bytes, key);
+      let grid = packGrid(bytesToF32(bytes), STRIDE[key]);
+      // values on no coarse grid (an exact recipe) need ~4 varint bytes each, which gzip worse than words
+      if (grid && grid.length * 2 > words.length) grid = null;
+      const packed = grid ?? words;
       const blob = new Uint8Array(1 + packed.length);
       blob[0] = grid ? 1 : 0;
       blob.set(packed, 1);
