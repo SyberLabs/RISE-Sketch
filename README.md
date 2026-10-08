@@ -145,6 +145,10 @@ Checks: `npm run typecheck` · `npx vitest run` (unit tests) ·
 `npm run build:single && node scripts/e2e.mjs` (end-to-end in headless Chrome; set `CHROME_PATH`
 if Chrome isn't in the default location; `--budget` runs only the control-budget scenarios).
 
+The link-preview image (`public/og.png`) and the app icons are drawn by the real engine:
+`node scripts/og-image.mjs` redraws them. Served over http(s), the app is installable and
+`public/sw.js` keeps the last good build for offline use.
+
 ## For contributors
 
 - `docs/DESIGN.md` — the product and technical specification.

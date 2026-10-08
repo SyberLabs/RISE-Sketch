@@ -1403,7 +1403,7 @@ src/
     debug.ts                  ?debug in debug builds only: window.__rise for e2e and benchmarks
     version.ts                the app string written into .rise files
 tests/   (see 7.6)
-scripts/ harness.mjs  e2e.mjs  bench-zoom.mjs (§9)  shrink.ts (build plugin, §9)
+scripts/ harness.mjs  e2e.mjs  bench-zoom.mjs (§9)  shrink.ts (build plugin, §9)  og-image.mjs (link preview + icons)
 lab/forms/  the forms lab: prototype Forms, harness, gallery, briefs (not shipped)
 README.md   the user-facing guide
 ```
