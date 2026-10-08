@@ -782,7 +782,9 @@ await scenario('symmetry', async ({ page, cdp }) => {
   await ev('mouseMoved', pts[0], { force: 0, buttons: 0 });
   await ev('mousePressed', pts[0], { clickCount: 1 });
   for (let i = 1; i < pts.length; i++) { await ev('mouseMoved', pts[i]); await sleep(4); }
-  await sleep(250);
+  // probing with the pen down and still is a hold: a short one rose or not depending on how long
+  // the probe took, and a rise adds a peel step to the undo below. Hold long enough that it rises.
+  await sleep(1400);
   const liveInk = await probeAt(rot(mid));
   await ev('mouseReleased', pts[pts.length - 1], { buttons: 0, clickCount: 1, force: 0 });
   await idle(page);
@@ -799,9 +801,14 @@ await scenario('symmetry', async ({ page, cdp }) => {
   assert(/"version":2/.test(doc), 'the file is format v2');
   await shot(page, 'symmetry-6');
   const h = await R(page, () => window.__rise.sceneHash());
+  assert((await last(page)).pools >= 1, 'the hold under the probe rose');
+  await dispatch(page, { k: 'undo' });
+  await idle(page);
+  assert(await count(page) === 6 && (await last(page)).pools === 0, 'the first undo peels the pools, keeping the copies');
   await dispatch(page, { k: 'undo' });
   await idle(page);
   assert(await count(page) === 0, `one undo removes every copy (left ${await count(page)})`);
+  await dispatch(page, { k: 'redo' });
   await dispatch(page, { k: 'redo' });
   await idle(page);
   assert(await count(page) === 6 && await R(page, () => window.__rise.sceneHash()) === h, 'redo restores all six');
