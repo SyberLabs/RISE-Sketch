@@ -6,7 +6,8 @@ import { DEFAULT_CALIB } from '../src/ink/calib';
 import { freezeRecipe } from '../src/doc/commands';
 import { timeline } from '../src/app/replay';
 import {
-  AVC_CODECS, MIN_SPEED, PLAY_MAX_MS, PLAY_MIN_MS, PORTRAIT_H, WIDTH, pickCodec, timelapseFrame, timelapseSpeed,
+  AVC_CODECS, MIN_SPEED, PLAY_MAX_MS, PLAY_MIN_MS, PORTRAIT_H, SAFE_BOTTOM, SAFE_SIDE, SAFE_TOP, VERTICAL_H, WIDTH,
+  pickCodec, timelapseFrame, timelapseSpeed,
 } from '../src/export/timelapse';
 import { muxMp4, nclx } from '../src/export/mp4';
 import { exportFilename } from '../src/export/png';
@@ -62,6 +63,25 @@ describe('timelapse framing', () => {
     expect([f.width, f.height]).toEqual([WIDTH, PORTRAIT_H]);
     expect(f.pxPerDoc).toBeCloseTo(Math.min(1080 / 420, 1350 / 720), 9);
     expect(timelapseFrame({ x0: 0, y0: 0, x1: 300, y1: 320 }).height).toBe(WIDTH);
+  });
+  it('is 9:16 when vertical, the content centred in the feed apps\' safe zone', () => {
+    const content = { x0: 100, y0: 50, x1: 600, y1: 250 };
+    const f = timelapseFrame(content, Infinity, true);
+    expect([f.width, f.height]).toEqual([WIDTH, VERTICAL_H]);
+    expect(f.fit).toEqual({ x0: SAFE_SIDE, y0: SAFE_TOP, x1: WIDTH - SAFE_SIDE, y1: VERTICAL_H - SAFE_BOTTOM });
+    expect(f.pxPerDoc).toBeCloseTo((WIDTH - 2 * SAFE_SIDE) / 600, 9);   // 500 wide + 2 × 50
+    // doc -> px: the content's centre lands on the safe zone's centre, its box inside the zone
+    const px = (x: number, y: number): [number, number] => [(x - f.box.x0) * f.pxPerDoc, (y - f.box.y0) * f.pxPerDoc];
+    const [cx, cy] = px(350, 150);
+    expect(cx).toBeCloseTo(WIDTH / 2, 6);
+    expect(cy).toBeCloseTo((SAFE_TOP + VERTICAL_H - SAFE_BOTTOM) / 2, 6);
+    const [ax, ay] = px(content.x0, content.y0), [bx, by] = px(content.x1, content.y1);
+    expect(ax).toBeGreaterThanOrEqual(SAFE_SIDE); expect(bx).toBeLessThanOrEqual(WIDTH - SAFE_SIDE);
+    expect(ay).toBeGreaterThanOrEqual(SAFE_TOP); expect(by).toBeLessThanOrEqual(VERTICAL_H - SAFE_BOTTOM);
+    expect((f.box.y1 - f.box.y0) * f.pxPerDoc).toBeCloseTo(VERTICAL_H, 6);
+    // a tall drawing fits the zone's height instead
+    const t = timelapseFrame({ x0: 0, y0: 0, x1: 300, y1: 900 }, Infinity, true);
+    expect(t.pxPerDoc).toBeCloseTo((VERTICAL_H - SAFE_TOP - SAFE_BOTTOM) / 1080, 9);
   });
   it('never magnifies past the cap', () => {
     const f = timelapseFrame({ x0: 0, y0: 0, x1: 10, y1: 10 }, 3);

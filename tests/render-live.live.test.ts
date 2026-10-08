@@ -602,6 +602,16 @@ describe('replay (play)', () => {
     expect(e.host.bakes.length).toBe(7);
   });
 
+  it('play returns when it will end: the item is animating until then, and bakes after', () => {
+    const e = setup();
+    const { r, c } = recorded();
+    const end = e.live.play(r, c, { durationScale: 0.5 });
+    expect(end).toBeGreaterThan(e.host.t + 2100 * 0.5);   // past the pool's rise at half time
+    while (e.host.t + 16 < end) { tick(e); expect(e.host.bakes.length).toBe(0); }
+    settle(e, 600);
+    expect(e.host.bakes.length).toBe(1);
+  });
+
   it('rests without baking when asked, and dissolves on demand', () => {
     const e = setup();
     const { r, c } = recorded();

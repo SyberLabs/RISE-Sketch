@@ -119,10 +119,13 @@ reseeds it.
   version 1 files still open.
 - **Export image** saves a high-resolution PNG framed to your drawing.
 - **Replay** redraws the whole drawing, stroke by stroke, as it was made.
-- **Share timelapse** turns that replay into a 6–12 second video (MP4, 1080 px square, or 4:5 for a
-  tall drawing) of the ink growing, on your ground, with a small `sketch.syberlabs.io` mark. Where
-  your device can share files, a **Share** button opens the share sheet; otherwise the video
-  downloads. You can keep drawing while it records.
+- **Share timelapse** turns that replay into a 6–12 second MP4 of the ink growing, on your ground,
+  with a `sketch.syberlabs.io` mark. It opens on the finished piece, which dissolves into the
+  drawing being made, and it ends on the same frame, so it loops cleanly. From a phone or tablet it
+  is 1080 × 1920 for Reels, TikTok and Shorts, with the drawing clear of their captions. Elsewhere
+  it is 1080 px square, or 4:5 for a tall drawing. Where your device can share files, a **Share**
+  button opens the share sheet; otherwise the video downloads. You can keep drawing while it
+  records.
 - **Copy remix link** copies a link that carries the drawing itself. Whoever opens it gets that
   exact drawing as a new document, watches it grow, and can keep drawing on it; their own drawing
   stays in Recent. The drawing rides in the part of the link after `#`, which browsers never send

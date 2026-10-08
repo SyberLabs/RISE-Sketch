@@ -690,6 +690,8 @@ export class Controller implements InputSink {
         const ledger = rt.renderer.ledger;
         res = await recordTimelapse(items, timeline(items.map(it => it.r), timelapseSpeed), {
           ground: rt.store.get().ground, content, codec, loop: rt.loop,
+          // phones and tablets post to the 9:16 feeds (Reels, TikTok, Shorts); desktops square
+          vertical: rt.store.get().isTouch,
           onProgress: f => { progress = f; if (deliver && performance.now() - lastToast > 150) toast(); },
           cancelled,
           alloc: (w, h) => ledger.alloc(w, h, 'export'),
