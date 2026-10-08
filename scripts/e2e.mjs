@@ -426,8 +426,8 @@ await scenario('export-png', async ({ page, cdp }) => {
   assert(r.width >= 1000 && r.height > 100 && r.bytes > 5000, `export ${r.width}x${r.height} ${r.bytes}B`);
 });
 
-// Share timelapse (DESIGN §8): Shift+P records the replay as a video and, with no share sheet,
-// downloads it; the debug hook hands back the same recording for inspection in a <video>. The
+// Share timelapse (DESIGN §8): Shift+P records the replay as a video and, on a desktop, downloads
+// it even where the browser offers a share sheet (desktop sheets don't reach the chat apps); the debug hook hands back the same recording for inspection in a <video>. The
 // video and its first, middle and last frames land in e2e-out/ for review.
 await scenario('timelapse', async ({ browser, page, cdp }) => {
   await dispatch(page, { k: 'pickInk', ink: 'spectral' });
@@ -441,13 +441,18 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   await idle(page);
   const h = await R(page, () => window.__rise.sceneHash());
   const n0 = await count(page);
-  // the key, delivered as a download (no share sheet): intercept it
+  // the key, delivered as a download: intercept it
   const dl = resolve(OUT, 'timelapse-download');
   rmSync(dl, { recursive: true, force: true });
   mkdirSync(dl, { recursive: true });
   const bcdp = await browser.target().createCDPSession();
   await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
-  await R(page, () => { Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true }); });
+  // a share sheet that takes files, as desktop Chrome and Edge on Windows have: it must stay closed
+  await R(page, () => {
+    window.__sheetOpened = false;
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: async () => { window.__sheetOpened = true; }, configurable: true });
+  });
   await key(page, 'P', ['Shift']);
   let st = await R(page, () => window.__rise.state());
   assert(st.recording, 'Shift+P starts recording');
@@ -464,6 +469,7 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   }
   assert(file, `a video was downloaded (${readdirSync(dl)})`);
   assert(statSync(resolve(dl, file)).size > 50000, `the download is a real video (${statSync(resolve(dl, file)).size} B)`);
+  assert(!(await R(page, () => window.__sheetOpened)), 'a desktop never opens the share sheet');
   assert(await count(page) === n0 + 1, 'the stroke drawn while recording landed');
   await dispatch(page, { k: 'undo' });
   await idle(page);
@@ -505,13 +511,40 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   assert(v.grow > 2, `the ink grows: the middle differs from the finished piece (mean |Δ| ${v.grow.toFixed(2)})`);
 });
 
-// On a phone or tablet (coarse pointer) the timelapse is the 9:16 frame the feed apps want.
-await scenario('timelapse-vertical', async ({ page, cdp }) => {
+// On a phone or tablet (coarse pointer) the timelapse is the 9:16 frame the feed apps want, and it
+// leaves through the share sheet; closing the sheet turns the toast into Save, which downloads it.
+await scenario('timelapse-vertical', async ({ browser, page, cdp }) => {
   assert((await R(page, () => window.__rise.state())).isTouch, 'a touch device');
   await penStroke(cdp, wave(60, 400, 340, 60, 40), { delay: 4 });
   await idle(page);
   const r = await R(page, () => window.__rise.timelapse());
   assert(r && r.width === 1080 && r.height === 1920, `vertical timelapse ${JSON.stringify(r && { ...r, url: 0 })}`);
+  const dl = resolve(OUT, 'timelapse-phone-download');
+  rmSync(dl, { recursive: true, force: true });
+  mkdirSync(dl, { recursive: true });
+  const bcdp = await browser.target().createCDPSession();
+  await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
+  // a share sheet the person closes
+  await R(page, () => {
+    window.__shared = [];
+    Object.defineProperty(navigator, 'canShare', { value: d => !!d.files?.length, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: async d => { window.__shared.push(d.files.map(f => f.name)); throw new DOMException('closed', 'AbortError'); }, configurable: true });
+  });
+  await dispatch(page, { k: 'timelapse' });
+  const toast = re => page.waitForFunction(re => new RegExp(re).test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 90000 }, re.source).then(() => true, () => false);
+  assert(await toast(/Timelapse ready.*Share/), 'the finished video waits on a Share toast');
+  await page.click('.r-toast-action');
+  assert(await toast(/Timelapse ready.*Save/), 'closing the sheet offers Save');
+  const shared = await R(page, () => window.__shared);
+  assert(shared.length === 1 && /^rise-\d{8}-\d{4}\.mp4$/.test(shared[0][0]), `the sheet got the video (${JSON.stringify(shared)})`);
+  await page.click('.r-toast-action');
+  assert(await toast(/Timelapse saved/), 'Save confirms');
+  let file = null;
+  for (let t = 0; t < 50 && !file; t++) {
+    file = readdirSync(dl).find(f => /^rise-\d{8}-\d{4}\.mp4$/.test(f)) || null;
+    if (!file) await sleep(100);
+  }
+  assert(file && statSync(resolve(dl, file)).size > 50000, `Save downloads the video (${readdirSync(dl)})`);
 }, { touch: true, width: 400, height: 860 });
 
 await scenario('first-run-seed', async ({ page, cdp }) => {

@@ -23,8 +23,8 @@ export type Intent =
   | { k: 'new' } | { k: 'open'; file: File } | { k: 'openPicker' }
   | { k: 'openRecent'; id: string } | { k: 'deleteRecent'; id: string }
   | { k: 'save' } | { k: 'exportPng' } | { k: 'cancelExport' } | { k: 'copyRemix' }
-  /** Share timelapse: record (Shift+P / menu), cancel the recording, share the finished video (toast action). */
-  | { k: 'timelapse' } | { k: 'cancelTimelapse' } | { k: 'shareTimelapse' }
+  /** Share timelapse: record (Shift+P / menu), cancel the recording, share or save the finished video (toast actions). */
+  | { k: 'timelapse' } | { k: 'cancelTimelapse' } | { k: 'shareTimelapse' } | { k: 'saveTimelapse' }
   | { k: 'replay' } | { k: 'stopReplay' }
   | { k: 'fit' } | { k: 'resetView' } | { k: 'viewChip' }
   | { k: 'resetCalibration' }
