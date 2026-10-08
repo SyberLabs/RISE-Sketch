@@ -278,11 +278,16 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
 
   /** The LiveLayer handed to the app: forwards to the live layer and tracks what it will bake. */
   const liveFacade: LiveLayer = {
-    begin(d, cook) { touchLive(); live.begin(d, cook); },
+    begin(d, cook, copies) { touchLive(); live.begin(d, cook, copies); },
     update() { touchLive(); live.update(); },
     predict(tail) { requestFrame(); live.predict(tail); },
     halo(h) { touchLive(); live.halo(h); },
-    commit(r, c) { holdLive(r.id); touchLive(); live.commit(r, c); },
+    commit(r, c, copies) {
+      holdLive(r.id);
+      if (copies) for (const cp of copies) holdLive(cp.r.id);
+      touchLive();
+      live.commit(r, c, copies);
+    },
     withdraw() { touchLive(); live.withdraw(); },
     play(r, c, o) { if (!o || o.bake !== false) holdLive(r.id); touchLive(); live.play(r, c, o); },
     dissolve(ms) { touchLive(); live.dissolve(ms); },

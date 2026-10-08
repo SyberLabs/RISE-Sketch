@@ -56,6 +56,7 @@ export function keyRows(isMac: boolean, L: (code: string) => string): HelpRow[] 
     { keys: [L('BracketLeft'), L('BracketRight')], action: 'Size smaller / larger' },
     { keys: [L('Minus'), L('Equal')], action: 'Depth shallower / deeper' },
     { keys: [L('KeyR')], action: 'Reseed the selection, else the last stroke' },
+    { keys: [L('KeyM'), `${sh}${L('KeyM')}`], action: 'Symmetry on / off (centred on the view) · more folds' },
     { keys: isMac ? [`${mod}${L('KeyZ')}`, `${sh}${mod}${L('KeyZ')}`] : [`${mod}${L('KeyZ')}`, `${mod}${L('KeyY')}`], action: 'Undo / redo' },
     { keys: [`${mod}click`, `${mod}drag`], action: `Select · lasso (${isMac ? '⇧' : 'Shift'} adds)` },
     { keys: [`${mod}${L('KeyA')}`], action: 'Select all' },
@@ -101,6 +102,7 @@ const DRAWING: readonly HelpRow[] = [
   { keys: ['Tap'], action: 'A seed; hold before moving to bloom', plain: true },
   { keys: ['Close a loop'], action: 'The ends weld; Echo becomes a snowflake', plain: true },
   { keys: ['Chips'], action: 'Tap a kind · drag an amount', plain: true },
+  { keys: ['Form → Symmetry'], action: 'Mirror or kaleidoscope · drag the switch for folds', plain: true },
 ];
 
 type LayoutMap = ReadonlyMap<string, string>;

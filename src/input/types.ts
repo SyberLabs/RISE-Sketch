@@ -15,6 +15,7 @@ export type KeyAction =
   | { k: 'size'; factor: number }           // [ ] -> 0.8 / 1.25
   | { k: 'depth'; delta: number }           // - = -> -0.5 / +0.5
   | { k: 'reseed' }                         // R
+  | { k: 'symmetry'; step: boolean }        // M toggles symmetry / Shift+M steps the fold count
   | { k: 'undo' } | { k: 'redo' }
   | { k: 'selectAll' } | { k: 'delete' } | { k: 'escape' }
   | { k: 'fit' } | { k: 'resetView' }       // Shift+1 / Shift+0

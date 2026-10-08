@@ -17,6 +17,8 @@ export type Intent =
   | { k: 'bendColor'; dh: number; dL: number; done: boolean } // degrees / L, relative to drag start
   | { k: 'reseed' } | { k: 'delete' } | { k: 'undo' } | { k: 'redo' }
   | { k: 'ground'; g: Ground }
+  /** Symmetry (Form sheet switch, M): `on` toggles it (the centre becomes the view centre); `folds` sets the fold count and turns it on. */
+  | { k: 'symmetry'; on?: boolean; folds?: number }
   | { k: 'select'; ids: readonly StrokeId[]; add: boolean } | { k: 'deselect' } | { k: 'selectAll' }
   | { k: 'new' } | { k: 'open'; file: File } | { k: 'openPicker' }
   | { k: 'openRecent'; id: string } | { k: 'deleteRecent'; id: string }

@@ -74,7 +74,14 @@ export interface ColorStyle {
   lch: { night: LCh; paper: LCh } | null; // custom ink colours (ink === 'custom'); null otherwise
 }
 export interface FormStyle { form: FormId; v: number /* operator version */; base: number /* levels, quantised to 1/4 */ }
-export interface Symmetry { axis: 'v' | 'h'; at: number } // P1
+export interface Symmetry { axis: 'v' | 'h'; at: number } // reserved (always null): symmetry copies are expressed as `xf`
+/**
+ * Symmetry drawing (the Form sheet switch, DESIGN §2.3.1, §4). `folds` 2 = Mirror (reflection across
+ * the vertical axis through the centre); 3..12 = radial copies rotated by 360°/folds. The centre is
+ * in doc units: the view centre when symmetry was turned on. Each copy is a recipe of its own whose
+ * `xf` places the shared geometry (ink/symmetry.ts).
+ */
+export interface SymmetryTool { on: boolean; folds: number; cx: number; cy: number }
 
 /** Fields every recipe-like object shares; operators and the spine builder read only these. */
 export interface RecipeCore {
@@ -101,7 +108,7 @@ export interface StrokeRecipe extends RecipeCore {
   readonly closed: boolean;
   readonly radial: boolean;     // L < 6 sp: tap or bloom seed
   readonly sym: Symmetry | null; // P1
-  readonly xf: Mat2x3 | null;   // P1 post-cook transform
+  readonly xf: Mat2x3 | null;   // post-cook placement (doc rel. origin -> doc rel. origin); symmetry copies (format v2)
   readonly geomRev: number;     // bumped by a replace that changes geometry inputs (cache key)
   readonly colorRev: number;    // bumped when only colour changes (re-raster, no re-cook)
 }
@@ -323,5 +330,5 @@ export interface ToolState {
   form: FormId;
   base: Record<FormId, number>;           // base depth per Form (quarter levels)
   mode: 'draw' | 'erase';
-  mirror: Symmetry | null;                // P1
+  sym: SymmetryTool;                      // symmetry drawing (Mirror / radial); never in history
 }

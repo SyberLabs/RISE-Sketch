@@ -314,6 +314,7 @@ export class FakeOverlay implements OverlayInternal {
   eraser(): void { /* no-op */ }
   selection(_b: AABB | null, _ids: readonly StrokeId[]): void { /* no-op */ }
   sizeRing(_p: Vec2 | null): void { /* no-op */ }
+  symmetry(): void { /* no-op */ }
   clear(): void { /* no-op */ }
   frame(): boolean { return false; }
   resize(): void { /* no-op */ }

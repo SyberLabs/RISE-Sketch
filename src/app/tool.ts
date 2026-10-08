@@ -9,6 +9,7 @@ import { INK_ORDER, P0_FORMS, P0_NIBS } from '../core/types';
 import { NIBS } from '../ink/nibs';
 import { FORMS } from '../ink/operators/registry';
 import { prefs } from '../persist/prefs';
+import { clampFolds, SYM_DEFAULT_FOLDS } from '../ink/symmetry';
 
 const TOOL_KEY = 'tool';
 
@@ -24,7 +25,7 @@ export function defaultTool(): ToolState {
       craze: FORMS.craze.baseDefault, plume: FORMS.plume.baseDefault, caustic: FORMS.caustic.baseDefault, burin: FORMS.burin.baseDefault, plait: FORMS.plait.baseDefault, orbit: FORMS.orbit.baseDefault,
     },
     mode: 'draw',
-    mirror: null,
+    sym: { on: false, folds: SYM_DEFAULT_FOLDS, cx: 0, cy: 0 },
   };
 }
 
@@ -87,6 +88,12 @@ export function loadTool(): ToolState {
       if (Number.isFinite(b)) t.base[k] = clampBase(k, b);
     }
   }
+  const sym = v.sym as Record<string, unknown> | undefined;
+  if (sym && typeof sym === 'object') {
+    const cx = Number(sym.cx), cy = Number(sym.cy);
+    const ok = Number.isFinite(cx) && Number.isFinite(cy);
+    t.sym = { on: sym.on === true && ok, folds: clampFolds(sym.folds), cx: ok ? cx : 0, cy: ok ? cy : 0 };
+  }
   return t;
 }
 
@@ -94,7 +101,7 @@ export function loadTool(): ToolState {
 export function saveTool(t: ToolState): void {
   prefs.set(TOOL_KEY, {
     nib: t.nib, lastNib: t.lastNib, sizes: t.sizes, ink: t.ink, custom: t.custom,
-    recents: t.recents, form: t.form, base: t.base,
+    recents: t.recents, form: t.form, base: t.base, sym: t.sym,
   });
 }
 

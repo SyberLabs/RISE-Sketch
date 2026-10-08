@@ -20,7 +20,7 @@ kind's one amount.**
 |---|---|---|
 | **Stroke** | the nib: Pen, Brush, Chisel — or Erase | size |
 | **Color** | the ink: Graphite, Indigo, Oxide, Ochre, Moss, Rose, Spectral, plus two recent custom inks; and the ground, Night or Paper | hue (sideways) and tone (up/down) |
-| **Form** | what the stroke grows into (below) | base depth |
+| **Form** | what the stroke grows into (below); and symmetry, Free or Mirror / Kaleido | base depth |
 
 The sheets show *your own last stroke* drawn through each option, so you can see what you'd get.
 
@@ -38,6 +38,21 @@ The sheets show *your own last stroke* drawn through each option, so you can see
 | 8 | Burin | engraver's hatching on the shadow side |
 | 9 | Plait | three strands braiding over and under |
 | 0 | Orbit | a rope of looping orbits; a tap draws a spirograph rose |
+
+### Symmetry: Mirror and kaleidoscope
+
+The Form sheet has one switch, **Free | Symmetry**. Turn it on and every stroke you draw is repeated
+around the centre of the view (where you were looking when you switched it on): reflected across a
+vertical axis for **Mirror**, or turned into **3, 4, 5, 6, 8 or 12** copies for the kaleidoscope
+(6 by default). Drag the switch sideways (or press its arrow keys) to change the number of folds;
+the switch and a small badge on the Form chip show them as spokes. A faint hairline shows the axis
+or spokes; it is never something you can grab.
+
+The copies draw live with your stroke and grow exactly like it. With **Spectral** ink each copy
+turns the hue a step further round the wheel, so a six-fold mandala is a rainbow. One undo removes
+the whole gesture; each copy is its own stroke afterwards (erase, select and restyle it alone;
+`R` reseeds the last gesture as a whole). To move the centre, switch symmetry off, look somewhere
+else, and switch it on again.
 
 ## How the ink reads your hand
 
@@ -64,6 +79,9 @@ Alt/⌥-click to sample a colour from the ink.
 two fingers pan and zoom · tap ink with a finger to select, hold then drag to lasso · two-finger
 tap undoes.
 
+**Symmetry (every device):** Form chip → the Free | Symmetry switch; drag it sideways for more or
+fewer folds.
+
 **Touch only:** one finger draws · two fingers pan and zoom · two-finger tap undoes · double-tap ink
 to select (then drag to lasso) · double-tap the canvas to deselect.
 
@@ -82,6 +100,7 @@ reseeds it.
 | `[` `]` | size smaller / larger |
 | `-` `=` | depth shallower / deeper |
 | `R` | reseed the selection, else the last stroke |
+| `M` / `Shift+M` | symmetry on / off (centred on the view) / next fold count |
 | `Ctrl/⌘+Z`, `Ctrl+Y` / `⇧⌘Z` | undo / redo |
 | `Ctrl/⌘+A` · `Del` · `Esc` | select all · delete selection · deselect / close |
 | `Shift+1` / `Shift+0` | fit the drawing / 100% |
@@ -94,7 +113,8 @@ reseeds it.
 - Your drawing **autosaves** in the browser. The menu lists **Recent** drawings; **New** keeps the
   old one in Recent.
 - **Save project** downloads a `.rise` file (the drawing as recipes, so it reopens exactly);
-  open it from the menu or drop it on the canvas.
+  open it from the menu or drop it on the canvas. Files are format version 2 (symmetry copies);
+  version 1 files still open.
 - **Export image** saves a high-resolution PNG framed to your drawing.
 - **Replay** redraws the whole drawing, stroke by stroke, as it was made.
 
@@ -111,7 +131,7 @@ npm run build          # regular multi-file build in dist/
 
 Checks: `npm run typecheck` · `npx vitest run` (unit tests) ·
 `npm run build:single && node scripts/e2e.mjs` (end-to-end in headless Chrome; set `CHROME_PATH`
-if Chrome isn't in the default location).
+if Chrome isn't in the default location; `--budget` runs only the control-budget scenarios).
 
 ## For contributors
 

@@ -479,6 +479,27 @@ body {
 .r-switch[data-on="night"] span[data-v="night"],
 .r-switch[data-on="paper"] span[data-v="paper"] { color: var(--r-bg); }
 
+/* Free | Symmetry (Form sheet): the same switch; its "on" half carries the fold count as spokes.
+   Dragging it sideways steps the folds (the chip rule), so it never pans the sheet. */
+.r-switch[data-on="sym"] .r-thumb { transform: translateX(100%); }
+.r-switch[data-on="free"] span[data-v="free"],
+.r-switch[data-on="sym"] span[data-v="sym"] { color: var(--r-bg); }
+.r-symswitch { touch-action: none; cursor: ew-resize; }
+.r-symswitch span[data-v="sym"] { grid-auto-flow: column; gap: 0.375rem; }
+.r-symswitch span[data-v="sym"] b { font-weight: inherit; }
+.r-symswitch.is-dragging .r-thumb { transition: none; }
+/* Form chip: symmetry badge (state, not a control) */
+.r-symbadge {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  display: grid;
+  color: var(--r-text);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.r-symbadge svg { width: 11px; height: 11px; }
+
 /* menu */
 .r-sheet[data-sheet="menu"] { width: 17.5rem; padding: 0.5rem; }
 .r-doctitle {
@@ -962,7 +983,10 @@ body {
   .r-replay-line { forced-color-adjust: none; background: Highlight; }
   .r-switch[data-on] span[data-v] { forced-color-adjust: none; color: ButtonText; }
   .r-switch[data-on="night"] span[data-v="night"],
-  .r-switch[data-on="paper"] span[data-v="paper"] { color: HighlightText; }
+  .r-switch[data-on="paper"] span[data-v="paper"],
+  .r-switch[data-on="free"] span[data-v="free"],
+  .r-switch[data-on="sym"] span[data-v="sym"] { color: HighlightText; }
+  .r-symbadge { forced-color-adjust: none; color: ButtonText; }
   .r-glyph,
   .r-well,
   .r-well canvas,

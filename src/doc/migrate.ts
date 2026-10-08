@@ -6,8 +6,11 @@
  * renames or fills fields. Every format version keeps a committed fixture under
  * tests/fixtures/ that must migrate to its golden sceneHash.
  *
- * Version 1 is the first published format, so the list is empty; the runner is
- * exercised by tests with injected migrations.
+ * Versions:
+ *  - 1: the first published format.
+ *  - 2: `xf` is live: a stroke with an `xf` is placed by it (symmetry copies, ink/symmetry.ts).
+ *    Version 1 never wrote one and never applied one, so 1 -> 2 clears any `xf` a v1 file
+ *    carries: its strokes keep cooking exactly where they were drawn.
  */
 
 /** A parsed `.rise` JSON tree. */
@@ -16,7 +19,16 @@ export type RiseJson = { [key: string]: unknown };
 export type Migration = (json: RiseJson) => RiseJson;
 
 /** migrations[v] upgrades a version-v document to v + 1 (index 0 is unused: there is no v0). */
-export const migrations: readonly (Migration | undefined)[] = [];
+export const migrations: readonly (Migration | undefined)[] = [
+  undefined,
+  // 1 -> 2: xf was inert in v1
+  json => {
+    if (Array.isArray(json.strokes)) {
+      for (const s of json.strokes) if (s && typeof s === 'object' && !Array.isArray(s)) (s as RiseJson).xf = null;
+    }
+    return json;
+  },
+];
 
 /** Thrown when a document cannot be brought to the target version. */
 export class MigrationError extends Error {

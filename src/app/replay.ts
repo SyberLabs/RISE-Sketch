@@ -50,11 +50,15 @@ export function timeline(rs: readonly StrokeRecipe[]): { starts: Float64Array; t
   const starts = new Float64Array(n);
   let t = 0;
   for (let i = 0; i < n; i++) {
+    // a symmetry copy plays with the stroke it was drawn by (same pen-down, placed by xf)
+    if (i > 0 && rs[i].xf && rs[i].created === rs[i - 1].created) { starts[i] = starts[i - 1]; continue; }
     starts[i] = t;
     const d = strokeDuration(rs[i]);
     t += d;
-    if (i + 1 < n) {
-      const gap = rs[i + 1].created - (rs[i].created + d);
+    let j = i + 1;
+    while (j < n && rs[j].xf && rs[j].created === rs[i].created) j++;
+    if (j < n) {
+      const gap = rs[j].created - (rs[i].created + d);
       t += gap === gap ? Math.max(0, Math.min(GAP_CAP_MS, gap)) : GAP_CAP_MS;
     }
   }
