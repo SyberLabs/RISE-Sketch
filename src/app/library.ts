@@ -6,16 +6,19 @@
  *  - Open (picker, Mod+O, a dropped .rise) parses the file into a NEW document (fresh id, fresh
  *    revs; parseDoc) and adopts it with the 200 ms base fade. Toast: "Opened ⟨title⟩".
  *  - Save downloads `<title>.rise`.
+ *  - A remix link (`#r=…`, persist/remix.ts) opens like a file, then replays once so the drawing
+ *    is seen growing. Copy remix link puts the current document's link on the clipboard.
  *  - Recent: the last 12 stored documents, newest first, with their autosave thumbnails as
  *    object URLs (revoked when they leave the list). Opening one loads it from IndexedDB and
  *    shows its cold-load snapshot until the tiles are cooked. Deleting the current document first
  *    moves to a fresh one, so autosave never resurrects it.
  */
 import type { StrokeRecipe } from '../core/types';
-import { newMeta } from '../doc/document';
+import { DEFAULT_TITLE, newMeta } from '../doc/document';
 import { makeDocId } from '../doc/ids';
 import { parseDoc, serializeDoc } from '../doc/serialize';
 import { downloadBlob, pickFile, readFileText, riseFilename } from '../persist/files';
+import { decodeRemix, remixUrl } from '../persist/remix';
 import type { RecentDoc } from './types';
 import type { Runtime } from './runtime';
 import type { Controller } from './controller';
@@ -90,6 +93,53 @@ export class Library {
     }
     downloadBlob(new Blob([text], { type: 'application/json' }), riseFilename(rt.doc.meta.title || 'Untitled'));
     rt.store.emit({ k: 'announce', text: 'Project saved' });
+  }
+
+  // ---------------------------------------------------------------- remix links
+
+  /** Open the drawing a remix link carries as a new document, then replay it once. Damage loads nothing. */
+  async openRemix(payload: string): Promise<void> {
+    const rt = this.rt;
+    let parsed: { meta: import('../core/types').DocMeta; strokes: StrokeRecipe[] };
+    try {
+      parsed = parseDoc(await decodeRemix(payload));
+    } catch (err) {
+      console.warn('[rise] could not open remix link', err);
+      rt.store.emit({ k: 'toast', id: 'open', text: 'That link is damaged or incomplete' });
+      return;
+    }
+    adoptDocument(rt, this.ctl, parsed.meta, parsed.strokes, 'none');
+    const title = parsed.meta.title.trim();
+    rt.store.emit({ k: 'toast', id: 'open', text: `Opened ${title && title !== DEFAULT_TITLE ? title : 'a shared drawing'}` });
+    this.scheduleRefresh();
+    void this.ctl.player.start();
+  }
+
+  /** Menu → Copy remix link: the clipboard gets this drawing's link, or the person learns it is too big. */
+  copyRemix(): void {
+    const store = this.rt.store;
+    const url = remixUrl(this.rt.doc, VERSION);
+    const link = url.then(u => u ?? Promise.reject(new RangeError('the link would be too long')));
+    let write: Promise<void>;
+    try {
+      // ClipboardItem takes the link as a promise, so the write keeps the click's user activation (Safari)
+      write = typeof ClipboardItem === 'function'
+        ? navigator.clipboard.write([new ClipboardItem({ 'text/plain': link.then(u => new Blob([u], { type: 'text/plain' })) })])
+        : link.then(u => navigator.clipboard.writeText(u));
+    } catch (err) {
+      write = Promise.reject(err);
+    }
+    write.then(
+      () => store.emit({ k: 'toast', id: 'remix', text: 'Remix link copied' }),
+      async err => {
+        if (await url.then(u => u === null, () => false)) {
+          store.emit({ k: 'toast', id: 'remix', text: 'Too big for a link. Save the project to share it.', action: { label: 'Save', intent: { k: 'save' } } });
+          return;
+        }
+        console.warn('[rise] remix link not copied', err);
+        store.emit({ k: 'toast', id: 'remix', text: 'Couldn’t copy the link' });
+      },
+    );
   }
 
   // ---------------------------------------------------------------- recent

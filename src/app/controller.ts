@@ -24,6 +24,8 @@ import { prefs } from '../persist/prefs';
 import { exportFilename, renderPng } from '../export/png';
 import { mimeExt, pickEncoder, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
 import { downloadBlob } from '../persist/files';
+import { remixUrl } from '../persist/remix';
+import { VERSION } from './version';
 import type { Runtime } from './runtime';
 import { View } from './view';
 import { Drafts, formName } from './draft';
@@ -42,7 +44,7 @@ type Bend =
 
 /** The export progress toast appears once an export takes longer than this (ms). */
 const EXPORT_TOAST_MS = 300;
-/** The share sheet's title and link (DESIGN §8 Share timelapse). */
+/** The share sheet's title, and its link when the drawing is too big for a remix link (DESIGN §8 Share timelapse). */
 const SHARE_TITLE = 'Made in RISE Sketch', SHARE_URL = 'https://sketch.syberlabs.io';
 /** A finished timelapse waits this long on its Share toast (ms). */
 const SHARE_TOAST_MS = 20000;
@@ -69,6 +71,8 @@ export class Controller implements InputSink {
   private timelapseCancel = false;
   /** A finished timelapse waiting for the toast's Share tap (the share sheet needs a fresh user gesture). */
   private timelapseFile: File | null = null;
+  /** The link shared with it: the recorded drawing's remix link when it fits. */
+  private timelapseUrl = SHARE_URL;
   private readonly cursorAt: [number, number] = [0, 0];
   private readonly cursorShape: NibCursor = { kind: 'brush', wCss: 0, angle: 0, css: '#ffffff' };
   private cursorCss = '';
@@ -321,6 +325,7 @@ export class Controller implements InputSink {
       case 'openRecent': if (!this.busy) void this.library.openRecent(i.id); break;
       case 'deleteRecent': void this.library.deleteRecent(i.id); break;
       case 'save': this.library.save(); break;
+      case 'copyRemix': this.library.copyRemix(); break;
       case 'exportPng': void this.exportPng(true); break;
       case 'cancelExport': this.exportCancel = true; break;
       case 'timelapse': void this.shareTimelapse(true); break;
@@ -674,6 +679,7 @@ export class Controller implements InputSink {
     if (deliver) toast();
     const cancelled = (): boolean => this.timelapseCancel || gen !== this.timelapseGen;
     let res: TimelapseResult | null = null;
+    const link = remixUrl(rt.doc, VERSION).catch(() => null);
     try {
       const rs = rt.doc.ordered();
       try { await rt.scene.ensure(rs.map(r => r.id), 'visible'); } catch { /* uncooked strokes are skipped */ }
@@ -701,7 +707,8 @@ export class Controller implements InputSink {
       rt.store.emit({ k: 'announce', text: this.timelapseCancel ? 'Timelapse cancelled' : 'Timelapse failed' });
       return null;
     }
-    if (deliver) this.deliverTimelapse(res);
+    this.timelapseUrl = (await link) ?? SHARE_URL;
+    if (deliver && gen === this.timelapseGen) this.deliverTimelapse(res);
     return res;
   }
 
@@ -724,7 +731,7 @@ export class Controller implements InputSink {
     const file = this.timelapseFile;
     if (!file) return;
     try {
-      await navigator.share({ files: [file], title: SHARE_TITLE, url: SHARE_URL });
+      await navigator.share({ files: [file], title: SHARE_TITLE, url: this.timelapseUrl });
       this.timelapseFile = null;
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;  // the person closed the sheet

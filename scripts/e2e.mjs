@@ -809,6 +809,62 @@ await scenario('symmetry', async ({ page, cdp }) => {
   await shot(page, 'symmetry-mirror');
 });
 
+// Remix links (DESIGN §8): a symmetry drawing becomes a link; a visitor with a drawing of their own
+// opens it as a new document that replays once and cooks bit-identically, their own drawing stays in
+// Recent, the fragment leaves the address bar, and a truncated link loads nothing.
+await scenario('remix-link', async ({ page, cdp }) => {
+  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
+  await dispatch(page, { k: 'pickForm', form: 'sprout' });
+  await dispatch(page, { k: 'symmetry', folds: 6 });
+  await penStroke(cdp, line(700, 300, 980, 330, 50), { hold: 600 });
+  await idle(page, 15000);
+  assert(await count(page) === 6, `six strokes to share (${await count(page)})`);
+  const h = await R(page, () => window.__rise.sceneHash());
+  const link = await R(page, () => window.__rise.remixUrl());
+  assert(link && link.startsWith('https://sketch.syberlabs.io/#r='), `a remix link (${link && link.slice(0, 40)})`);
+  // the menu item copies it (or says why not) without an error
+  await dispatch(page, { k: 'copyRemix' });
+  await page.waitForFunction(() => /Remix link copied|Couldn’t copy/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
+  const fragment = link.slice(link.indexOf('#'));
+
+  // the visitor: a fresh browser with a drawing of their own
+  const v = await open();
+  try {
+    await v.page.evaluate(() => window.__rise.dispatch({ k: 'pickForm', form: 'drift' }));
+    await penStroke(v.cdp, wave(300, 400, 900, 90, 60));
+    await idle(v.page);
+    await sleep(700); // autosave batch
+    const own = await R(v.page, () => window.__rise.state().currentDocId);
+    const ownHash = await R(v.page, () => window.__rise.sceneHash());
+    await v.page.goto('about:blank');
+    await v.page.goto(URL + fragment, { waitUntil: 'load' });
+    await v.page.waitForFunction(() => window.__rise && window.__rise.state().replaying, { polling: 'raf', timeout: 15000 });
+    assert(await R(v.page, () => location.hash) === '', 'the fragment leaves the address bar');
+    await idle(v.page, 30000);
+    let st = await R(v.page, () => window.__rise.state());
+    assert(!st.replaying, 'the replay finished');
+    assert(await count(v.page) === 6, `the shared drawing opens (${await count(v.page)} strokes)`);
+    assert(await R(v.page, () => window.__rise.sceneHash()) === h, 'the remix cooks bit-identically (sceneHash)');
+    assert(st.currentDocId !== own, 'it opens as a new document');
+    await sleep(700);
+    await dispatch(v.page, { k: 'openSheet', sheet: 'menu' });
+    await sleep(900);
+    st = await R(v.page, () => window.__rise.state());
+    assert(st.recentDocs.some(d => d.id === own && d.strokes === 1), `the visitor's own drawing is still in Recent (${st.recentDocs.map(d => d.id + ':' + d.strokes)})`);
+    await dispatch(v.page, { k: 'openSheet', sheet: null });
+    await shot(v.page, 'remix-opened');
+    // a truncated link (pasted into the open app) loads nothing and says so
+    await R(v.page, f => { location.hash = f; }, fragment.slice(0, fragment.length >> 1));
+    await v.page.waitForFunction(() => /damaged or incomplete/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
+    assert(await R(v.page, () => window.__rise.sceneHash()) === h, 'a bad link changes nothing');
+    assert(ownHash !== h, 'the two drawings differ');
+    const errs = v.errors.filter(e => !/favicon/.test(e));
+    assert(errs.length === 0, 'visitor console/page errors:\n  ' + errs.join('\n  '));
+  } finally {
+    await v.browser.close();
+  }
+});
+
 // ---------------------------------------------------------------------------------------------
 const failed = results.filter(r => !r.ok);
 writeFileSync(`${OUT}/results.json`, JSON.stringify(results, null, 2));
