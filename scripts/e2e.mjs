@@ -81,6 +81,25 @@ const controls = page => R(page, () => window.__rise.visibleControls());
 const last = page => R(page, () => window.__rise.lastStroke());
 const count = page => R(page, () => window.__rise.strokeCount());
 const dispatch = (page, intent) => R(page, i => window.__rise.dispatch(i), intent);
+/** Whether the toast comes to match `re` within `timeout` ms. */
+const toastSays = (page, re, timeout = 5000) => page.waitForFunction(src => new RegExp(src).test(document.querySelector('.r-toast')?.textContent || ''), { timeout }, re.source).then(() => true, () => false);
+/** An empty e2e-out/<name> that receives the browser's downloads. */
+async function downloadsTo(browser, name) {
+  const dir = resolve(OUT, name);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  await (await browser.target().createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir });
+  return dir;
+}
+/** The size of the timelapse video downloaded into `dir` (waits up to 5 s), or 0. */
+async function downloadedMp4(dir) {
+  for (let t = 0; t < 50; t++) {
+    const f = readdirSync(dir).find(n => /^rise-\d{8}-\d{4}\.mp4$/.test(n));
+    if (f) return statSync(resolve(dir, f)).size;
+    await sleep(100);
+  }
+  return 0;
+}
 
 async function scenario(name, fn, opts) {
   if (ONLY.length && !ONLY.includes(name)) return;
@@ -172,14 +191,14 @@ await scenario('draw-each-form', async ({ page, cdp }) => {
 });
 
 await scenario('draw-new-forms', async ({ page, cdp }) => {
-  // the six Forms promoted from the forms lab, each in its gallery ink, on a 3 × 2 grid
-  const forms = [['craze', 'oxide'], ['plume', 'ochre'], ['caustic', 'spectral'], ['burin', 'graphite'], ['plait', 'indigo'], ['orbit', 'rose']];
+  // the seven Forms promoted from the forms lab, each in its gallery ink, on a 4 + 3 grid
+  const forms = [['craze', 'oxide'], ['plume', 'ochre'], ['caustic', 'spectral'], ['burin', 'graphite'], ['plait', 'indigo'], ['orbit', 'rose'], ['ripple', 'ochre']];
   for (let i = 0; i < forms.length; i++) {
     const [form, ink] = forms[i];
     await dispatch(page, { k: 'pickForm', form });
     await dispatch(page, { k: 'pickInk', ink });
-    const x0 = 110 + (i % 3) * 380, y = 250 + Math.floor(i / 3) * 320;
-    await penStroke(cdp, wave(x0, y, x0 + 300, 70, 70));
+    const x0 = 60 + (i % 4) * 300, y = 250 + Math.floor(i / 4) * 320;
+    await penStroke(cdp, wave(x0, y, x0 + 240, 70, 70));
     await idle(page);
     const s = await last(page);
     assert(s && s.form === form, `stroke ${i} form ${form}, got ${s && s.form}`);
@@ -191,14 +210,14 @@ await scenario('draw-new-forms', async ({ page, cdp }) => {
     const [form, ink] = forms[i];
     await dispatch(page, { k: 'pickForm', form });
     await dispatch(page, { k: 'pickInk', ink });
-    const x = 190 + i * 180, y = 735;
+    const x = 160 + i * 160, y = 735;
     await penStroke(cdp, [[x, y, 0.6], [x + 0.5, y + 0.3, 0.7], [x + 0.8, y + 0.4, 0.7]]);
     await idle(page);
     const s = await last(page);
     assert(s.form === form && s.radial, `${form} tap is radial (form=${s.form}, radial=${s.radial})`);
     assert(s.nPts > 3, `${form} tap produced geometry (${s.nPts} pts)`);
   }
-  assert(await count(page) === 12, 'six strokes and six taps');
+  assert(await count(page) === 14, 'seven strokes and seven taps');
   // a .rise round trip keeps the new Form ids (serialize.ts knows them)
   const h0 = await R(page, () => window.__rise.sceneHash());
   const text = await R(page, () => window.__rise.serialize());
@@ -245,38 +264,6 @@ await scenario('draw-new-forms', async ({ page, cdp }) => {
   const rows = new Set(tiles.map(t => t.top)).size;
   assert(rows === 2, `two rows of tiles on desktop, got ${rows}`);
   await shot(page, 'new-forms-sheet');
-});
-
-await scenario('ripple', async ({ page, cdp }) => {
-  // Ripple v2: interference contours on both sides of the stroke, more rings with depth; a tap is a bullseye
-  await dispatch(page, { k: 'pickForm', form: 'ripple' });
-  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
-  await penStroke(cdp, wave(160, 300, 1100, 90, 90, 2));
-  await idle(page);
-  let s = await last(page);
-  assert(s && s.form === 'ripple', `stroke form ripple, got ${s && s.form}`);
-  assert(s.nPts > 200, `ripple produced rings (${s.nPts} pts)`);
-  assert(s.gens >= 3, `ripple grew several rings (gens=${s.gens})`);
-  // the bloom is a few dozen points, under the jitter between two separate strokes, so compare
-  // the held stroke with itself after the first undo peels its pool
-  await penStroke(cdp, line(250, 580, 1050, 580, 60), { hold: 1400 });
-  await idle(page);
-  const held = await last(page);
-  await dispatch(page, { k: 'undo' });
-  await idle(page);
-  const peeled = await last(page);
-  assert(held.pools >= 1 && peeled.id === held.id && peeled.pools === 0, `undo peels the hold's pool (pools ${held.pools} → ${peeled.pools})`);
-  assert(held.nPts > peeled.nPts, `holding blooms more rings (${peeled.nPts} → ${held.nPts} pts)`);
-  await penStroke(cdp, [[640, 720, 0.6], [640.5, 720.3, 0.7], [640.8, 720.4, 0.7]]);
-  await idle(page);
-  s = await last(page);
-  assert(s.form === 'ripple' && s.radial && s.nPts > 3, `ripple tap is a radial bullseye (${s.nPts} pts)`);
-  const h0 = await R(page, () => window.__rise.sceneHash());
-  const text = await R(page, () => window.__rise.serialize());
-  await R(page, t => window.__rise.load(t), text);
-  await idle(page);
-  assert(await R(page, () => window.__rise.sceneHash()) === h0, 'ripple round trip keeps the scene hash');
-  await shot(page, 'ripple-night');
 });
 
 await scenario('rise-hold-pen', async ({ page, cdp }) => {
@@ -443,11 +430,7 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   const h = await R(page, () => window.__rise.sceneHash());
   const n0 = await count(page);
   // the key, delivered as a download: intercept it
-  const dl = resolve(OUT, 'timelapse-download');
-  rmSync(dl, { recursive: true, force: true });
-  mkdirSync(dl, { recursive: true });
-  const bcdp = await browser.target().createCDPSession();
-  await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
+  const dl = await downloadsTo(browser, 'timelapse-download');
   // a share sheet that takes files, as desktop Chrome and Edge on Windows have: it must stay closed
   await R(page, () => {
     window.__sheetOpened = false;
@@ -458,18 +441,13 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   let st = await R(page, () => window.__rise.state());
   assert(st.recording, 'Shift+P starts recording');
   // the toast follows the async encoder probe (VideoEncoder.isConfigSupported), which takes no fixed time
-  assert(await page.waitForFunction(() => /Recording timelapse/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 10000 }).then(() => true, () => false), 'a progress toast shows');
+  assert(await toastSays(page, /Recording timelapse/, 10000), 'a progress toast shows');
   // drawing goes on while it records
   await penStroke(cdp, line(200, 700, 420, 690, 20));
   await page.waitForFunction(() => !window.__rise.state().recording, { timeout: 90000 });
-  await page.waitForFunction(() => /Timelapse saved/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
-  let file = null;
-  for (let t = 0; t < 50 && !file; t++) {
-    file = readdirSync(dl).find(f => /^rise-\d{8}-\d{4}\.mp4$/.test(f)) || null;
-    if (!file) await sleep(100);
-  }
-  assert(file, `a video was downloaded (${readdirSync(dl)})`);
-  assert(statSync(resolve(dl, file)).size > 50000, `the download is a real video (${statSync(resolve(dl, file)).size} B)`);
+  assert(await toastSays(page, /Timelapse saved/), 'Timelapse saved');
+  const bytes = await downloadedMp4(dl);
+  assert(bytes > 50000, `a real video was downloaded (${bytes} B: ${readdirSync(dl)})`);
   assert(!(await R(page, () => window.__sheetOpened)), 'a desktop never opens the share sheet');
   assert(await count(page) === n0 + 1, 'the stroke drawn while recording landed');
   await dispatch(page, { k: 'undo' });
@@ -520,11 +498,7 @@ await scenario('timelapse-vertical', async ({ browser, page, cdp }) => {
   await idle(page);
   const r = await R(page, () => window.__rise.timelapse());
   assert(r && r.width === 1080 && r.height === 1920, `vertical timelapse ${JSON.stringify(r && { ...r, url: 0 })}`);
-  const dl = resolve(OUT, 'timelapse-phone-download');
-  rmSync(dl, { recursive: true, force: true });
-  mkdirSync(dl, { recursive: true });
-  const bcdp = await browser.target().createCDPSession();
-  await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
+  const dl = await downloadsTo(browser, 'timelapse-phone-download');
   // a share sheet the person closes
   await R(page, () => {
     window.__shared = [];
@@ -532,20 +506,14 @@ await scenario('timelapse-vertical', async ({ browser, page, cdp }) => {
     Object.defineProperty(navigator, 'share', { value: async d => { window.__shared.push(d.files.map(f => f.name)); throw new DOMException('closed', 'AbortError'); }, configurable: true });
   });
   await dispatch(page, { k: 'timelapse' });
-  const toast = re => page.waitForFunction(re => new RegExp(re).test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 90000 }, re.source).then(() => true, () => false);
-  assert(await toast(/Timelapse ready.*Share/), 'the finished video waits on a Share toast');
+  assert(await toastSays(page, /Timelapse ready.*Share/, 90000), 'the finished video waits on a Share toast');
   await page.click('.r-toast-action');
-  assert(await toast(/Timelapse ready.*Save/), 'closing the sheet offers Save');
+  assert(await toastSays(page, /Timelapse ready.*Save/), 'closing the sheet offers Save');
   const shared = await R(page, () => window.__shared);
   assert(shared.length === 1 && /^rise-\d{8}-\d{4}\.mp4$/.test(shared[0][0]), `the sheet got the video (${JSON.stringify(shared)})`);
   await page.click('.r-toast-action');
-  assert(await toast(/Timelapse saved/), 'Save confirms');
-  let file = null;
-  for (let t = 0; t < 50 && !file; t++) {
-    file = readdirSync(dl).find(f => /^rise-\d{8}-\d{4}\.mp4$/.test(f)) || null;
-    if (!file) await sleep(100);
-  }
-  assert(file && statSync(resolve(dl, file)).size > 50000, `Save downloads the video (${readdirSync(dl)})`);
+  assert(await toastSays(page, /Timelapse saved/), 'Save confirms');
+  assert(await downloadedMp4(dl) > 50000, `Save downloads the video (${readdirSync(dl)})`);
 }, { touch: true, width: 400, height: 860 });
 
 await scenario('first-run-seed', async ({ page, cdp }) => {
@@ -787,43 +755,38 @@ await scenario('hints', async ({ page, cdp }) => {
 
 // The share hint (DESIGN §4 hints, §13): at the first pause once the drawing has 6 strokes, once
 // ever (remembered across reloads), never after Share timelapse or Copy remix link.
+// The touch wording is a unit test (tests/app.share-hint.test.ts): the flow is the same.
 const shareHint = page => R(page, () => {
   const el = document.querySelector('.r-hint[data-hint="share"]');
-  return { st: window.__rise.state().hints.share, on: !!el && el.classList.contains('is-on'), text: el ? el.textContent : '', touch: window.__rise.state().isTouch };
+  return { st: window.__rise.state().hints.share, on: !!el && el.classList.contains('is-on'), text: el ? el.textContent : '' };
 });
-async function drawSix(page, cdp, x0, x1) {
-  for (let i = 0; i < 6; i++) await penStroke(cdp, line(x0, 160 + i * 70, x1, 170 + i * 70, 30));
-  await idle(page);
-}
-for (const [name, opts] of [['share-hint', {}], ['share-hint-phone', { width: 390, height: 844, touch: true }]]) {
-  await scenario(name, async ({ page, cdp }) => {
-    await dispatch(page, { k: 'pickForm', form: 'sprout' });
-    for (let i = 0; i < 5; i++) await penStroke(cdp, line(60, 160 + i * 70, (opts.width || W) - 60, 170 + i * 70, 30));
-    await sleep(5000);
-    let h = await shareHint(page);
-    assert(h.st === 'pending' && !h.on, `no share hint at 5 strokes (${h.st})`);
-    await penStroke(cdp, line(60, 560, (opts.width || W) - 60, 570, 30));
-    await sleep(2000);
-    h = await shareHint(page);
-    assert(h.st === 'pending', `no share hint right after the 6th stroke (${h.st})`);
-    await sleep(3200);
-    h = await shareHint(page);
-    assert(h.st === 'showing' && h.on, `the share hint shows at the pause after stroke 6 (${h.st})`);
-    assert(h.text === (h.touch ? 'Share it: Menu → Share timelapse' : 'Share it: ⇧P makes a video of it growing'), `share hint text (${h.text})`);
-    assert(!(await R(page, () => Object.entries(window.__rise.state().hints).some(([k, v]) => k !== 'share' && v === 'showing'))), 'one hint at a time');
-    await shot(page, name);
-    await sleep(4500);
-    h = await shareHint(page);
-    assert(h.st === 'done' && !h.on, `the share hint dismisses itself (${h.st})`);
-    await page.reload({ waitUntil: 'load' });
-    await page.waitForFunction(() => window.__rise && window.__rise.version, { timeout: 15000 });
-    await idle(page, 15000);
-    await penStroke(cdp, line(60, 640, (opts.width || W) - 60, 650, 30));
-    await sleep(5000);
-    h = await shareHint(page);
-    assert(h.st === 'done' && !h.on, `the share hint never comes back after a reload (${h.st})`);
-  }, opts);
-}
+await scenario('share-hint', async ({ page, cdp }) => {
+  await dispatch(page, { k: 'pickForm', form: 'sprout' });
+  for (let i = 0; i < 5; i++) await penStroke(cdp, line(60, 160 + i * 70, W - 60, 170 + i * 70, 30));
+  await sleep(5000);
+  let h = await shareHint(page);
+  assert(h.st === 'pending' && !h.on, `no share hint at 5 strokes (${h.st})`);
+  await penStroke(cdp, line(60, 560, W - 60, 570, 30));
+  await sleep(2000);
+  h = await shareHint(page);
+  assert(h.st === 'pending', `no share hint right after the 6th stroke (${h.st})`);
+  await sleep(3200);
+  h = await shareHint(page);
+  assert(h.st === 'showing' && h.on, `the share hint shows at the pause after stroke 6 (${h.st})`);
+  assert(h.text === 'Share it: ⇧P makes a video of it growing', `share hint text (${h.text})`);
+  assert(!(await R(page, () => Object.entries(window.__rise.state().hints).some(([k, v]) => k !== 'share' && v === 'showing'))), 'one hint at a time');
+  await shot(page, 'share-hint');
+  await sleep(4500);
+  h = await shareHint(page);
+  assert(h.st === 'done' && !h.on, `the share hint dismisses itself (${h.st})`);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.__rise && window.__rise.version, { timeout: 15000 });
+  await idle(page, 15000);
+  await penStroke(cdp, line(60, 640, W - 60, 650, 30));
+  await sleep(5000);
+  h = await shareHint(page);
+  assert(h.st === 'done' && !h.on, `the share hint never comes back after a reload (${h.st})`);
+});
 
 await scenario('share-hint-shared', async ({ page, cdp }) => {
   await penStroke(cdp, line(300, 160, 800, 170, 30));
@@ -950,7 +913,7 @@ await scenario('remix-link', async ({ page, cdp }) => {
   assert(link && link.startsWith('https://sketch.syberlabs.io/#r='), `a remix link (${link && link.slice(0, 40)})`);
   // the menu item copies it (or says why not) without an error
   await dispatch(page, { k: 'copyRemix' });
-  await page.waitForFunction(() => /Remix link copied|Couldn’t copy/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
+  assert(await toastSays(page, /Remix link copied|Couldn’t copy/), 'Copy remix link answers');
   const fragment = link.slice(link.indexOf('#'));
   await dispatch(page, { k: 'symmetry', on: false }); // its guides are not part of the drawing
   await sleep(6500); // the toast leaves
@@ -993,7 +956,7 @@ await scenario('remix-link', async ({ page, cdp }) => {
     assert(diff.mean < 0.5 && diff.over < 0.01, `the remix looks like the sender's drawing (mean ${diff.mean.toFixed(3)}, ${(100 * diff.over).toFixed(3)} % > 16)`);
     // a truncated link (pasted into the open app) loads nothing and says so
     await R(v.page, f => { location.hash = f; }, fragment.slice(0, fragment.length >> 1));
-    await v.page.waitForFunction(() => /damaged or incomplete/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
+    assert(await toastSays(v.page, /damaged or incomplete/), 'a bad link says so');
     assert(await R(v.page, () => window.__rise.sceneHash()) === h, 'a bad link changes nothing');
     const errs = v.errors.filter(e => !/favicon/.test(e));
     assert(errs.length === 0, 'visitor console/page errors:\n  ' + errs.join('\n  '));

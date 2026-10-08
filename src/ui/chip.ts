@@ -14,6 +14,7 @@
 import type { FormId, InkId, NibId } from '../core/types';
 import type { AppState, Intent } from '../app/types';
 import type { Layout, UICtx } from './index';
+import { foldsName } from '../core/folds';
 
 export const DEAD_ZONE = 6;
 export const LONG_PRESS_MS = 500;
@@ -105,7 +106,7 @@ export function chipLabel(which: ChipKind, s: AppState): string {
     case 'color':
       return `Color: ${INK_NAMES[t.ink]} on ${GROUND_NAMES[s.ground]}. Drag sideways for hue, up or down for tone${target ? ' of the selection' : ''}.`;
     case 'form': {
-      const sym = t.sym.on ? ` Symmetry: ${t.sym.folds === 2 ? 'Mirror' : `kaleidoscope, ${t.sym.folds}-fold`}.` : '';
+      const sym = t.sym.on ? ` Symmetry: ${foldsName(t.sym.folds)}.` : '';
       return `Form: ${FORM_NAMES[t.form]}, depth ${fmtDepth(t.base[t.form])}.${sym} Drag up or down to change ${target ? target + ' ' : ''}depth.`;
     }
   }

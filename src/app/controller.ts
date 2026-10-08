@@ -25,6 +25,7 @@ import { exportFilename, renderPng } from '../export/png';
 import { pickCodec, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
 import { downloadBlob } from '../persist/files';
 import { remixLink } from './remix';
+import { REMIX_BASE } from '../persist/remix';
 import type { Runtime } from './runtime';
 import { View } from './view';
 import { Drafts, formName } from './draft';
@@ -43,8 +44,8 @@ type Bend =
 
 /** The export progress toast appears once an export takes longer than this (ms). */
 const EXPORT_TOAST_MS = 300;
-/** The share sheet's title, and its link when the drawing is too big for a remix link (DESIGN §8 Share timelapse). */
-const SHARE_TITLE = 'Made in RISE Sketch', SHARE_URL = 'https://sketch.syberlabs.io';
+/** The share sheet's title (DESIGN §8 Share timelapse); its link is the remix link, else the app (REMIX_BASE). */
+const SHARE_TITLE = 'Made in RISE Sketch';
 /** A finished timelapse waits this long on its Share toast (ms). */
 const SHARE_TOAST_MS = 20000;
 
@@ -71,7 +72,7 @@ export class Controller implements InputSink {
   /** A finished timelapse waiting for the toast's Share tap (the share sheet needs a fresh user gesture). */
   private timelapseFile: File | null = null;
   /** The link shared with it: the recorded drawing's remix link when it fits. */
-  private timelapseUrl = SHARE_URL;
+  private timelapseUrl = REMIX_BASE;
   private readonly cursorAt: [number, number] = [0, 0];
   private readonly cursorShape: NibCursor = { kind: 'brush', wCss: 0, angle: 0, css: '#ffffff' };
   private cursorCss = '';
@@ -709,7 +710,7 @@ export class Controller implements InputSink {
       rt.store.emit({ k: 'announce', text: this.timelapseCancel ? 'Timelapse cancelled' : 'Timelapse failed' });
       return null;
     }
-    this.timelapseUrl = (await link) ?? SHARE_URL;
+    this.timelapseUrl = (await link) ?? REMIX_BASE;
     if (deliver && gen === this.timelapseGen) this.deliverTimelapse(res);
     return res;
   }
@@ -721,18 +722,12 @@ export class Controller implements InputSink {
    * pastes nothing in Discord), while a downloaded file drags into any of them.
    */
   private deliverTimelapse(res: TimelapseResult): void {
-    const name = exportFilename(new Date(), 'mp4');
-    const file = new File([res.blob], name, { type: res.blob.type });
+    const file = this.timelapseFile = new File([res.blob], exportFilename(new Date(), 'mp4'), { type: res.blob.type });
     const nav = navigator as Navigator & { userActivation?: { isActive: boolean } };
     const sheet = typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare({ files: [file] });
-    if (sheet && this.rt.store.get().isTouch) {
-      this.timelapseFile = file;
-      if (nav.userActivation?.isActive) { void this.shareFile(); return; }
-      this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse ready', action: { label: 'Share', intent: { k: 'shareTimelapse' } }, ms: SHARE_TOAST_MS });
-      return;
-    }
-    this.timelapseFile = file;
-    this.saveFile();
+    if (!sheet || !this.rt.store.get().isTouch) this.saveFile();
+    else if (nav.userActivation?.isActive) void this.shareFile();
+    else this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse ready', action: { label: 'Share', intent: { k: 'shareTimelapse' } }, ms: SHARE_TOAST_MS });
   }
 
   private async shareFile(): Promise<void> {

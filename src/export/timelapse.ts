@@ -151,9 +151,9 @@ export interface TimelapseOptions {
   onProgress(fraction: number): void;
   /** Polled every frame; true stops and resolves null. */
   cancelled(): boolean;
-  /** Optional canvas allocator (the ledger); falls back to document.createElement. */
-  alloc?(w: number, h: number): HTMLCanvasElement | null;
-  free?(c: HTMLCanvasElement): void;
+  /** Canvas allocator (the ledger); null falls back to document.createElement. */
+  alloc(w: number, h: number): HTMLCanvasElement | null;
+  free(c: HTMLCanvasElement): void;
 }
 
 export interface TimelapseResult { blob: Blob; width: number; height: number; durationMs: number; frames: number }
@@ -178,13 +178,13 @@ function createFilm(items: readonly TimelapseItem[], plan: TimelapsePlan, o: Tim
 
   const owned: HTMLCanvasElement[] = [];
   const canvas = (w: number, h: number): HTMLCanvasElement => {
-    let c = o.alloc ? o.alloc(w, h) : null;
+    let c = o.alloc(w, h);
     if (!c) { c = document.createElement('canvas'); c.width = w; c.height = h; }
     owned.push(c);
     return c;
   };
   const release = (): void => {
-    for (const c of owned) { if (o.free) o.free(c); else { c.width = 0; c.height = 0; } }
+    for (const c of owned) o.free(c);
     owned.length = 0;
   };
   const out = canvas(W, H), ground = canvas(W, H), base = canvas(W, H), dry = canvas(W, H), wet = canvas(W, H), poster = canvas(W, H);
