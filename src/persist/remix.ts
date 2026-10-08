@@ -2,20 +2,20 @@
  * Remix links (DESIGN §8, §13): the whole drawing travels in the URL fragment, `#r=<payload>`, so
  * it never reaches a server and needs none. Opening one loads the drawing as a new document.
  *
- * Version 2 (what Rise writes): before encoding, each recipe's input is rounded to a grid finer
- * than anyone can see (`quantize`: positions to 1/16 sp, time, pressure, tilt and crowding to a
- * few hundredths of their range; seeds and every discrete field stay exact). The recipient cooks
- * those rounded samples, so the remix looks the same as the sender's drawing but is not bit-
- * identical to it (its `sceneHash` differs); it is deterministic, and rounding twice changes
- * nothing, so a remix of a remix carries the same link. Forms whose growth amplifies any change
- * of input (`EXACT_FORMS`) keep their recipes exact.
+ * Version 2 (what Rise writes): each recipe travels rounded (`quantize`: positions to 1/16 sp,
+ * time to 1 ms, pressure, tilt and crowding to 8–10 bits, calibration to 4 digits; seeds and every
+ * discrete field exact), but only where the rounding cooks to the same picture: the app cooks both
+ * and compares (app/remix.ts), trying finer grids before sending a recipe exact (`carried`). So
+ * the remix looks like the sender's drawing without being bit-identical to it (its `sceneHash`
+ * differs); it cooks the same on every device, and a recipe already on a grid stays put, so a
+ * remix of a remix carries the same link.
  *
  * The payload is the `.rise` text with its typed arrays pulled out as binary, gzipped, then
  * base64url. Each array is stored losslessly, as one of:
- *  - grid (v2): per column, the coarsest power-of-two grid its values sit on, then the
- *    zigzag varint deltas of the grid indexes (0 stands for NaN). Rounded samples cost about
- *    one byte per value;
- *  - words (v1, and v2 arrays the grid cannot hold): column-wise deltas of the 32-bit words,
+ *  - grid: per column, the coarsest power-of-two grid its values sit on, then zigzag varints of
+ *    the grid indexes' first or second differences (0 stands for NaN). Rounded samples cost about
+ *    a byte per value;
+ *  - words (all of v1; v2 arrays on no coarse grid): column-wise deltas of the 32-bit words,
  *    split into byte planes.
  * Identical arrays are stored once: a symmetry copy shares its stroke's samples, pools and resume.
  *
@@ -25,7 +25,7 @@
  */
 import type { Calib, Doc, StrokeRecipe } from '../core/types';
 import { S } from '../core/types';
-import { base64ToBytes, bytesToBase64, sceneHash, serializeDoc } from '../doc/serialize';
+import { base64ToBytes, bytesToBase64, decodeF32, encodeF32, sceneHash, serializeDoc } from '../doc/serialize';
 
 /** Where remix links point: the shipped app, whatever page made the link. */
 export const REMIX_BASE = 'https://sketch.syberlabs.io/';
@@ -241,18 +241,6 @@ function unpackGrid(p: Uint8Array, stride: number): Float32Array {
   return a;
 }
 
-/** Float32 array <-> little-endian bytes (the `.rise` base64 payload). */
-const f32ToBytes = (a: Float32Array): Uint8Array => {
-  const b = new Uint8Array(a.length * 4), v = new DataView(b.buffer);
-  for (let i = 0; i < a.length; i++) v.setFloat32(i * 4, a[i], true);
-  return b;
-};
-const bytesToF32 = (b: Uint8Array): Float32Array => {
-  const v = new DataView(b.buffer, b.byteOffset, b.byteLength), a = new Float32Array(b.length >>> 2);
-  for (let i = 0; i < a.length; i++) a[i] = v.getFloat32(i * 4, true);
-  return a;
-};
-
 async function pipe(bytes: Uint8Array, t: CompressionStream | DecompressionStream): Promise<Uint8Array> {
   return new Uint8Array(await new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(t)).arrayBuffer());
 }
@@ -271,7 +259,7 @@ export async function encodeRemix(text: string): Promise<string> {
       index.set(key + b64, i);
       const bytes = base64ToBytes(b64);
       const words = packWords(bytes, key);
-      let grid = packGrid(bytesToF32(bytes), STRIDE[key]);
+      let grid = packGrid(decodeF32(b64), STRIDE[key]);
       // values on no coarse grid (an exact recipe) need ~4 varint bytes each, which gzip worse than words
       if (grid && grid.length * 2 > words.length) grid = null;
       const packed = grid ?? words;
@@ -312,10 +300,8 @@ export async function decodeRemix(payload: string): Promise<string> {
   return body.replace(INDEX_RE, (_, key: string, i: string) => {
     const b = blobs[Number(i)];
     if (!b) throw new Error('damaged remix link');
-    const bytes = version === 1 ? unpackWords(b, key)
-      : b[0] === 1 ? f32ToBytes(unpackGrid(b.subarray(1), STRIDE[key]))
-      : unpackWords(b.subarray(1), key);
-    return `"${key}":"${bytesToBase64(bytes)}"`;
+    if (version === 2 && b[0] === 1) return `"${key}":"${encodeF32(unpackGrid(b.subarray(1), STRIDE[key]))}"`;
+    return `"${key}":"${bytesToBase64(unpackWords(version === 1 ? b : b.subarray(1), key))}"`;
   });
 }
 
