@@ -2529,7 +2529,7 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       a.refresh(cx);
       items.push(a);
     };
-    let baked = 0; // copies with a live follower to finish from; the rest bake directly
+    let finished = 0; // copies finished from their live follower; the rest bake directly
     if (ls) {
       live = null;
       endHalo();
@@ -2545,9 +2545,10 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       ls.dead = true;
       replace(ls, f0);
       for (const fl of fs) {
-        if (baked < copies.length) {
+        if (finished < copies.length) {
           // drawn from the stroke's own geometry through the copy's placement; bakes the placed geometry
-          const fk = new FinishStroke(fl, copies[baked].r, c, now, cx, fold, copies[baked++].c);
+          const cp = copies[finished++];
+          const fk = new FinishStroke(fl, cp.r, c, now, cx, fold, cp.c);
           fk.lead = f0;
           fl.dead = true;
           replace(fl, fk);
@@ -2558,7 +2559,7 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       for (const f of fs) f.kill(cx);
       bake(r, c);
     }
-    for (const cp of copies.slice(baked)) bake(cp.r, cp.c);
+    for (const cp of copies.slice(finished)) bake(cp.r, cp.c);
     host.requestFrame();
   }
 
