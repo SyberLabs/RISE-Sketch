@@ -11,7 +11,7 @@
  *  - Shift is ignored where it cannot mean anything else: `[ ] - =` (so `+` deepens
  *    too), Delete/Backspace, Escape. Numpad +/− also set depth.
  *  - `?` is accepted with AltGr (layouts that need it) but not with Mod alone.
- *  - Digit1–Digit9 and Digit0 pick the ten Forms in sheet order (P0_FORMS); Shift+Digit0 is 100 %.
+ *  - Digit1–Digit9 and Digit0 pick the first ten Forms in sheet order (P0_FORMS; Ripple has no key); Shift+Digit0 is 100 %.
  *  - P1 bindings (Mod+D, Mod+Shift+E, M, arrows) return null.
  */
 import type { KeyAction } from './types';

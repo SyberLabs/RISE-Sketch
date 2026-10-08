@@ -25,9 +25,12 @@ export type LCh = readonly [L: number, C: number, h: number];
 export type Mat2x3 = Float64Array; // [a b c d e f], Canvas2D setTransform order
 export interface AABB { x0: number; y0: number; x1: number; y1: number }
 
-/** Nibs / Forms offered in the UI, in sheet and number-key order (charcoal and ripple are P1). */
+/**
+ * Nibs / Forms offered in the UI, in sheet and number-key order (charcoal is P1). Digit1–Digit0 pick
+ * the first ten Forms; Ripple, the eleventh, has no key.
+ */
 export const P0_NIBS: readonly NibId[] = ['pen', 'brush', 'chisel'];
-export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'];
+export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit', 'ripple'];
 export const INK_ORDER: readonly InkId[] = ['graphite', 'indigo', 'oxide', 'ochre', 'moss', 'rose', 'spectral'];
 
 // ============================================================================ input samples

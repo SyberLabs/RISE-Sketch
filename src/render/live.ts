@@ -95,9 +95,9 @@ export function revealMs(form: FormId): number {
 export const CHILD_AT = 1 - Math.cbrt(0.4);
 /** Spine reach of each Form (sp): growth is born this far behind the nib, plus the 24 sp unsettled tail. */
 const REACH: Record<FormId, number> = {
-  line: 36, echo: 0, sprout: 24, drift: 12, ripple: 24,
+  line: 36, echo: 0, sprout: 24, drift: 12,
   // the promoted lab Forms: their operators' `reach`
-  craze: 60, plume: 22, caustic: 20, burin: 8, plait: 108, orbit: 54,
+  ripple: 52, craze: 60, plume: 22, caustic: 20, burin: 8, plait: 108, orbit: 54,
 };
 /** Removal, restyle, re-grow, lift cross-fade, Echo ghost dissolve and brim flash durations (ms). */
 export const UNGROW_MS = 200, RESTYLE_UNGROW_MS = 150, GROW_MS = 320, LIFT_MS = 120, GHOST_MS = 150, BRIM_MS = 160;

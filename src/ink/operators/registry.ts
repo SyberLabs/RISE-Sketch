@@ -17,20 +17,21 @@ import { caustic } from './caustic.v1';
 import { burin } from './burin.v1';
 import { plait } from './plait.v1';
 import { orbit } from './orbit.v1';
+import { ripple as ripple2 } from './ripple.v2';
 
 /** UI / tool metadata of a Form. */
 export interface FormMeta { id: FormId; name: string; dMax: number; baseDefault: number; locality: 'local' | 'global'; p0: boolean }
 
 /**
- * The Forms (Ripple is P1: metadata only). Craze, Plume, Caustic, Burin, Plait and Orbit were
- * promoted from the forms lab (lab/forms, prototypes v101–v106) with unchanged geometry.
+ * The Forms. Craze, Plume, Caustic, Burin, Plait and Orbit were promoted from the forms lab
+ * (lab/forms, prototypes v101–v106) with unchanged geometry; Ripple v2 from prototype v107.
  */
 export const FORMS: Record<FormId, FormMeta> = {
   line: { id: 'line', name: 'Line', dMax: 5, baseDefault: 0, locality: 'local', p0: true },
   echo: { id: 'echo', name: 'Echo', dMax: 5, baseDefault: 2, locality: 'global', p0: true },
   sprout: { id: 'sprout', name: 'Sprout', dMax: 4, baseDefault: 2, locality: 'local', p0: true },
   drift: { id: 'drift', name: 'Drift', dMax: 6, baseDefault: 2, locality: 'local', p0: true },
-  ripple: { id: 'ripple', name: 'Ripple', dMax: 6, baseDefault: 2, locality: 'local', p0: false },
+  ripple: { id: 'ripple', name: 'Ripple', dMax: 6, baseDefault: 2, locality: 'local', p0: true },
   craze: { id: 'craze', name: 'Craze', dMax: 4, baseDefault: 2, locality: 'local', p0: true },
   plume: { id: 'plume', name: 'Plume', dMax: 3, baseDefault: 2, locality: 'local', p0: true },
   caustic: { id: 'caustic', name: 'Caustic', dMax: 4, baseDefault: 2, locality: 'local', p0: true },
@@ -41,7 +42,7 @@ export const FORMS: Record<FormId, FormMeta> = {
 
 /** Operator version new strokes are drawn with. */
 export const CURRENT_V: Record<FormId, number> = {
-  line: 1, echo: 1, sprout: 2, drift: 2, ripple: 1,
+  line: 1, echo: 1, sprout: 2, drift: 2, ripple: 2,
   craze: 1, plume: 1, caustic: 1, burin: 1, plait: 1, orbit: 1,
 };
 
@@ -50,9 +51,10 @@ const V1: Record<FormId, FormOps> = { line, echo, sprout, drift, ripple: line, c
 /**
  * Later shipped versions, by Form then version. Sprout v2 draws every branch from where it
  * clears its parent's ribbon, Drift v2 pours every filament off the trunk's edge (no additive
- * overlap on Night); v1 recipes keep cooking with v1.
+ * overlap on Night); v1 recipes keep cooking with v1. Ripple v1 never had an operator (it cooks
+ * as Line); Ripple v2 is the first real one.
  */
-const LATER: Partial<Record<FormId, Record<number, FormOps>>> = { sprout: { 2: sprout2 }, drift: { 2: drift2 } };
+const LATER: Partial<Record<FormId, Record<number, FormOps>>> = { sprout: { 2: sprout2 }, drift: { 2: drift2 }, ripple: { 2: ripple2 } };
 
 /** Operators registered at runtime by exact (form, version): experiments and future versions. */
 const EXTRA: Map<string, FormOps> = new Map();

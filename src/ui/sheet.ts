@@ -346,7 +346,7 @@ export function tileSpecs(kind: ChipKind, s: AppState): TileSpec[] {
     return out;
   }
   return P0_FORMS.map((form, i): TileSpec => ({
-    key: form, label: FORM_NAMES[form], aria: FORM_NAMES[form], tip: `${FORM_NAMES[form]} · ${(i + 1) % 10}`,
+    key: form, label: FORM_NAMES[form], aria: FORM_NAMES[form], tip: i < 10 ? `${FORM_NAMES[form]} · ${(i + 1) % 10}` : FORM_NAMES[form],
     opt: { k: 'form', form }, checked: t.form === form, intent: { k: 'pickForm', form }, drag: false,
   }));
 }
@@ -372,7 +372,7 @@ export function rovingNext(i: number, n: number, key: string, cols: number): num
 
 /**
  * Grid columns for a tile sheet (phones use a grid; elsewhere one row, or two balanced rows
- * past 9 tiles: the ten-Form sheet is 5 + 5).
+ * past 9 tiles: the eleven-Form sheet is 6 + 5).
  */
 export function tileCols(layout: Layout, n: number): number {
   if (layout === 'phone') return n > 4 ? 3 : 4;

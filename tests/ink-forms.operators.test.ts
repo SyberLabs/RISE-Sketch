@@ -72,10 +72,12 @@ describe('registry', () => {
     expect(FORMS.echo).toMatchObject({ dMax: 5, baseDefault: 2, locality: 'global', p0: true });
     expect(FORMS.sprout).toMatchObject({ dMax: 4, baseDefault: 2, locality: 'local', p0: true });
     expect(FORMS.drift).toMatchObject({ dMax: 6, baseDefault: 2, locality: 'local', p0: true });
-    expect(FORMS.ripple.p0).toBe(false);
+    expect(FORMS.ripple).toMatchObject({ dMax: 6, baseDefault: 2, locality: 'local', p0: true });
+    expect(operatorFor('ripple', 1).id).toBe('line'); // v1 never had an operator
+    expect(operatorFor('ripple', 2).id).toBe('ripple');
     // promoted from the forms lab: local, offered in the UI after the first four, in this order
-    expect(P0_FORMS).toEqual(['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit']);
-    for (const f of P0_FORMS.slice(4)) {
+    expect(P0_FORMS).toEqual(['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit', 'ripple']);
+    for (const f of P0_FORMS.slice(4, 10)) {
       expect(FORMS[f]).toMatchObject({ id: f, locality: 'local', p0: true, baseDefault: 2 });
       expect(operatorFor(f, 1).id).toBe(f);
       expect(operatorFor(f, 1).baseDefault).toBe(FORMS[f].baseDefault);
@@ -83,11 +85,11 @@ describe('registry', () => {
     }
     for (const f of Object.keys(CURRENT_V) as FormId[]) {
       // Sprout (clean crotches) and Drift (filaments off the trunk's edge) draw new strokes with
-      // v2; v1 recipes keep cooking with v1
-      expect(CURRENT_V[f]).toBe(f === 'sprout' || f === 'drift' ? 2 : 1);
+      // v2; v1 recipes keep cooking with v1. Ripple v1 cooks as Line; Ripple v2 is its first operator.
+      expect(CURRENT_V[f]).toBe(f === 'sprout' || f === 'drift' || f === 'ripple' ? 2 : 1);
       expect(operatorFor(f, 1).dMax).toBe(f === 'ripple' ? 5 : FORMS[f].dMax);
-      expect(operatorFor(f, CURRENT_V[f]).dMax).toBe(f === 'ripple' ? 5 : FORMS[f].dMax);
-      expect(operatorFor(f, CURRENT_V[f]).v).toBe(f === 'ripple' ? 1 : CURRENT_V[f]);
+      expect(operatorFor(f, CURRENT_V[f]).dMax).toBe(FORMS[f].dMax);
+      expect(operatorFor(f, CURRENT_V[f]).v).toBe(CURRENT_V[f]);
     }
     expect(operatorFor('sprout', 1).v).toBe(1);
     expect(operatorFor('sprout', 2).v).toBe(2);
