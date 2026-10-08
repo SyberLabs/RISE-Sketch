@@ -113,7 +113,7 @@ export class Library {
     const title = parsed.meta.title.trim();
     rt.store.emit({ k: 'toast', id: 'open', text: `Opened ${title && title !== DEFAULT_TITLE ? title : 'a shared drawing'}` });
     this.scheduleRefresh();
-    void this.ctl.player.start();
+    void this.ctl.player.start(() => this.ctl.hints.remixPlayed());
   }
 
   /** Menu → Copy remix link: the clipboard gets this drawing's link, or the person learns it is too big. */

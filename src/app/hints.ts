@@ -2,7 +2,8 @@
  * Hints (DESIGN §3.0, §4): at most five, ever, each shown once and remembered in prefs.
  *
  *  draw  "Draw anything. It grows."  — with the first-run seed (boot sets it 'showing'; the UI
- *        fades it at the first contact and dispatches hintDone).
+ *        fades it at the first contact and dispatches hintDone). A first-run visitor who arrives
+ *        on a remix link sees "Draw on it. It grows." instead, once the replay has played out.
  *  form  The Form chip pulses once with "Try another Form", 1.2 s after the first stroke.
  *  rise  "Hold still to make it rise." near the end of stroke 5 when nothing has risen yet
  *        (neither in this session nor in the document).
@@ -23,6 +24,8 @@ import type { AppState, HintId } from './types';
 import type { Runtime } from './runtime';
 import type { View } from './view';
 
+/** The first-run hint for a visitor who arrived on a remix link, shown when its replay ends. */
+export const REMIX_DRAW_TEXT = 'Draw on it. It grows.';
 /** The Form chip pulses this long after the first stroke (ms). */
 export const FORM_HINT_DELAY_MS = 1200;
 /** The rise hint appears at this stroke when nothing has risen. */
@@ -123,6 +126,14 @@ export class HintFlow {
   shared(): void {
     clearTimeout(this.shareTimer);
     this.rt.store.dispatch({ k: 'hintDone', id: 'share' });
+  }
+
+  /**
+   * A shared drawing finished replaying for someone who has never drawn here: the first-run hint,
+   * worded for ink that is already on the page (DESIGN §3.0). It stays until the first contact.
+   */
+  remixPlayed(): void {
+    if (this.rt.store.get().firstRun) this.show('draw', REMIX_DRAW_TEXT, null);
   }
 
   /** A navigation gesture: the nav hint did its job. */

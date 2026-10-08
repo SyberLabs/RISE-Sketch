@@ -718,7 +718,7 @@ body {
   transition: opacity 400ms var(--r-ease);
 }
 .r-hint.is-on { opacity: 1; }
-.r-hint[data-hint="draw"] {
+.r-hint.is-bare {
   background: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -727,7 +727,7 @@ body {
   font-weight: 300;
   letter-spacing: 0.015em;
 }
-.r-hint[data-hint="draw"].is-on { opacity: 0.35; }
+.r-hint.is-bare.is-on { opacity: 0.35; }
 
 .r-tip {
   position: absolute;
