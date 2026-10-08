@@ -129,7 +129,7 @@ export function installDebug(app: App): void {
     async timelapse() {
       const r = await app.ctl.shareTimelapse(false);
       if (!r) return null;
-      return { url: URL.createObjectURL(r.blob), mime: r.mime, bytes: r.blob.size, width: r.width, height: r.height, frames: r.frames, durationMs: r.durationMs };
+      return { url: URL.createObjectURL(r.blob), bytes: r.blob.size, width: r.width, height: r.height, frames: r.frames, durationMs: r.durationMs };
     },
     perf: reset => rt.perf.read(reset),
     renderStats: opts => readStats(opts),

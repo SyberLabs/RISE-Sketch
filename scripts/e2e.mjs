@@ -457,7 +457,7 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   await page.waitForFunction(() => /Timelapse saved/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
   let file = null;
   for (let t = 0; t < 50 && !file; t++) {
-    file = readdirSync(dl).find(f => /^rise-\d{8}-\d{4}\.(mp4|webm)$/.test(f)) || null;
+    file = readdirSync(dl).find(f => /^rise-\d{8}-\d{4}\.mp4$/.test(f)) || null;
     if (!file) await sleep(100);
   }
   assert(file, `a video was downloaded (${readdirSync(dl)})`);
@@ -490,8 +490,7 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
     for (let i = 0; i < first.px.length; i += 4) diff += Math.abs(first.px[i] - last.px[i]) + Math.abs(first.px[i + 1] - last.px[i + 1]) + Math.abs(first.px[i + 2] - last.px[i + 2]);
     return { duration: el.duration, w: el.videoWidth, h: el.videoHeight, diff: diff / (first.px.length / 4), b64: btoa(bin), first: first.png, mid: mid.png, last: last.png };
   }, r.url);
-  const ext = /mp4/.test(r.mime) ? 'mp4' : 'webm';
-  writeFileSync(`${OUT}/timelapse.${ext}`, Buffer.from(v.b64, 'base64'));
+  writeFileSync(`${OUT}/timelapse.mp4`, Buffer.from(v.b64, 'base64'));
   for (const k of ['first', 'mid', 'last']) writeFileSync(`${OUT}/timelapse-${k}.png`, Buffer.from(v[k].split(',')[1], 'base64'));
   assert(v.w === r.width && v.h === r.height, `the video is ${v.w}×${v.h}`);
   assert(v.duration >= 3 && v.duration <= 12.5, `plausible duration (${v.duration} s)`);

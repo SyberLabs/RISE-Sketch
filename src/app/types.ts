@@ -122,7 +122,7 @@ export interface RiseDebug {
    * Record the timelapse without delivering it. `url` is an object URL of the video (the e2e loads
    * it into a <video>); null when nothing was recorded.
    */
-  timelapse(): Promise<{ url: string; mime: string; bytes: number; width: number; height: number; frames: number; durationMs: number } | null>;
+  timelapse(): Promise<{ url: string; bytes: number; width: number; height: number; frames: number; durationMs: number } | null>;
   /** Perf counters since the last reset (CPU-side ms). */
   perf(reset?: boolean): { liveFrameP95: number; liveFrameMax: number; inputP95: number; frames: number; longTasks: number };
   /**

@@ -1,12 +1,12 @@
 /** export/timelapse.ts schedule, framing and encoder choice; export/mp4.ts box layout (DESIGN §8 Share timelapse). */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import type { StrokeRecipe } from '../src/core/types';
 import { S } from '../src/core/types';
 import { DEFAULT_CALIB } from '../src/ink/calib';
 import { freezeRecipe } from '../src/doc/commands';
 import { timeline } from '../src/app/replay';
 import {
-  MIME_CANDIDATES, MIN_SPEED, PLAY_MAX_MS, PLAY_MIN_MS, PORTRAIT_H, WIDTH, mimeExt, pickMime, timelapseFrame, timelapseSpeed,
+  AVC_CODECS, MIN_SPEED, PLAY_MAX_MS, PLAY_MIN_MS, PORTRAIT_H, WIDTH, pickCodec, timelapseFrame, timelapseSpeed,
 } from '../src/export/timelapse';
 import { muxMp4, nclx } from '../src/export/mp4';
 import { exportFilename } from '../src/export/png';
@@ -70,18 +70,20 @@ describe('timelapse framing', () => {
   });
 });
 
-describe('encoder choice', () => {
-  it('prefers MP4/H.264, then WebM VP9, VP8', () => {
-    expect(pickMime(() => true)).toBe(MIME_CANDIDATES[0]);
-    expect(pickMime(t => t.startsWith('video/webm'))).toBe('video/webm;codecs=vp9');
-    expect(pickMime(t => t === 'video/webm;codecs=vp8')).toBe('video/webm;codecs=vp8');
-    expect(pickMime(t => t === 'video/mp4')).toBe('video/mp4');
-    expect(pickMime(() => false)).toBe(null);
-    expect(pickMime(() => { throw new Error('x'); })).toBe(null);
+describe('codec choice', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+  it('picks the best H.264 profile WebCodecs can encode, else none', async () => {
+    expect(await pickCodec()).toBe(null);   // no WebCodecs
+    const supported = new Set(['avc1.4d0028']);
+    vi.stubGlobal('VideoFrame', class {});
+    vi.stubGlobal('VideoEncoder', { isConfigSupported: async (c: VideoEncoderConfig) => ({ supported: supported.has(c.codec) }) });
+    expect(await pickCodec()).toBe('avc1.4d0028');
+    supported.add(AVC_CODECS[0]);
+    expect(await pickCodec()).toBe(AVC_CODECS[0]);
+    supported.clear();
+    expect(await pickCodec()).toBe(null);
   });
-  it('names the file by its container', () => {
-    expect(mimeExt('video/mp4')).toBe('mp4');
-    expect(mimeExt('video/webm;codecs=vp9')).toBe('webm');
+  it('names the file .mp4', () => {
     expect(exportFilename(new Date(2026, 9, 8, 9, 5), 'mp4')).toBe('rise-20261008-0905.mp4');
   });
 });

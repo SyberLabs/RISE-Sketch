@@ -22,7 +22,7 @@ import { chiselAngle, nibWidth } from '../ink/nibs';
 import { clampFolds, foldsName, stepFolds } from '../core/folds';
 import { prefs } from '../persist/prefs';
 import { exportFilename, renderPng } from '../export/png';
-import { mimeExt, pickEncoder, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
+import { pickCodec, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
 import { downloadBlob } from '../persist/files';
 import { remixUrl } from '../persist/remix';
 import { VERSION } from './version';
@@ -656,7 +656,7 @@ export class Controller implements InputSink {
    * Share timelapse (Shift+P / menu, DESIGN §8): record the replay as a video (export/timelapse.ts)
    * with a progress toast and Cancel, then share it where the Web Share sheet takes files, else
    * download it. The recording runs off the app's renderer, so drawing and navigation go on.
-   * Without MediaRecorder it exports the PNG instead and says why.
+   * Without WebCodecs H.264 it exports the PNG instead and says why.
    */
   async shareTimelapse(deliver: boolean): Promise<TimelapseResult | null> {
     const rt = this.rt;
@@ -665,8 +665,8 @@ export class Controller implements InputSink {
     this.timelapseCancel = false;
     this.timelapseFile = null;
     rt.store.set({ recording: true });
-    const encoder = await pickEncoder();
-    if (!encoder) {
+    const codec = await pickCodec();
+    if (!codec) {
       if (gen === this.timelapseGen) rt.store.set({ recording: false });
       if (deliver) void this.exportPng(true, 'This browser can’t record video, so here is an image');
       return null;
@@ -689,7 +689,7 @@ export class Controller implements InputSink {
       if (items.length && content && !cancelled()) {
         const ledger = rt.renderer.ledger;
         res = await recordTimelapse(items, timeline(items.map(it => it.r), timelapseSpeed), {
-          ground: rt.store.get().ground, content, encoder, loop: rt.loop,
+          ground: rt.store.get().ground, content, codec, loop: rt.loop,
           onProgress: f => { progress = f; if (deliver && performance.now() - lastToast > 150) toast(); },
           cancelled,
           alloc: (w, h) => ledger.alloc(w, h, 'export'),
@@ -714,10 +714,10 @@ export class Controller implements InputSink {
 
   /** Share sheet where it takes the file (from the toast's Share tap: it needs a user gesture), else a download. */
   private deliverTimelapse(res: TimelapseResult): void {
-    const name = exportFilename(new Date(), mimeExt(res.mime));
-    const file = typeof File === 'function' ? new File([res.blob], name, { type: res.mime }) : null;
+    const name = exportFilename(new Date(), 'mp4');
+    const file = new File([res.blob], name, { type: res.blob.type });
     const nav = navigator as Navigator & { userActivation?: { isActive: boolean } };
-    if (file && typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare({ files: [file] })) {
+    if (typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare({ files: [file] })) {
       this.timelapseFile = file;
       if (nav.userActivation?.isActive) { void this.shareFile(); return; }
       this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse ready', action: { label: 'Share', intent: { k: 'shareTimelapse' } }, ms: SHARE_TOAST_MS });
