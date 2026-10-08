@@ -331,6 +331,7 @@ export class Controller implements InputSink {
       case 'timelapse': this.hints.shared(); void this.shareTimelapse(true); break;
       case 'cancelTimelapse': this.timelapseCancel = true; break;
       case 'shareTimelapse': void this.shareFile(); break;
+      case 'saveTimelapse': this.saveFile(); break;
       case 'replay': if (!this.busy && !st.replaying) void this.player.start(); break;
       case 'stopReplay': this.player.stop(); break;
     }
@@ -654,8 +655,8 @@ export class Controller implements InputSink {
 
   /**
    * Share timelapse (Shift+P / menu, DESIGN §8): record the replay as a video (export/timelapse.ts)
-   * with a progress toast and Cancel, then share it where the Web Share sheet takes files, else
-   * download it. The recording runs off the app's renderer, so drawing and navigation go on.
+   * with a progress toast and Cancel, then share it from phones and tablets where the Web Share
+   * sheet takes files, else download it. The recording runs off the app's renderer, so drawing and navigation go on.
    * Without WebCodecs H.264 it exports the PNG instead and says why.
    */
   async shareTimelapse(deliver: boolean): Promise<TimelapseResult | null> {
@@ -714,19 +715,25 @@ export class Controller implements InputSink {
     return res;
   }
 
-  /** Share sheet where it takes the file (from the toast's Share tap: it needs a user gesture), else a download. */
+  /**
+   * Phones and tablets: the share sheet (from the toast's Share tap: it needs a user gesture); closing
+   * it turns the toast into Save. Desktops, and browsers whose sheet can't take the file: a download.
+   * Desktop sheets don't reach the apps people post from (Windows' sheet lists few, and its Copy
+   * pastes nothing in Discord), while a downloaded file drags into any of them.
+   */
   private deliverTimelapse(res: TimelapseResult): void {
     const name = exportFilename(new Date(), 'mp4');
     const file = new File([res.blob], name, { type: res.blob.type });
     const nav = navigator as Navigator & { userActivation?: { isActive: boolean } };
-    if (typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare({ files: [file] })) {
+    const sheet = typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare({ files: [file] });
+    if (sheet && this.rt.store.get().isTouch) {
       this.timelapseFile = file;
       if (nav.userActivation?.isActive) { void this.shareFile(); return; }
       this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse ready', action: { label: 'Share', intent: { k: 'shareTimelapse' } }, ms: SHARE_TOAST_MS });
       return;
     }
-    downloadBlob(res.blob, name);
-    this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse saved' });
+    this.timelapseFile = file;
+    this.saveFile();
   }
 
   private async shareFile(): Promise<void> {
@@ -736,11 +743,22 @@ export class Controller implements InputSink {
       await navigator.share({ files: [file], title: SHARE_TITLE, url: this.timelapseUrl });
       this.timelapseFile = null;
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;  // the person closed the sheet
-      this.timelapseFile = null;
-      downloadBlob(file, file.name);
-      this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse saved' });
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // the person closed the sheet: keep the video, and offer it as a file instead
+        this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse ready', action: { label: 'Save', intent: { k: 'saveTimelapse' } }, ms: SHARE_TOAST_MS });
+        return;
+      }
+      this.saveFile();
     }
+  }
+
+  /** Download the finished timelapse (desktops, the toast's Save, or a failed share). */
+  private saveFile(): void {
+    const file = this.timelapseFile;
+    if (!file) return;
+    this.timelapseFile = null;
+    downloadBlob(file, file.name);
+    this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse saved' });
   }
 
   // ================================================================ misc
