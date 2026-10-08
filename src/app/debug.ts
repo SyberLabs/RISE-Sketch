@@ -8,6 +8,7 @@ import { parseDoc, sceneHash, serializeDoc } from '../doc/serialize';
 import { adoptDocument } from './docs';
 import { VERSION } from './version';
 import { prefKeys, prefKey } from '../persist/prefs';
+import { remixUrl } from '../persist/remix';
 import { cook } from '../ink/cook';
 import { paintGround } from '../render/ground';
 import { readStats } from '../render/stats';
@@ -123,6 +124,7 @@ export function installDebug(app: App): void {
       const { meta, strokes } = parseDoc(text);
       adoptDocument(rt, app.ctl, meta, strokes, 'fade');
     },
+    remixUrl: () => remixUrl(rt.doc, VERSION),
     exportPng: async () => (await app.ctl.exportPng(false)) ?? { width: 0, height: 0, bytes: 0 },
     async timelapse() {
       const r = await app.ctl.shareTimelapse(false);

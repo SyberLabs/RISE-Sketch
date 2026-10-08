@@ -123,6 +123,12 @@ reseeds it.
   tall drawing) of the ink growing, on your ground, with a small `sketch.syberlabs.io` mark. Where
   your device can share files, a **Share** button opens the share sheet; otherwise the video
   downloads. You can keep drawing while it records.
+- **Copy remix link** copies a link that carries the drawing itself. Whoever opens it gets that
+  exact drawing as a new document, watches it grow, and can keep drawing on it; their own drawing
+  stays in Recent. The drawing rides in the part of the link after `#`, which browsers never send
+  to a server, so it stays private until you send the link. Links are capped at 32 KB (about 20
+  strokes, or 15 symmetry gestures); a bigger drawing says so, and Save project shares it instead.
+  A shared timelapse carries the remix link when it fits.
 
 ## Building and running
 

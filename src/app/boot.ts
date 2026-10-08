@@ -8,6 +8,8 @@
  *     stands in until the visible tiles are cooked; the rest cooks in background jobs.
  *  4. Controller (input sink, intents, draft, eraser, camera), input on #stage, UI on #chrome.
  *  5. Autosave (batched writes, snapshots while idle), learner (calibration per device class).
+ *  6. A remix link in the address (`#r=…`, now or later) opens as a new document and replays; the
+ *     fragment is removed first, so a reload never imports it twice.
  *
  * Frame participants, in order: the draft (rows -> cook, Rise, closure) · the camera glide and
  * view-chip state · the renderer (live layer, tiles, composite, overlay, bloom) · background jobs.
@@ -29,6 +31,7 @@ import { createUI } from '../ui/index';
 import { openDocStore, type DocStore } from '../persist/idb';
 import { createAutosave, type AutosaveInternal } from '../persist/autosave';
 import { onDropFiles } from '../persist/files';
+import { remixPayload } from '../persist/remix';
 import { prefs } from '../persist/prefs';
 import { createStore } from './store';
 import { createPerf } from './perf';
@@ -187,7 +190,7 @@ export async function boot(o: BootOptions): Promise<App> {
   onDropFiles(o.stage, files => ctl.library.dropped(files));
   // the first-run seed (DESIGN §3.0): plays after 600 ms idle; the first pointerdown anywhere
   // un-grows it, and the same event may start the user's own stroke
-  if (firstRun && doc.size === 0) {
+  if (firstRun && doc.size === 0 && !remixPayload(location.hash)) {
     ctl.player.armSeed();
     const onFirstDown = (): void => { ctl.player.dissolveSeed(); };
     window.addEventListener('pointerdown', onFirstDown, { capture: true, passive: true });
@@ -211,6 +214,14 @@ export async function boot(o: BootOptions): Promise<App> {
   });
   if (!docStore) notAutosaving();
   void ctl.library.refreshRecent();
+  const openLink = (): void => {
+    const payload = remixPayload(location.hash);
+    if (!payload) return;
+    window.history.replaceState(window.history.state, '', location.pathname + location.search);
+    void ctl.library.openRemix(payload);
+  };
+  openLink();
+  window.addEventListener('hashchange', openLink);
 
   const app: App = {
     rt, ctl, stage: o.stage, chrome: o.chrome,

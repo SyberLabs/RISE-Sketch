@@ -93,8 +93,8 @@ describe('Delete', () => {
 });
 
 describe('menu', () => {
-  it('has exactly the eight items of DESIGN §4, in order', () => {
-    expect(menuItems(state()).map(i => i.label)).toEqual(['New', 'Open…', 'Save project', 'Export image', 'Share timelapse', 'Recent', 'Replay', 'Gestures & keys']);
+  it('has exactly the nine items of DESIGN §4, in order', () => {
+    expect(menuItems(state()).map(i => i.label)).toEqual(['New', 'Open…', 'Save project', 'Export image', 'Share timelapse', 'Copy remix link', 'Recent', 'Replay', 'Gestures & keys']);
   });
   it('shows shortcuts on desktop only, with the platform modifier', () => {
     expect(menuItems(state({ isMac: true })).find(i => i.key === 'save')!.kbd).toBe('⌘S');
@@ -117,6 +117,13 @@ describe('menu', () => {
     expect(tl({}).intent).toEqual({ k: 'timelapse' });
     expect(tl({}).kbd).toBe('⇧P');
     expect(tl({ isTouch: true }).kbd).toBe(null);
+  });
+  it('Copy remix link needs ink and has no shortcut', () => {
+    const rm = (s: Parameters<typeof state>[0]) => menuItems(state(s)).find(i => i.key === 'remix')!;
+    expect(rm({}).disabled).toBe(true);
+    expect(rm({ hasInk: true }).disabled).toBe(false);
+    expect(rm({}).intent).toEqual({ k: 'copyRemix' });
+    expect(rm({}).kbd).toBe(null);
   });
 });
 

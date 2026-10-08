@@ -6,7 +6,7 @@
 
 export type IconName =
   | 'mark' | 'undo' | 'redo' | 'trash' | 'arrow' | 'close' | 'back' | 'chevron'
-  | 'plus' | 'open' | 'save' | 'image' | 'clock' | 'play' | 'keys' | 'eraser' | 'reset' | 'share';
+  | 'plus' | 'open' | 'save' | 'image' | 'clock' | 'play' | 'keys' | 'eraser' | 'reset' | 'share' | 'link';
 
 /** Inner markup per icon (viewBox 0 0 24 24). */
 export const ICONS: Readonly<Record<IconName, string>> = {
@@ -44,6 +44,10 @@ export const ICONS: Readonly<Record<IconName, string>> = {
   share:
     '<path d="M13.5 5H6a2.5 2.5 0 0 0-2.5 2.5v9A2.5 2.5 0 0 0 6 19h11a2.5 2.5 0 0 0 2.5-2.5V13"/>' +
     '<path d="M10 9.6v5.3l4.3-2.65z"/><path d="M16.5 3.5h4v4"/><path d="m20.3 3.7-4.6 4.6"/>',
+  // two chain links
+  link:
+    '<path d="M10.2 13.8a3.6 3.6 0 0 0 5.1 0l3.1-3.1a3.6 3.6 0 0 0-5.1-5.1l-1.2 1.2"/>' +
+    '<path d="M13.8 10.2a3.6 3.6 0 0 0-5.1 0l-3.1 3.1a3.6 3.6 0 0 0 5.1 5.1l1.2-1.2"/>',
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

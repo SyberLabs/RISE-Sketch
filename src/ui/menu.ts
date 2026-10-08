@@ -1,6 +1,6 @@
 /**
  * The menu sheet (DESIGN §4): New · Open… · Save project · Export image · Share timelapse ·
- * Recent ▸ · Replay · Gestures & keys. Eight items, no settings. Recent drills into its own view inside the sheet.
+ * Copy remix link · Recent ▸ · Replay · Gestures & keys. Nine items, no settings. Recent drills into its own view inside the sheet.
  * The not-autosaving state shows on the mark (dot) and as a note on Save.
  */
 import type { AppState, Intent } from '../app/types';
@@ -10,7 +10,7 @@ import { createRecent } from './recent';
 import { createSheetFrame, type SheetFrame } from './sheet';
 
 export interface MenuItemSpec {
-  key: 'new' | 'open' | 'save' | 'export' | 'timelapse' | 'recent' | 'replay' | 'help';
+  key: 'new' | 'open' | 'save' | 'export' | 'timelapse' | 'remix' | 'recent' | 'replay' | 'help';
   label: string;
   icon: IconName;
   /** Shortcut hint (desktop only), or the Recent count. */
@@ -21,7 +21,7 @@ export interface MenuItemSpec {
   disabled: boolean;
 }
 
-/** The eight menu items for a state (pure). */
+/** The nine menu items for a state (pure). */
 export function menuItems(s: AppState): MenuItemSpec[] {
   const mod = s.isMac ? '⌘' : 'Ctrl+';
   const keys = !s.isTouch;
@@ -31,6 +31,7 @@ export function menuItems(s: AppState): MenuItemSpec[] {
     { key: 'save', label: 'Save project', icon: 'save', kbd: keys ? `${mod}S` : null, intent: { k: 'save' }, note: s.autosaveOk ? null : 'Not autosaving', disabled: false },
     { key: 'export', label: 'Export image', icon: 'image', kbd: keys ? `${mod}E` : null, intent: { k: 'exportPng' }, note: null, disabled: !s.hasInk || s.exporting },
     { key: 'timelapse', label: 'Share timelapse', icon: 'share', kbd: keys ? '⇧P' : null, intent: { k: 'timelapse' }, note: null, disabled: !s.hasInk || s.recording },
+    { key: 'remix', label: 'Copy remix link', icon: 'link', kbd: null, intent: { k: 'copyRemix' }, note: null, disabled: !s.hasInk },
     { key: 'recent', label: 'Recent', icon: 'clock', kbd: s.recentDocs.length ? String(Math.min(12, s.recentDocs.length)) : null, intent: null, note: null, disabled: false },
     { key: 'replay', label: 'Replay', icon: 'play', kbd: keys ? 'P' : null, intent: { k: 'replay' }, note: null, disabled: !s.hasInk },
     { key: 'help', label: 'Gestures & keys', icon: 'keys', kbd: keys ? '?' : null, intent: { k: 'openSheet', sheet: 'help' }, note: null, disabled: false },

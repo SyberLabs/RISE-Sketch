@@ -22,7 +22,7 @@ export type Intent =
   | { k: 'select'; ids: readonly StrokeId[]; add: boolean } | { k: 'deselect' } | { k: 'selectAll' }
   | { k: 'new' } | { k: 'open'; file: File } | { k: 'openPicker' }
   | { k: 'openRecent'; id: string } | { k: 'deleteRecent'; id: string }
-  | { k: 'save' } | { k: 'exportPng' } | { k: 'cancelExport' }
+  | { k: 'save' } | { k: 'exportPng' } | { k: 'cancelExport' } | { k: 'copyRemix' }
   /** Share timelapse: record (Shift+P / menu), cancel the recording, share the finished video (toast action). */
   | { k: 'timelapse' } | { k: 'cancelTimelapse' } | { k: 'shareTimelapse' }
   | { k: 'replay' } | { k: 'stopReplay' }
@@ -115,6 +115,8 @@ export interface RiseDebug {
   /** Serialise / load the current document as .rise text. */
   serialize(): string;
   load(text: string): Promise<void>;
+  /** The current document's remix link (persist/remix.ts), or null when it is too big. */
+  remixUrl(): Promise<string | null>;
   exportPng(): Promise<{ width: number; height: number; bytes: number }>;
   /**
    * Record the timelapse without delivering it. `url` is an object URL of the video (the e2e loads
