@@ -29,7 +29,7 @@ import type {
 import type { Halo, LiveCopy } from '../render/types';
 import { PL, S } from '../core/types';
 import { createInkCook, type InkIncrementalCook } from '../ink/cook';
-import { createRise, type Rise, type RiseInput } from '../ink/rise';
+import { createRise, LIFT_GUARD_MS, type Rise, type RiseInput } from '../ink/rise';
 import { closureRadius, closureTest } from '../ink/envelope';
 import { nibWidth } from '../ink/nibs';
 import { CURRENT_V, FORMS } from '../ink/operators/registry';
@@ -92,6 +92,8 @@ class Live {
   curCS = 0;
   travel = 0;
   quietUntil = 0;
+  /** Stroke clock of the last Rise step. */
+  riseT = -Infinity;
   /** Stroke clock of the physical lift (touch taps), NaN until then. */
   tUp = NaN;
   haloOn = false;
@@ -242,6 +244,7 @@ export class Drafts {
       const inp = this.inp;
       inp.x = tip.x; inp.y = tip.y; inp.s = tip.s; inp.p = tip.p; inp.now = tNow; inp.travel = tip.travel;
       const out = L.rise.step(inp, L.d.pools, L.d.form.base, this.ceil);
+      L.riseT = tNow;
       if (out.changed) {
         L.cook.regrow(out.changed.s0, out.changed.s1);
         changed = true;
@@ -310,9 +313,19 @@ export class Drafts {
     }
     if (L.pending > 0) { L.cook.append(L.pending); L.pending = 0; }
     const d = L.d, b = d.samples;
+    const tUp = L.tUp === L.tUp ? L.tUp : Math.max(L.lastT, performance.now() - L.t0);
+    // Rise steps on rAF. When no frame stepped it since the guard time (a stalled frame loop: a
+    // long task, a GPU stall), step it there once, so a hold the input shows is not lost to frame timing
+    const tg = tUp - LIFT_GUARD_MS;
+    if (tg > L.riseT) {
+      const tip = L.cook.tip(tg), inp = this.inp;
+      inp.x = tip.x; inp.y = tip.y; inp.s = tip.s; inp.p = tip.p; inp.now = tg; inp.travel = tip.travel;
+      const out = L.rise.step(inp, d.pools, d.form.base, s => L.cook.ceiling(s)); // this.cur is already null
+      if (out.changed) L.cook.regrow(out.changed.s0, out.changed.s1);
+      if (out.hold && out.level > L.maxLevel) L.maxLevel = out.level;
+    }
     // the final pointer-up row: the last row again at the lift time, so a dwell before lift
     // (mouse and touch send nothing while still) reaches the seated-stop test
-    const tUp = L.tUp === L.tUp ? L.tUp : Math.max(L.lastT, performance.now() - L.t0);
     if (b.n > 0 && tUp > L.lastT + 0.25) {
       ensureRows(b, b.n + 1, S.STRIDE);
       const o = b.n * S.STRIDE, p = o - S.STRIDE;

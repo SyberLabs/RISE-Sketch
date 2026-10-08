@@ -28,12 +28,16 @@ export async function launch({ width = 1280, height = 820, dpr = 1, url, touch =
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: dpr, hasTouch: touch, isMobile: false });
   const errors = [];
+  // why a target went away ("Target closed"): a renderer crash, or the browser process exiting
+  const gone = [];
+  page.on('error', e => gone.push('renderer crashed: ' + (e?.message || e)));
+  browser.process()?.on('exit', (code, signal) => gone.push(`browser process exited (code ${code}, signal ${signal})`));
   page.on('pageerror', e => errors.push('pageerror: ' + (e?.stack || e)));
   page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   const target = url || pathToFileURL(resolve('dist-single/index.html')).href;
   await page.goto(target, { waitUntil: 'load' });
   const cdp = await page.createCDPSession();
-  return { browser, page, cdp, errors };
+  return { browser, page, cdp, errors, gone };
 }
 
 /** points: [[x, y, pressure?, tiltX?, tiltY?], ...] in CSS px */

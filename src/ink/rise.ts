@@ -104,6 +104,7 @@ class RiseImpl implements Rise {
   private readonly ja = new Float64Array(JOURNAL);
   private readonly j1 = new Float64Array(JOURNAL);
   private readonly jn = new Int32Array(JOURNAL);   // -1: edit; ≥ 0: row created, n before
+  private readonly js = new Float64Array(JOURNAL);  // edit: start of the interval it integrated
   private jHead = 0; private jCount = 0;
 
   private readonly out: RiseOut = { phase: 'moving', pre: 0, level: 0, brim: false, changed: null, hold: null };
@@ -156,9 +157,9 @@ class RiseImpl implements Rise {
     return this.hp[(this.hHead - this.hCount + HIST) % HIST];
   }
 
-  private journal(now: number, idx: number, prevA: number, prevT1: number, createdFromN: number): void {
+  private journal(now: number, idx: number, prevA: number, prevT1: number, createdFromN: number, from = now): void {
     const i = this.jHead;
-    this.jt[i] = now; this.ji[i] = idx; this.ja[i] = prevA; this.j1[i] = prevT1; this.jn[i] = createdFromN;
+    this.jt[i] = now; this.ji[i] = idx; this.ja[i] = prevA; this.j1[i] = prevT1; this.jn[i] = createdFromN; this.js[i] = from;
     this.jHead = (i + 1) % JOURNAL;
     if (this.jCount < JOURNAL) this.jCount++;
   }
@@ -175,6 +176,7 @@ class RiseImpl implements Rise {
     return base + m;
   }
 
+  /** Open (or continue) the hold's row; `now` is the pooling onset, which a late frame may postdate. */
   private startPool(pools: PoolBuf, base: number, now: number): void {
     const s = this.holdS, d = pools.data;
     let idx = -1, near = -1, nd = Infinity;
@@ -206,14 +208,17 @@ class RiseImpl implements Rise {
     this.poolIdx = idx;
   }
 
-  /** Store the continuous level into the row (quantised); returns true if the stored value changed. */
-  private store(pools: PoolBuf, now: number, maxA: number): boolean {
+  /**
+   * Store the continuous level into the row (quantised); returns true if the stored value changed.
+   * `from` is the start of the interval this step integrated (the lift guard interpolates it).
+   */
+  private store(pools: PoolBuf, now: number, maxA: number, from: number): boolean {
     const o = this.poolIdx * PL.STRIDE, d = pools.data;
     let q = Math.round(this.aCont * 16) / 16;
     // the ceiling stops rising; it never lowers a row below what it already holds
     if (q > maxA + 1e-9) q = Math.max(Math.floor(maxA * 16) / 16, Math.min(q, d[o + PL.A]));
     if (q === d[o + PL.A]) return false;
-    this.journal(now, this.poolIdx, d[o + PL.A], d[o + PL.T1], -1);
+    this.journal(now, this.poolIdx, d[o + PL.A], d[o + PL.T1], -1, from);
     d[o + PL.A] = q; d[o + PL.T1] = now;
     if (q > 0) this.roseFlag = true;
     return true;
@@ -254,7 +259,8 @@ class RiseImpl implements Rise {
     if (this.phase === 'prehalo') {
       const el = now - this.stillStart;
       if (el >= this.poolT) {
-        this.startPool(pools, base, now);
+        // dated at the onset, not at this step: a late frame (a stalled loop) must not move it
+        this.startPool(pools, base, this.stillStart + this.poolT);
         started = true;
         this.phase = 'pooling';
         poolDt = Math.min(dt, el - this.poolT);
@@ -283,7 +289,7 @@ class RiseImpl implements Rise {
         this.aCont = Math.max(0, this.aCont - SETTLE_RATE * poolDt / 1000);
         this.phase = 'settling';
       } else this.phase = 'paused';
-      if (this.store(pools, now, maxA)) {
+      if (this.store(pools, now, maxA, now - poolDt)) {
         this.chg.s0 = s - POOL_BACK; this.chg.s1 = s + POOL_AHEAD;
         out.changed = this.chg;
       }
@@ -309,9 +315,15 @@ class RiseImpl implements Rise {
     while (this.jCount > 0) {
       const i = (this.jHead - 1 + JOURNAL) % JOURNAL;
       if (!(this.jt[i] > cut)) break;
-      const idx = this.ji[i];
+      const idx = this.ji[i], from = this.js[i];
       if (this.jn[i] >= 0) pools.n = this.jn[i];
-      else if (idx < pools.n) { d[idx * PL.STRIDE + PL.A] = this.ja[i]; d[idx * PL.STRIDE + PL.T1] = this.j1[i]; }
+      else if (idx < pools.n && from < cut) {
+        // the edit integrated [from, jt], which straddles the cut (frames were sparse): take the
+        // level at the cut, so the result depends on the hold and not on when frames came
+        const o = idx * PL.STRIDE, a0 = this.ja[i];
+        d[o + PL.A] = Math.round((a0 + (d[o + PL.A] - a0) * (cut - from) / (this.jt[i] - from)) * 16) / 16;
+        d[o + PL.T1] = cut;
+      } else if (idx < pools.n) { d[idx * PL.STRIDE + PL.A] = this.ja[i]; d[idx * PL.STRIDE + PL.T1] = this.j1[i]; }
       this.jHead = i; this.jCount--;
     }
     let rose = false;

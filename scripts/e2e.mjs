@@ -93,8 +93,10 @@ async function scenario(name, fn, opts) {
     results.push({ name, ok: true, ms: Date.now() - t0 });
     console.log(`  PASS ${name} (${Date.now() - t0} ms)`);
   } catch (e) {
-    results.push({ name, ok: false, ms: Date.now() - t0, err: String(e && e.stack || e) });
-    console.log(`  FAIL ${name}: ${e && e.message}`);
+    if (env && !env.browser.connected) await sleep(500); // let the exit status arrive
+    const why = env && env.gone.length ? ` [${env.gone.join('; ')}]` : '';
+    results.push({ name, ok: false, ms: Date.now() - t0, err: String(e && e.stack || e) + why });
+    console.log(`  FAIL ${name}: ${e && e.message}${why}`);
     if (env) { try { await shot(env.page, `FAIL-${name}`); } catch {} }
   } finally {
     if (env) await env.browser.close();
@@ -447,10 +449,10 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
   await R(page, () => { Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true }); });
   await key(page, 'P', ['Shift']);
-  await sleep(100);
   let st = await R(page, () => window.__rise.state());
   assert(st.recording, 'Shift+P starts recording');
-  assert(await R(page, () => document.querySelector('.r-toast')?.textContent || '') .then(t => /Recording timelapse/.test(t)), 'a progress toast shows');
+  // the toast follows the async encoder probe (VideoEncoder.isConfigSupported), which takes no fixed time
+  assert(await page.waitForFunction(() => /Recording timelapse/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 10000 }).then(() => true, () => false), 'a progress toast shows');
   // drawing goes on while it records
   await penStroke(cdp, line(200, 700, 420, 690, 20));
   await page.waitForFunction(() => !window.__rise.state().recording, { timeout: 90000 });
@@ -780,7 +782,9 @@ await scenario('symmetry', async ({ page, cdp }) => {
   await ev('mouseMoved', pts[0], { force: 0, buttons: 0 });
   await ev('mousePressed', pts[0], { clickCount: 1 });
   for (let i = 1; i < pts.length; i++) { await ev('mouseMoved', pts[i]); await sleep(4); }
-  await sleep(250);
+  // probing with the pen down and still is a hold: a short one rose or not depending on how long
+  // the probe took, and a rise adds a peel step to the undo below. Hold long enough that it rises.
+  await sleep(1400);
   const liveInk = await probeAt(rot(mid));
   await ev('mouseReleased', pts[pts.length - 1], { buttons: 0, clickCount: 1, force: 0 });
   await idle(page);
@@ -797,9 +801,14 @@ await scenario('symmetry', async ({ page, cdp }) => {
   assert(/"version":2/.test(doc), 'the file is format v2');
   await shot(page, 'symmetry-6');
   const h = await R(page, () => window.__rise.sceneHash());
+  assert((await last(page)).pools >= 1, 'the hold under the probe rose');
+  await dispatch(page, { k: 'undo' });
+  await idle(page);
+  assert(await count(page) === 6 && (await last(page)).pools === 0, 'the first undo peels the pools, keeping the copies');
   await dispatch(page, { k: 'undo' });
   await idle(page);
   assert(await count(page) === 0, `one undo removes every copy (left ${await count(page)})`);
+  await dispatch(page, { k: 'redo' });
   await dispatch(page, { k: 'redo' });
   await idle(page);
   assert(await count(page) === 6 && await R(page, () => window.__rise.sceneHash()) === h, 'redo restores all six');
