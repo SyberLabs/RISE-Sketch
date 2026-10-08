@@ -31,6 +31,20 @@ export const FORM_NAMES: Readonly<Record<FormId, string>> = {
 };
 const GROUND_NAMES = { night: 'Night', paper: 'Paper' } as const;
 
+/** Spoke glyph of a fold count (inline SVG, 16 px): Mirror is an axis between two facing ticks. Pure. */
+export function foldsGlyph(folds: number): string {
+  const p: string[] = [];
+  if (folds === 2) p.push('M8 1.5V14.5', 'M2.5 5.5 5.5 8 2.5 10.5', 'M13.5 5.5 10.5 8 13.5 10.5');
+  else {
+    for (let i = 0; i < folds; i++) {
+      const t = -Math.PI / 2 + (2 * Math.PI * i) / folds;
+      const x = (8 + 6.5 * Math.cos(t)).toFixed(2), y = (8 + 6.5 * Math.sin(t)).toFixed(2);
+      p.push(`M8 8L${x} ${y}`);
+    }
+  }
+  return `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="${p.join('')}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 // ============================================================================ amount maths (pure)
 
 /** Stroke chip: S' = S·2^(−Δy/60), 60 px per doubling (DESIGN §2.2.1). */
@@ -90,8 +104,10 @@ export function chipLabel(which: ChipKind, s: AppState): string {
       return `Stroke: ${NIB_NAMES[t.nib]}, size ${fmtSize(t.sizes[t.nib])}. Drag up or down to change ${target ? target + ' ' : ''}size.`;
     case 'color':
       return `Color: ${INK_NAMES[t.ink]} on ${GROUND_NAMES[s.ground]}. Drag sideways for hue, up or down for tone${target ? ' of the selection' : ''}.`;
-    case 'form':
-      return `Form: ${FORM_NAMES[t.form]}, depth ${fmtDepth(t.base[t.form])}. Drag up or down to change ${target ? target + ' ' : ''}depth.`;
+    case 'form': {
+      const sym = t.sym.on ? ` Symmetry: ${t.sym.folds === 2 ? 'Mirror' : `kaleidoscope, ${t.sym.folds}-fold`}.` : '';
+      return `Form: ${FORM_NAMES[t.form]}, depth ${fmtDepth(t.base[t.form])}.${sym} Drag up or down to change ${target ? target + ' ' : ''}depth.`;
+    }
   }
 }
 
@@ -325,6 +341,15 @@ export function createChip(which: ChipKind, ctx: UICtx): Chip {
   canvas.className = 'r-glyph';
   canvas.setAttribute('aria-hidden', 'true');
   el.appendChild(canvas);
+  // the Form chip shows the symmetry state (DESIGN §4): a small spoke badge, not a control
+  let badge: HTMLSpanElement | null = null, badgeFolds = -1;
+  if (which === 'form') {
+    badge = document.createElement('span');
+    badge.className = 'r-symbadge';
+    badge.setAttribute('aria-hidden', 'true');
+    badge.hidden = true;
+    el.appendChild(badge);
+  }
 
   let pendingRaf = 0, pulseTimer = 0;
   let lastDx = 0, lastDy = 0, lastDepth = 0;
@@ -421,6 +446,11 @@ export function createChip(which: ChipKind, ctx: UICtx): Chip {
         // In erase mode a tap returns to the last nib instead of opening the sheet.
         if (erase) el.removeAttribute('aria-haspopup');
         else el.setAttribute('aria-haspopup', 'dialog');
+      }
+      if (badge) {
+        const sym = s.tool.sym;
+        badge.hidden = !sym.on;
+        if (sym.on && badgeFolds !== sym.folds) { badgeFolds = sym.folds; badge.innerHTML = foldsGlyph(sym.folds); }
       }
       // The tool object is replaced on every change; the Glyphs implementation caches renders.
       if (force || !prev || prev.tool !== s.tool || prev.ground !== s.ground) stale = true;

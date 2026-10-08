@@ -67,6 +67,7 @@ import { NIBS, CHISEL_CORE, chiselAngle } from './nibs';
 import { rowsOf, entrySpeed, entryKnown } from './signals';
 import { CurlField } from './noise';
 import { operatorFor } from './operators/registry';
+import { placeCooked, placeSpine } from './symmetry';
 import { line } from './operators/line.v1';
 import {
   Plan, planCrystal, buildCrystal, emitCrystal, echoGhost, crystalBucket, crystalFade, spineMeans, chordSp, MIN_CHORD,
@@ -666,7 +667,7 @@ class Cook implements InkIncrementalCook {
     if (crystal && fromBuf && crystal.nPolys > 0) morph = foldOut(out, fromBuf, liftT, ceilingMax);
     this.doneView = { geom: out, ghost: null, morph };
     this.queue = []; this.pending.clear();
-    spineCache.set(r, sp);
+    if (!r.xf) spineCache.set(r, sp); // a placed recipe's spine is placed lazily by spineOf
     return out;
   }
 
@@ -1028,13 +1029,19 @@ export function draftOf(r: StrokeRecipe): DraftStroke {
   };
 }
 
-/** cook(r) ≡ createIncrementalCook(draftOf(r)).finish(r). Pure: reads only the recipe. */
-export const cook: CookFn = (r: StrokeRecipe): Cooked => createIncrementalCook(draftOf(r)).finish(r);
+/**
+ * cook(r) ≡ createIncrementalCook(draftOf(r)).finish(r), placed by `r.xf` when the recipe has one
+ * (symmetry copies, ink/symmetry.ts). Pure: reads only the recipe.
+ */
+export const cook: CookFn = (r: StrokeRecipe): Cooked => {
+  const c = createIncrementalCook(draftOf(r)).finish(r);
+  return r.xf ? placeCooked(c, r.xf, r.origin) : c;
+};
 
-/** Spine of a committed recipe, cached per recipe object (hit tests, lasso, lineage). */
+/** Spine of a committed recipe where its ink lies (placed by `xf`), cached per recipe object (hit tests, lasso, lineage). */
 export function spineOf(r: StrokeRecipe): Spine {
   let sp = spineCache.get(r);
-  if (!sp) { sp = buildSpine(r); spineCache.set(r, sp); }
+  if (!sp) { sp = buildSpine(r); if (r.xf) sp = placeSpine(sp, r.xf); spineCache.set(r, sp); }
   return sp;
 }
 

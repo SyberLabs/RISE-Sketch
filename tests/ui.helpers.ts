@@ -8,7 +8,7 @@ export function state(patch: Partial<AppState> = {}): AppState {
       sizes: { pen: 2.5, brush: 9, chisel: 12, charcoal: 7 },
       ink: 'moss', custom: null, recents: [],
       form: 'sprout', base: { line: 0, echo: 2, sprout: 2, drift: 2, ripple: 2, craze: 2, plume: 2, caustic: 2, burin: 2, plait: 2, orbit: 2 },
-      mode: 'draw', mirror: null,
+      mode: 'draw', sym: { on: false, folds: 6, cx: 0, cy: 0 },
     },
     ground: 'night', selection: [], selectionRect: null, canUndo: false, canRedo: false, hasInk: false,
     zoom: 100, inkInView: true, inkDirection: null, chromeHidden: false, sheet: null, lastRecipe: null,

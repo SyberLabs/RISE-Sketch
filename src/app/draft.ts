@@ -18,9 +18,13 @@
  *             scene.putFor, learner.observe(…, z), live.commit. Touch taps get their strokeEnd up
  *             to 300 ms late (double-tap window): contact(false) is the lift there.
  *  withdraw   live.withdraw (un-grow, no history).
+ *  symmetry   With the tool's symmetry on, pen-down also fixes the copies' placements (about the
+ *             tool's centre) and colours; the live layer draws the one cook once per copy, and the
+ *             lift commits the stroke and its copies in the same add (and peel replace), so one
+ *             undo removes the whole gesture (ink/symmetry.ts).
  */
 import type {
-  Command, Device, DraftStroke, InputSample, NibId, PoolBuf, SampleBuf, StrokeId, StrokeRecipe,
+  ColorStyle, Command, Cooked, Device, DraftStroke, InputSample, Mat2x3, NibId, PoolBuf, SampleBuf, StrokeId, StrokeRecipe,
 } from '../core/types';
 import type { Halo } from '../render/types';
 import { PL, S } from '../core/types';
@@ -31,6 +35,7 @@ import { nibWidth } from '../ink/nibs';
 import { CURRENT_V, FORMS } from '../ink/operators/registry';
 import { assignVariant, swatchCss } from '../ink/color';
 import { continuationSamples, RESUME } from '../ink/spine';
+import { copyColor, placeCooked, symmetryXfs } from '../ink/symmetry';
 import { addCmd, batchCmd, freezeRecipe, peelCommands } from '../doc/commands';
 import type { Runtime } from './runtime';
 import type { View } from './view';
@@ -97,6 +102,8 @@ class Live {
   maxLevel = 0;
   /** Committed pieces of an auto-split stroke (one history batch at the end). */
   readonly pieces: { cmd: Command; inv: Command }[] = [];
+  /** Symmetry copies: placement and colour of each, fixed at pen-down. */
+  copies: { xf: Mat2x3; color: ColorStyle }[] = [];
 
   constructor(d: Mutable<DraftStroke>, cook: InkIncrementalCook, rise: Rise, id: StrokeId, created: number,
     device: Device, t0: number, sx0: number, sy0: number) {
@@ -153,10 +160,14 @@ export class Drafts {
     L.cX = s.x; L.cY = s.y;
     L.curC = rt.scene.crowding(ox, oy, z);
     L.curCS = 0;
+    if (t.sym.on) {
+      const { folds, cx, cy } = t.sym;
+      L.copies = symmetryXfs(folds, cx, cy, d.origin).map((xf, k) => ({ xf, color: copyColor(color, k + 1, folds) }));
+    }
     this.cur = L;
     this.row(L, s);
     rt.renderer.overlay.cursor(null, null);
-    rt.renderer.live.begin(d, cook);
+    rt.renderer.live.begin(d, cook, L.copies.length ? L.copies : undefined);
     rt.loop.request();
   }
 
@@ -319,17 +330,18 @@ export class Drafts {
     const r = this.freeze(L, d.cut, radial);
     const c = L.cook.finish(r);
     rt.scene.putFor(r, c);
+    const copies = this.copiesOf(L, r, c);
     if (L.pieces.length) {
-      const cmd = addCmd([r]);
+      const cmd = addCmd([r, ...copies.map(x => x.r)]);
       const inv = rt.doc.apply(cmd);
       this.pushPieces(L, cmd, inv);
     } else {
-      for (const cmd of peelCommands(r)) {
+      for (const cmd of peelCommands(r, copies.map(x => x.r))) {
         const inv = rt.doc.apply(cmd);
         rt.history.push(cmd, inv);
       }
     }
-    rt.renderer.live.commit(r, c);
+    rt.renderer.live.commit(r, c, copies.length ? copies : undefined);
     this.observe(L.device, r.samples, L.cook.jitter(), L.z);
     this.ev.committed(r, L.maxLevel);
   }
@@ -364,6 +376,20 @@ export class Drafts {
     });
   }
 
+  /**
+   * The symmetry copies of a frozen stroke: the same recipe under a new id, its own colour and
+   * placement; their geometry is the stroke's, placed (≡ cook(copy)). Registered with the scene.
+   */
+  private copiesOf(L: Live, r: StrokeRecipe, c: Cooked): { r: StrokeRecipe; c: Cooked }[] {
+    if (!L.copies.length) return [];
+    return L.copies.map(cp => {
+      const rk = freezeRecipe({ ...r, id: this.rt.doc.nextId(), color: cp.color, xf: cp.xf });
+      const ck = placeCooked(c, cp.xf, r.origin);
+      this.rt.scene.putFor(rk, ck);
+      return { r: rk, c: ck };
+    });
+  }
+
   /** The pieces of a split stroke are one history entry: a batch of adds. */
   private pushPieces(L: Live, last: Command | null, lastInv: Command | null): void {
     const cmds = L.pieces.map(p => p.cmd), invs = L.pieces.map(p => p.inv);
@@ -385,11 +411,12 @@ export class Drafts {
     const piece = this.freeze(L, d.cut | 2, false);
     const c = L.cook.finish(piece);
     rt.scene.putFor(piece, c);
-    const cmd = addCmd([piece]);
+    const copies = this.copiesOf(L, piece, c);
+    const cmd = addCmd([piece, ...copies.map(x => x.r)]);
     L.pieces.push({ cmd, inv: rt.doc.apply(cmd) });
     if (L.haloOn) { rt.renderer.live.halo(null); L.haloOn = false; }
     rt.renderer.overlay.weld(null, 0);
-    rt.renderer.live.commit(piece, c);
+    rt.renderer.live.commit(piece, c, copies.length ? copies : undefined);
     this.observe(L.device, piece.samples, L.cook.jitter(), L.z);
     // the continuation: same origin, its first row on the snapshot station
     const rows = continuationSamples(d.samples.data, d.samples.n, snap);
@@ -407,7 +434,7 @@ export class Drafts {
     L.pending = n;
     L.spineN = -1;
     L.quietUntil = L.travel + SEAM_QUIET;
-    rt.renderer.live.begin(next, L.cook);
+    rt.renderer.live.begin(next, L.cook, L.copies.length ? L.copies : undefined);
   }
 }
 

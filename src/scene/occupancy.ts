@@ -45,6 +45,7 @@ import type { AABB, StrokeRecipe } from '../core/types';
 import { pow2i } from '../core/det';
 import { smoothstep } from '../core/num';
 import { RTree } from './rtree';
+import { placedSamples } from '../ink/symmetry';
 
 export interface Occupancy {
   add(r: StrokeRecipe): void; remove(r: StrokeRecipe): void; clear(): void;
@@ -140,7 +141,14 @@ export function sameBits(a: Float32Array | null, b: Float32Array | null): boolea
 /** True when two recipes splat identically (everything the occupancy grid reads). */
 export const sameFootprint = (a: StrokeRecipe, b: StrokeRecipe): boolean =>
   a === b || (a.origin[0] === b.origin[0] && a.origin[1] === b.origin[1] && a.z === b.z &&
-    a.stroke.size === b.stroke.size && sameBits(a.samples, b.samples));
+    a.stroke.size === b.stroke.size && sameBits(a.samples, b.samples) && sameXf(a.xf, b.xf));
+
+const sameXf = (a: Float64Array | null, b: Float64Array | null): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  for (let i = 0; i < 6; i++) if (a[i] !== b[i]) return false;
+  return true;
+};
 
 /** True for finite numbers (false for NaN and ±Infinity). */
 const finite = (v: number): boolean => v - v === 0;
@@ -332,7 +340,7 @@ export function createOccupancy(): OccupancyGrid {
    * Returns the number of sample rows walked.
    */
   function splat(r: StrokeRecipe, l: number, sign: number): number {
-    const smp = r.samples;
+    const smp = placedSamples(r);
     const n = (smp.length / S.STRIDE) | 0;
     const w = capsuleWidth(r);
     if (n === 0 || w === 0) return 0;
@@ -375,7 +383,7 @@ export function createOccupancy(): OccupancyGrid {
    */
   function memberBox(r: StrokeRecipe): AABB | null {
     const w = capsuleWidth(r);
-    const smp = r.samples;
+    const smp = placedSamples(r);
     const n = (smp.length / S.STRIDE) | 0;
     if (w === 0 || n === 0) return null;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;

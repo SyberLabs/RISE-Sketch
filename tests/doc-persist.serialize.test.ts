@@ -5,13 +5,17 @@ import type { DocMeta, StrokeRecipe } from '../src/core/types';
 import { freezeRecipe, patchRecipe } from '../src/doc/commands';
 import { createDoc, newMeta } from '../src/doc/document';
 import { base64ToBytes, bytesToBase64, decodeF32, encodeF32, FORMAT_VERSION, parseDoc, RiseFormatError, sampleTimeFault, sceneHash, serializeDoc } from '../src/doc/serialize';
+import { symmetryXf } from '../src/ink/symmetry';
 import { CALIB, makeSamples, randomRecipe, recipeDiff, sameBits, seeded } from './doc-persist.helpers';
 
 const APP = 'rise-sketch@0.1.0';
+/** Golden sceneHash of doc-v2.rise (the v1 fixture document plus a Mirror copy and two radial copies). */
+const V2_HASH = 0xddd18cb6;
 const FIXTURE_DIR = join(__dirname, 'fixtures');
-/** Committed v1 fixture and its golden sceneHash (DESIGN §7.6: every format fixture migrates to it). */
+/** Committed fixtures and their golden sceneHash (DESIGN §7.6: every format fixture migrates to it). */
 const FIXTURES: { file: string; version: number; hash: number; strokes: number }[] = [
   { file: 'doc-v1.rise', version: 1, hash: 0x059a1552, strokes: 7 },
+  { file: 'doc-v2.rise', version: 2, hash: V2_HASH, strokes: 10 },
 ];
 
 function expectSameRecipes(a: readonly StrokeRecipe[], b: readonly StrokeRecipe[]): void {
@@ -168,7 +172,7 @@ describe('.rise serialisation', () => {
     const { meta, strokes } = buildFixture();
     const text = serializeDoc(meta, strokes.slice().reverse(), APP);
     const lines = text.trimEnd().split('\n');
-    expect(lines[0]).toBe('{"format":"rise","version":1,"app":"rise-sketch@0.1.0",');
+    expect(lines[0]).toBe('{"format":"rise","version":2,"app":"rise-sketch@0.1.0",');
     expect(lines[1].startsWith('"meta":{"title":')).toBe(true);
     expect(lines.length).toBe(3 + strokes.length + 1);
     const json = JSON.parse(text);
@@ -349,9 +353,9 @@ describe('sceneHash', () => {
 });
 
 describe('format fixtures', () => {
-  it('the committed v1 fixture is what the writer produces for the fixture document', () => {
-    const path = join(FIXTURE_DIR, 'doc-v1.rise');
-    const { meta, strokes } = buildFixture();
+  it('the committed v2 fixture is what the writer produces for the fixture document (plus symmetry copies)', () => {
+    const path = join(FIXTURE_DIR, 'doc-v2.rise');
+    const { meta, strokes } = buildV2Fixture();
     const text = serializeDoc(meta, strokes, APP);
     if (process.env.RISE_UPDATE_FIXTURES === '1' || !existsSync(path)) {
       mkdirSync(FIXTURE_DIR, { recursive: true });
@@ -375,4 +379,33 @@ describe('format fixtures', () => {
       expect(sceneHash(doc.ordered())).toBe(fx.hash);
     });
   }
+});
+
+/** The fixture document plus symmetry copies of its first stroke (Mirror, and 3-fold radial, Spectral hue offsets). */
+function buildV2Fixture(): { meta: DocMeta; strokes: StrokeRecipe[] } {
+  const { meta, strokes } = buildFixture();
+  const r = strokes[0];
+  const extra: StrokeRecipe[] = [];
+  const mk = (id: string, folds: number, i: number) => freezeRecipe({
+    ...r, id, xf: symmetryXf(folds, i, r.origin[0] + 37.5, r.origin[1] - 12.25, r.origin),
+    color: { ...r.color, dh: (r.color.dh + (360 * i) / folds) % 360 },
+  });
+  extra.push(mk(r.id + 'm', 2, 1), mk(r.id + 'r', 3, 1), mk(r.id + 's', 3, 2));
+  return { meta, strokes: [...strokes, ...extra] };
+}
+
+describe('format v2: symmetry copies', () => {
+  it('round-trips xf bit-exactly', () => {
+    const { meta, strokes } = buildV2Fixture();
+    const back = parseDoc(serializeDoc(meta, strokes, APP), { id: 'x' });
+    expectSameRecipes(strokes.slice().sort((a, b) => (a.id < b.id ? -1 : 1)), back.strokes);
+    expect(sceneHash(back.strokes)).toBe(sceneHash(strokes));
+  });
+
+  it('a v1 file never placed its strokes: the migration clears any xf', () => {
+    const { meta, strokes } = buildV2Fixture();
+    const text = serializeDoc(meta, strokes, APP).replace('"version":2', '"version":1');
+    const back = parseDoc(text, { id: 'y' });
+    expect(back.strokes.every(r => r.xf === null)).toBe(true);
+  });
 });

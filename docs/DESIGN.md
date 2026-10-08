@@ -96,7 +96,7 @@ Rise is a drawing instrument in which every mark is alive.
 | Conditional | **Redo** appears after an undo and stays until the next new command. The **view chip** appears when zoom ≠ 100%, or when the document has ink but none is in view. **Absolute max 7.** |
 | Selection | **6**: the 3 chips, Undo, Redo, Delete. Menu and the view chip hide. |
 | Drawing | **0** |
-| Any sheet | At most 9 tiles plus one two-way switch. **Exception:** the Form sheet shows all 10 Forms, in two rows of 5 on desktop (§13). |
+| Any sheet | At most 9 tiles plus one two-way switch. **Exception:** the Form sheet shows all 10 Forms, in two rows of 5 on desktop (§13). Its one switch is Free \| Symmetry (§2.3.1). |
 | Toast | One at a time, with at most one action, and only for the events listed in §4 |
 | Sliders / numeric readouts | **0 / 1** |
 
@@ -264,7 +264,12 @@ The six lab Forms were designed and judged in `lab/forms` (briefs in `lab/forms/
 - **Feedback:** the chip glyph re-renders at the new depth. No number is shown.
 - **Depth 0** is the bare nib for every Form.
 
-**Mirror** (P1) is the only toggle in the Form sheet (§11).
+**Symmetry** (Mirror and kaleidoscope; shipped, §13 After the build #6) is the Form sheet's one two-way switch, **Free | Symmetry**.
+- **Tap** toggles it. Turning it on centres it on the view centre at that moment (doc coordinates, kept in tool state). To move the centre: off, look elsewhere, on. A document switch re-centres it on the new view.
+- **Drag the switch sideways** to step the fold count, 28 px per step, clamped: **Mirror** (2: a reflection across the vertical axis through the centre), then **3, 4, 5, 6, 8, 12** radial copies (360°/n). Default 6. ArrowLeft/Right on the focused switch step it; `M` toggles and `Shift+M` cycles the count (§5). This is the chip rule (tap a kind, drag an amount): the switch has no track and shows no number; the count shows as a spoke glyph on the switch and as a badge on the Form chip.
+- **Guide:** a non-interactive 1 CSS px hairline at 15 % of the ground's text colour on the overlay, at rest and while drawing: the vertical axis for Mirror, otherwise one spoke per fold from a 4 px ring at the centre. It is feedback, never a target (the P1 list's "draggable at rest" axis was not built: a grab target on the canvas would steal pen-downs near the centre).
+- **What it makes:** every stroke drawn with symmetry on becomes `n` strokes: the stroke and `n − 1` copies. A copy is a full recipe with its own id that shares every geometry input with the stroke (samples, seed, calib, pools, base) and carries a placement `xf` (§7.2, §7.5 rule 8). `cook(copy)` cooks those inputs exactly as the stroke and then places the result, so every petal is the bit-exact transform of the stroke's geometry (a Sprout branches the same way in every copy) and the live copies are exactly what is committed. With **Spectral** ink copy `i` takes `dh += 360°·i/n`, stored in its recipe (§2.4.2): a six-fold mandala is a rainbow wheel, a Mirror pair complementary. Other inks keep the stroke's colour.
+- After the gesture each copy is an ordinary stroke: erased, selected and restyled on its own. Undo/redo, `R` on the last stroke (it reseeds the whole last gesture with one shared new seed) and Replay (copies play together) treat the gesture as one.
 
 #### 2.3.2 Depth field: base plus pools
 
@@ -645,7 +650,7 @@ Colour maths is hand-written OKLab/OKLCH (`core/oklab.ts`). Colours outside the 
 - `φ_k = fract(0.5 + 0.618034·k) − 0.5`
 - `dh = 2·band·φ_k`
 - `dL = 0.06·(fract(0.5 + 0.381966·k) − 0.5)`
-- Spectral uses `h_s = 360·fract(0.618034·k)`
+- Spectral uses `h_s = 360·fract(0.618034·k) + dh`. Spectral variants carry `dh = 0`; symmetry copy `i` of `n` carries `dh = 360·i/n` (mod 360), frozen in its recipe (§2.3.1).
 
 **Lineage.** At pen-down, the new stroke inherits `k`, `dh` and `dL` from a same-ink stroke if either test passes:
 1. **Proximity:** it starts within `max(6 sp, 3w)` of that stroke's spine.
@@ -683,7 +688,8 @@ Paper: L = L0 + (0.93 − L0)·(0.45d + 0.25(1−p)) + dL
 - pools (hold) and Settle
 - zoom
 - selection and restyle
-- Mirror (P1) and rotation (P1)
+- symmetry: Free, Mirror or a 3–12-fold kaleidoscope, and its centre (the view when switched on)
+- rotation (P1)
 
 **Inference happens at four moments only:**
 1. **Pen-down:** calibration snapshot, base depth, colour variant and lineage, occupancy level.
@@ -915,14 +921,14 @@ The recipes are the same on both grounds. Each ink has designed ramps for each, 
 | **Menu mark** | top-left | ✓ (hidden during selection) | hidden | Menu sheet | New · Open… · Save project · Export image · Recent ▸ · Replay · Gestures & keys. The not-autosaving dot rides on the mark. |
 | **Stroke chip** | dock | ✓ | hidden | Stroke sheet | 40×28 glyph: an S-curve in the current nib, size and ink. **Tap** opens the sheet. **Vertical drag** sets size. **In erase mode** the glyph becomes an eraser with an accent outline, and one tap returns to the last nib without opening the sheet. |
 | **Color chip** | dock | ✓ | hidden | Color sheet | Glyph of the current ink's ramp on the current ground. **Tap** opens the sheet. **2D drag** sets hue (x) and tone (y), creating a custom ink. |
-| **Form chip** | dock | ✓ | hidden | Form sheet | Glyph of a tiny squiggle grown at the current base depth. **Tap** opens the sheet. **Vertical drag** sets base depth. Shows Mirror state (P1). |
+| **Form chip** | dock | ✓ | hidden | Form sheet | Glyph of a tiny squiggle grown at the current base depth. **Tap** opens the sheet. **Vertical drag** sets base depth. While symmetry is on, a small spoke badge (state, not a control) shows Mirror or the fold count. |
 | **Undo** | top-right; on phones, the trailing end of the dock | after the first stroke | hidden | — | Tap to undo. A risen stroke peels: pools first, then the stroke. P1: long-press repeats every 150 ms. |
 | **Redo** | beside Undo | after an undo, until the next new command | hidden | — | |
 | **View chip** | bottom-right; on phones, the leading end of the dock | when zoom ≠ 100%, or ink exists but none is in view | hidden | — | Shows "140%", or an arrow pointing to the ink, or both. **Tap:** fits the content if no ink is in view, otherwise resets to 100%. **Long-press:** fits the content. |
 | **Delete** | just above the selection's bounds; on phones, the leading dock slot | selection only | hidden | — | Deletes the selection (un-grow). |
 | Stroke sheet | grows out of its chip | — | — | ✓ | Pen · Brush · Chisel (· Charcoal P1) · Erase, as labelled live tiles. Drag the active tile vertically to set size. |
 | Color sheet | grows out of its chip | — | — | ✓ | 7 inks and 2 recents as labelled tiles, plus the Night \| Paper switch |
-| Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift · Craze · Plume · Caustic · Burin · Plait · Orbit (· Ripple P1) as labelled live tiles: ten, in two rows of five on desktop and tablet, a 3-column grid on phones (the one sheet over the 9-tile cap, §13). Tooltips name the key (1–9, 0). Re-tapping the selection's Form tile reseeds it. Mirror toggle (P1). |
+| Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift · Craze · Plume · Caustic · Burin · Plait · Orbit (· Ripple P1) as labelled live tiles: ten, in two rows of five on desktop and tablet, a 3-column grid on phones (the one sheet over the 9-tile cap, §13). Tooltips name the key (1–9, 0). Re-tapping the selection's Form tile reseeds it. Below the tiles, the **Free \| Symmetry** switch: tap toggles, drag sideways steps the folds (§2.3.1). |
 | Menu sheet | top-left | — | — | ✓ | Items listed above. Recent: the last 12 documents with date, a 96 px thumbnail, open, and delete. |
 | Help sheet | full sheet | — | — | `?`, F1 or the menu | Ink Grammar; Keys (desktop) or Gestures (touch), with labels from `navigator.keyboard.getLayoutMap()` where it exists; **Reset calibration** |
 | Toast | above the dock | — | — | listed events only | **New:** "New canvas. The last one is in Recent." **Open / drop:** "Opened ⟨title⟩". **Export:** a progress toast with **Cancel** while it takes > 300 ms, then "Image saved". **Autosave failure:** "Not autosaving" with **Save**. **Pen mode:** on the first finger pan of a session, "Fingers pan while a pen is in use" with **Draw with fingers**. 6 s; one at a time. |
@@ -1085,7 +1091,8 @@ Phone, landscape:
 | `KeyE` | Toggle erase mode (`Escape` exits) |
 | `BracketLeft` / `BracketRight` | Size ×0.8 / ×1.25 (selection, else tool) |
 | `Minus` / `Equal` | Depth −0.5 / +0.5 (selection, else the tool's base) |
-| `KeyR` | Reseed the selection, else the last stroke |
+| `KeyR` | Reseed the selection, else the last gesture (the last stroke and its symmetry copies) |
+| `KeyM` / `Shift+KeyM` | Symmetry on / off (centred on the view) / next fold count (Mirror, 3, 4, 5, 6, 8, 12; turns it on) |
 | `Mod+Z`, `Shift+Mod+Z`, `Ctrl+Y` | Undo / redo |
 | `Mod+A` · `Delete` / `Backspace` · `Escape` | Select all · delete the selection · deselect, close a sheet or exit a mode |
 | `Space`+drag | Pan |
@@ -1093,7 +1100,7 @@ Phone, landscape:
 | `KeyP` | Replay |
 | `?` (by `e.key`) or `F1` | Help |
 | `Mod+S` / `Mod+O` / `Mod+E` | Save `.rise` / open / export PNG |
-| P1: `Mod+D`, arrows (`Shift`: ×10), `KeyM`, `Mod+Shift+E`, `Alt`+wheel | Duplicate, nudge, Mirror, export SVG, rotate |
+| P1: `Mod+D`, arrows (`Shift`: ×10), `Mod+Shift+E`, `Alt`+wheel | Duplicate, nudge, export SVG, rotate |
 
 ---
 
@@ -1304,6 +1311,7 @@ src/
     types.ts                  data contracts only (7.2)
     det.ts                    deterministic dsin/dcos/datan2/dexp/dlog/dpow/dhypot; fmix32/hash32; rnd; Ch; fnv1a
     num.ts  geom.ts  pool.ts  mat.ts (rotation() switches to dsin/dcos)
+    folds.ts                  symmetry fold counts (Mirror, 3, 4, 5, 6, 8, 12), shared by ink and ui
     oklab.ts                  OKLab/OKLCH, gamut map (presentation; exempt from the Math allow-list)
   ink/         (pure: "the instrument")
     calib.ts                  learner state (pressure, vMed, jitter), lock rules, snapshot(): Calib
@@ -1320,7 +1328,8 @@ src/
     operators/registry.ts     FORMS metadata, CURRENT_V, operatorFor(FormId, v), registerOperator (forms lab, tests)
     operators/line.v1.ts  echo.v1.ts  sprout.v1.ts  sprout.v2.ts  drift.v1.ts
     operators/craze.v1.ts  plume.v1.ts  caustic.v1.ts  burin.v1.ts  plait.v1.ts  orbit.v1.ts   (ripple P1: cooks as Line)
-    cook.ts                   createIncrementalCook(); cook(r) = createIncrementalCook(draftOf(r)).finish(r); cookPreview, spineOf
+    cook.ts                   createIncrementalCook(); cook(r) = place(createIncrementalCook(draftOf(r)).finish(r), r.xf); cookPreview, spineOf
+    symmetry.ts               symmetry copies: placements (symmetryXf), copy colours, placeCooked / placeSpine / placedSamples
   doc/         (pure)
     ids.ts  document.ts  commands.ts  history.ts  serialize.ts  migrate.ts
   scene/       (pure)
@@ -1414,7 +1423,8 @@ export interface Calib { lo: number; hi: number; gamma: number; flat: number; vM
 export interface StrokeStyle { nib: NibId; size: number /* S, sp */ }
 export interface ColorStyle  { ink: InkId; k: number; dh: number; dL: number; lch: { night: LCh; paper: LCh } | null }
 export interface FormStyle   { form: FormId; v: number /* operator version */; base: number /* k/4 */ }
-export interface Symmetry    { axis: 'v' | 'h'; at: number }   // P1
+export interface Symmetry    { axis: 'v' | 'h'; at: number }   // reserved; always null (symmetry copies use xf)
+export interface SymmetryTool { on: boolean; folds: number; cx: number; cy: number }   // tool state; folds 2 = Mirror
 
 /** Fields every recipe-like object shares; operators and buildSpine read only these. */
 export interface RecipeCore {
@@ -1440,7 +1450,7 @@ export interface StrokeRecipe extends RecipeCore {
   readonly closed: boolean;
   readonly radial: boolean;             // L < 6 sp: tap or bloom seed
   readonly sym: Symmetry | null;        // P1
-  readonly xf: Mat2x3 | null;           // P1 post-cook move/scale/rotate
+  readonly xf: Mat2x3 | null;           // post-cook placement, doc rel. origin -> same (symmetry copies, format v2; P1 move/scale)
   readonly geomRev: number;             // bumped by replace when geometry inputs change (cache key)
   readonly colorRev: number;            // bumped when only colour changes (re-raster, no re-cook)
 }
@@ -1623,7 +1633,7 @@ export interface ToolState {
   ink: InkId; custom: ColorStyle['lch']; recents: readonly ColorStyle[];   // ≤ 2
   form: FormId; base: Record<FormId, number>;
   mode: 'draw' | 'erase';
-  mirror: Symmetry | null;                                                  // P1
+  sym: SymmetryTool;                                                        // symmetry (Form sheet switch)
 }
 export type Intent =
   | { k: 'pickNib'; nib: NibId } | { k: 'pickErase' } | { k: 'pickInk'; ink: InkId | ColorStyle } | { k: 'pickForm'; form: FormId }
@@ -1674,8 +1684,9 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
    - `recipe = freeze(draft)`, then `c = cook.finish(recipe)`.
    - `doc.apply(add)`, plus `doc.apply(replace(pools))` when there are pools (peel), each pushed to history.
    - The scene registers `c`, the occupancy grid splats the stroke, the learner updates, and `live.commit` runs.
-5. **Auto-split.** At 6000 stations (about 14,400 sp), the stroke commits with `cut` bit 1 set. The continuation starts at once with `s0 = L`, `cut` bit 0 set, the `resume` state, and the same colour family. It is seamless.
-6. **pointercancel:** follows §5.
+5. **Symmetry.** With the tool's symmetry on, pen-down also fixes each copy's placement (`symmetryXf` about the tool's centre, relative to the stroke's origin) and colour; `live.begin(d, cook, copies)` draws the one incremental cook once more per copy through its placement (one cook, `n` draws). At lift each copy is frozen from the stroke's recipe under a new id with its `xf` and colour; its geometry is the stroke's `finish` placed (`≡ cook(copy)`); the stroke and its copies enter the document in the **same** `add` (and peel `replace`), so one undo removes the whole gesture. Split pieces carry their copies the same way.
+6. **Auto-split.** At 6000 stations (about 14,400 sp), the stroke commits with `cut` bit 1 set. The continuation starts at once with `s0 = L`, `cut` bit 0 set, the `resume` state, and the same colour family. It is seamless.
+7. **pointercancel:** follows §5.
 
 ### 7.5 Determinism rules
 
@@ -1690,17 +1701,18 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 5. **Inference outputs are frozen at creation:** `calib`, `C`/`CS` per sample, `color.k/dh/dL`, `closed`, `radial`, base, pools. Learners update only between strokes.
 6. **Context reads only strokes earlier in z-order, and its result is stored.** Deleting a neighbour never changes another stroke.
 7. **Local operators use absolute arc length in sp** and never normalised `u`. Only Echo is `global`. Each growth unit is a pure function of the spine within `reach` of it, `d(s)` there, and its own rng address. That is what makes `regrow`, truncation and split pieces exact.
-8. **Operators are frozen by version.** To change a look, ship `line.v2.ts`. Never edit v1. Moving old strokes to a new look is an explicit restyle.
+8. **Placement is post-cook.** A recipe with `xf` cooks exactly like the same recipe without it, then every point, chisel angle and box is mapped through `xf` (`ink/symmetry.ts placeCooked`; angles through `datan2`). Spines (`spineOf`) and the samples the occupancy grid and queries read (`placedSamples`) are placed the same way, so hit tests, the eraser, the lasso, lineage and crowding see the ink where it lies. `xf` is stored as six Float64 numbers, so the placement never depends on the engine.
+9. **Operators are frozen by version.** To change a look, ship `line.v2.ts`. Never edit v1. Moving old strokes to a new look is an explicit restyle.
    - `CURRENT_V` in `ink/operators/registry.ts` names the version new strokes are drawn with, and `operatorFor(form, v)` cooks every recipe with the version stored in `recipe.form.v`.
    - Shipped: Sprout v2 (§2.3.5) and Drift v2 (§2.3.6).
    - `registerOperator(form, v)` lets the forms lab and tests cook prototypes through the real pipeline at versions ≥ 100, which no shipped recipe uses.
-9. **Timestamps** are sanitised to be strictly increasing (`+0.25` ms minimum step). Predicted samples are never stored.
-10. **Precision:** samples are Float32 offsets from a Float64 origin. Files store base64 little-endian Float32, which round-trips exactly.
-11. **Device-adaptive cost changes presentation only:** reveal timing, tile level, prefetch, preview cadence. It never changes geometry.
+10. **Timestamps** are sanitised to be strictly increasing (`+0.25` ms minimum step). Predicted samples are never stored.
+11. **Precision:** samples are Float32 offsets from a Float64 origin. Files store base64 little-endian Float32, which round-trips exactly.
+12. **Device-adaptive cost changes presentation only:** reveal timing, tile level, prefetch, preview cadence. It never changes geometry.
 
 ### 7.6 Tests
 
-**Status (2026-10-05):** 1105 vitest tests in 71 files under `tests/`, all passing; 24 e2e scenarios. The forms lab has its own suite (`npx vitest run --config lab/vitest.config.ts`).
+**Status (2026-10-08):** 1144 vitest tests in 73 files under `tests/`, all passing (symmetry: `tests/ink-symmetry.test.ts`, the v2 format fixture); 25 e2e scenarios. The forms lab has its own suite (`npx vitest run --config lab/vitest.config.ts`).
 
 **vitest (Node):**
 - **`det`:** bit-exact golden vectors, plus relative error ≤ 1e-12 against `Math.*` over Rise's ranges.
@@ -1719,7 +1731,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 **e2e (`scripts/e2e.mjs` on `harness.mjs`):**
 - **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps. The suite drives the **debug variant** (`vite build --mode debug` → `dist-debug/index.html`, which it builds itself): the same app with `window.__rise` compiled in. The production file (`build:single`) has no debug hooks (`__DEBUG__` is a build-time constant), so the `prod-file` scenario only checks that it boots, draws, logs no errors and exposes nothing.
 - **Golden fixtures in other engines:** Firefox via puppeteer-core BiDi; the step reports SKIPPED when `FIREFOX_PATH` is absent. WebKit (Playwright) is P1. **Not built yet.**
-- **Scenarios** (24; `--only name,name` runs a subset):
+- **Scenarios** (25; `--only name,name` runs a subset; `--budget` runs `boot-budget`, `phone-layout` and `symmetry`):
   - `prod-file`: the production file boots, draws, logs no errors and has no `window.__rise`
   - `boot-budget`, `phone-layout`: control-budget DOM counts at rest, with ink and after an undo, on desktop and phone (the selection counts are checked in the selection scenarios)
   - `draw-each-form` (the first four), `draw-new-forms` (the six lab Forms, their taps, and a `.rise` round trip of their ids), `radial-seeds`
@@ -1730,6 +1742,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
   - `undo-redo-50`
   - `reload-persist` (identical `sceneHash`), `rise-file-roundtrip`, `export-png` (dimensions), `documents` (New, reopen and delete from Recent)
   - `first-run-seed`, `hints`, `replay`
+  - `symmetry`: the Form sheet holds 10 tiles plus the switch; the switch turns on 6-fold symmetry with no extra control at rest; the copies draw while the pen is down (pixel probe); one stroke makes 6 strokes with 6 Spectral hues in a v2 file; one undo removes them, redo restores them, a reload keeps them (identical `sceneHash`) and the switch state; `M` turns it off; Mirror makes 2
   - `navigate`, `touch-pinch`
   - `stress-300`: a 300-stroke document with 20 wheel zoom steps
 - **Not built yet:** the hand-off tolerance test (§6.2 Fidelity).
@@ -1747,12 +1760,13 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 |---|---|
 | One stroke without pools | 1 `add` |
 | One stroke with pools | `add`, then `replace` (pools); undo peels |
+| One stroke with symmetry on | the same `add` (or `add` + `replace`) carrying the stroke and all its copies: one undo removes the whole gesture |
 | One eraser gesture, or Delete | 1 `remove` |
 | One restyle (tap, chip-drag release, `[` `]`, `-` `=`, Reseed) | 1 `replace` |
 | Auto-split pieces | 1 `batch` of `add`s |
 
 **Not in history:**
-- Ground, camera and tool state.
+- Ground, camera and tool state (symmetry included).
 - **New.** It switches to a fresh document, and the old one is listed in Recent. There is no Clear.
 
 **Other rules:**
@@ -1793,7 +1807,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 ### `.rise` project file (P0)
 
 ```json
-{ "format": "rise", "version": 1, "app": "rise-sketch@0.1.0",
+{ "format": "rise", "version": 2, "app": "rise-sketch@0.1.0",
   "meta": { "title": "...", "created": 0, "docSeed": 0, "counter": 0, "inkCounters": {}, "ground": "night",
             "camera": { "cx": 0, "cy": 0, "scale": 1, "rot": 0 } },
   "strokes": [ { "id": "...", "created": 0, "device": "pen", "origin": [0, 0], "z": 1, "rot": 0, "seed": 0,
@@ -1813,7 +1827,8 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 - Geometry is always re-cooked on open, so files stay small. `geomRev` and `colorRev` reset to 0.
 
 **Format evolution:**
-- Migrations are an ordered list `migrations[v](json) → json`, with a fixture kept for every format version.
+- Migrations are an ordered list `migrations[v](json) → json`, with a fixture kept for every format version (`tests/fixtures/doc-v1.rise`, `doc-v2.rise`).
+- **Version 2** (symmetry): `xf` is live, so a stroke with an `xf` (a symmetry copy, `[a, b, c, d, e, f]`) is placed by it. Version 1 never wrote one and never applied one, so the 1 → 2 migration clears any `xf` a v1 file carries and its strokes cook exactly where they were drawn. An older app refuses a v2 file ("newer than this app understands") instead of piling the copies onto their stroke. The IndexedDB schema is unchanged (recipes already stored `xf`).
 - P1: gzip through `CompressionStream`, detected by the magic bytes `1f 8b`.
 
 ### Export
@@ -1967,7 +1982,8 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - **P0 is built**, all six milestones, except the items marked **Not built** in M6 below.
 - **Beyond the plan, shipped:** six more Forms (Craze, Plume, Caustic, Burin, Plait, Orbit, §2.3.10–§2.3.15) with keys 5–9 and 0 and a ten-tile Form sheet, and Sprout v2 (§2.3.5).
 - **Shipped after the build:** Drift v2 (§2.3.6).
-- **Still P1 and P2:** everything listed under those headings below. Ripple, Charcoal and paper tooth, tilt shading, view rotation, Mirror, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
+- **Shipped after the build:** symmetry drawing: Mirror (P1) and radial symmetry (P2) as one feature (§2.3.1, §13 After the build #6), with `.rise` format v2.
+- **Still P1 and P2:** everything listed under those headings below. Ripple, Charcoal and paper tooth, tilt shading, view rotation, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
 
 ### P0: one focused build, in six milestones (built)
 
@@ -2047,7 +2063,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - View rotation.
 - Selection move, duplicate, and scale/rotate (`xf`).
 - Partial erase of local Forms. It cuts the spine into pieces using the existing `s0`/`cut`/`resume`; geometry outside `reach` of a cut stays bit-identical; Echo is always erased whole.
-- Mirror, whose axis is a non-interactive 15% hairline while drawing and draggable only at rest.
+- ~~Mirror, whose axis is a non-interactive 15% hairline while drawing and draggable only at rest.~~ **Shipped** with radial symmetry (§2.3.1). The hairline is built; dragging the axis is not (the centre is the view centre when symmetry is switched on).
 - Drag a tile onto ink.
 - Hold-to-repeat undo; Tab through strokes; touch inertia (τ = 325 ms); Safari trackpad rotate.
 
@@ -2082,7 +2098,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - Persisted undo history.
 
 **Interaction:**
-- Radial symmetry; enclosure.
+- ~~Radial symmetry~~ (**shipped** with Mirror, §2.3.1); enclosure.
 - Haptics (`navigator.vibrate`, Android only).
 - Paste a hex value to create an ink.
 - Keyboard Seed.
@@ -2265,3 +2281,4 @@ Decisions taken once P0 was running. Same verdict scale.
 | 3 | Number keys for ten Forms | A | `Digit1`–`Digit9` and `Digit0` follow sheet order, so the key is the tile's position. Ripple gets no key until it ships. `Shift+Digit1` and `Shift+Digit0` keep fit and 100%. |
 | 4 | Fix Sprout's white dashes on Night by editing `sprout.v1.ts` | R | §7.5 rule 8: operators are frozen by version. The fix ships as `sprout.v2.ts` with `CURRENT_V.sprout = 2`. Old documents keep cooking with v1 and look exactly as they were drawn; moving them to v2 is an explicit restyle. |
 | 5 | Drift v2: filaments emerge from the trunk edge | A | Shipped. Same versioning as Sprout v2: a new `drift.v2.ts`, v1 kept for old documents. |
+| 6 | Symmetry: ship P1 Mirror and P2 radial symmetry as one kaleidoscope feature | A* | One control: the Form sheet's single permitted two-way switch, **Free \| Symmetry**, so the at-rest budget (4/5) and the ten-tile Form sheet are unchanged. The fold count is the switch's amount (drag sideways, the chip rule), shown as spokes, not a number: zero sliders, still one numeric readout. Copies are real recipes placed by `xf` after the cook, not re-cooked transformed samples: re-cooking rotated samples would let Caustic's lamp, Drift's curl field and Float32 rounding differ per petal, while placement keeps every petal bit-identical and costs one cook per gesture. Spectral copies take `dh = 360°·i/n` in the recipe (a rainbow wheel). One gesture is one history entry; afterwards the copies are separate strokes (you erase what you touch). **Changed from the P1 line:** the axis is not draggable at rest; the centre is the view centre when switched on, because a grab target near the centre would conflict with hold = rise. `.rise` goes to format v2. |

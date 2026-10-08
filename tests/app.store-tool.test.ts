@@ -84,6 +84,15 @@ describe('tool', () => {
     prefs.remove('tool');
   });
 
+  it('persists symmetry (on, folds, centre) and rejects odd values', () => {
+    expect(defaultTool().sym).toEqual({ on: false, folds: 6, cx: 0, cy: 0 });
+    saveTool({ ...defaultTool(), sym: { on: true, folds: 8, cx: -12.5, cy: 300 } });
+    expect(loadTool().sym).toEqual({ on: true, folds: 8, cx: -12.5, cy: 300 });
+    prefs.set('tool', { sym: { on: true, folds: 7, cx: 'x', cy: 1 } });
+    expect(loadTool().sym).toEqual({ on: false, folds: 6, cx: 0, cy: 0 });
+    prefs.remove('tool');
+  });
+
   it('compares custom inks by value', () => {
     const a = { night: [0.7, 0.1, 30] as const, paper: [0.5, 0.11, 30] as const };
     expect(sameCustom(a, { night: [0.7, 0.1, 30], paper: [0.5, 0.11, 30] })).toBe(true);

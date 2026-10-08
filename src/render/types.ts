@@ -81,15 +81,21 @@ export interface Renderer {
 }
 
 export interface LiveLayer {
-  /** A stroke starts. The live layer draws `cook.view()` incrementally (dry/wet split, hot trail, reveals). */
-  begin(d: DraftStroke, cook: IncrementalCook): void;
+  /**
+   * A stroke starts. The live layer draws `cook.view()` incrementally (dry/wet split, hot trail,
+   * reveals), and once more per symmetry copy, placed by its `xf` in its own colour.
+   */
+  begin(d: DraftStroke, cook: IncrementalCook, copies?: readonly LiveCopy[]): void;
   /** After cook.append / regrow / setClosing: schedule a redraw of what changed. */
   update(): void;
   /** Predicted tail (screen CSS px), drawn once on the overlay, discarded next frame. */
   predict(tail: readonly InputSample[]): void;
   halo(h: Halo | null): void;
-  /** Lift: finish reveals, then two-phase bake into tiles. */
-  commit(r: StrokeRecipe, c: Cooked): void;
+  /**
+   * Lift: finish reveals, then two-phase bake into tiles. `copies` are the committed symmetry
+   * copies (recipe and placed geometry), in the order `begin` was given them.
+   */
+  commit(r: StrokeRecipe, c: Cooked, copies?: readonly { r: StrokeRecipe; c: Cooked }[]): void;
   /** Cancel the live stroke with an un-grow; nothing enters the document. */
   withdraw(): void;
   /** Play a recorded/committed stroke growing in (replay, first-run seed, redo). */
@@ -101,6 +107,9 @@ export interface LiveLayer {
   readonly active: boolean; // a stroke is being drawn
 }
 
+/** A symmetry copy of the live stroke: its placement (doc rel. origin) and colour. */
+export interface LiveCopy { xf: Mat2x3; color: ColorStyle }
+
 export interface Overlay {
   cursor(p: Vec2 | null, shape: NibCursor | null): void;   // CSS px
   weld(p: Vec2 | null, rCss: number): void;               // closure weld ring at the stroke start
@@ -109,7 +118,11 @@ export interface Overlay {
   selection(box: AABB | null, ids: readonly StrokeId[]): void; // box in absolute doc coords
   /** True-size nib ring preview (size bending) at a screen point; null hides. */
   sizeRing(p: Vec2 | null, wCss: number, css: string): void;
-  /** Subtle guide hairline etc. reserved for P1 (mirror axis). */
+  /**
+   * Symmetry guide (DESIGN §2.3.1): a non-interactive 15 % hairline through the centre (doc
+   * coords): the vertical axis for Mirror (folds 2), else `folds` spokes. null hides it.
+   */
+  symmetry(g: { folds: number; cx: number; cy: number } | null): void;
   clear(): void;
 }
 

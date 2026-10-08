@@ -1,5 +1,5 @@
 /**
- * The `.rise` project file (DESIGN §8), format version 1.
+ * The `.rise` project file (DESIGN §8), format version 2 (v1 files migrate, doc/migrate.ts).
  *
  * JSON with typed arrays as base64 little-endian Float32, which round-trips every
  * bit (NaN payloads and -0 included, DESIGN §7.5 rule 10). Scalars are written by a
@@ -28,7 +28,7 @@ import { migrate, MigrationError } from './migrate';
 import type { RiseJson } from './migrate';
 
 /** Current `.rise` format version. */
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 /** The `format` tag every `.rise` file carries. */
 export const FORMAT_TAG = 'rise';
 

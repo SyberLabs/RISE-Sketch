@@ -39,6 +39,8 @@ const A = {
   shallower: Object.freeze({ k: 'depth', delta: -0.5 }) as KeyAction,
   deeper: Object.freeze({ k: 'depth', delta: 0.5 }) as KeyAction,
   reseed: Object.freeze({ k: 'reseed' }) as KeyAction,
+  symmetry: Object.freeze({ k: 'symmetry', step: false }) as KeyAction,
+  folds: Object.freeze({ k: 'symmetry', step: true }) as KeyAction,
   undo: Object.freeze({ k: 'undo' }) as KeyAction,
   redo: Object.freeze({ k: 'redo' }) as KeyAction,
   selectAll: Object.freeze({ k: 'selectAll' }) as KeyAction,
@@ -93,6 +95,7 @@ export function keyAction(e: KeyLike, isMac: boolean): KeyAction | null {
     case 'KeyE': return s ? null : A.erase;
     case 'KeyR': return s ? null : A.reseed;
     case 'KeyP': return s ? null : A.replay;
+    case 'KeyM': return s ? A.folds : A.symmetry;
     case 'BracketLeft': return A.smaller;
     case 'BracketRight': return A.larger;
     case 'Minus': case 'NumpadSubtract': return A.shallower;
