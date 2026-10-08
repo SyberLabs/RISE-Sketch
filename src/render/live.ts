@@ -2652,7 +2652,7 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       if (r.xf) {
         for (let k = items.length - 1; k >= 0; k--) {
           const it = items[k];
-          if (!it.dead && it instanceof PlayStroke && !copyOf.has(it) && it.r.created === r.created) { copyOf.set(p, it); break; }
+          if (!it.dead && it instanceof PlayStroke && !it.lead && it.r.created === r.created) { p.lead = it; break; }
         }
       }
       items.push(p);
