@@ -5,7 +5,7 @@
 This is the build spec for Rise (`rise-sketch`). It replaces the v1 draft and settles the three critiques of it (clutter, feasibility, delight). Section 13 logs every critique point with its verdict and a one-line reason. Where this document and the draft disagree, this document wins.
 
 **Status (2026-10-05).** P0 is built (§11 lists what is not), plus six Forms beyond the original plan.
-- **Forms:** ten in the app. Line, Echo, Sprout and Drift as specified; Craze, Plume, Caustic, Burin, Plait and Orbit promoted from the forms lab (`lab/forms`) with unchanged geometry (§2.3.10–§2.3.15). Ripple is still P1. New Sprout and Drift strokes cook with v2 operators (§2.3.5, §2.3.6); old documents keep v1.
+- **Forms:** eleven in the app. Line, Echo, Sprout and Drift as specified; Craze, Plume, Caustic, Burin, Plait and Orbit promoted from the forms lab (`lab/forms`) with unchanged geometry (§2.3.10–§2.3.15); Ripple v2 promoted from lab prototype v107 (§2.3.7). New Sprout and Drift strokes cook with v2 operators (§2.3.5, §2.3.6); old documents keep v1.
 - **Tests:** `npx vitest run` passes 1105 tests in 71 files under `tests/` (the forms lab has its own suite, §7.6).
 - **e2e:** `scripts/e2e.mjs` has 24 scenarios (23 on the debug build, plus `prod-file`), §7.6.
 - **Not met:** the single-file bundle budget (§9).
@@ -96,7 +96,7 @@ Rise is a drawing instrument in which every mark is alive.
 | Conditional | **Redo** appears after an undo and stays until the next new command. The **view chip** appears when zoom ≠ 100%, or when the document has ink but none is in view. **Absolute max 7.** |
 | Selection | **6**: the 3 chips, Undo, Redo, Delete. Menu and the view chip hide. |
 | Drawing | **0** |
-| Any sheet | At most 9 tiles plus one two-way switch. **Exception:** the Form sheet shows all 10 Forms, in two rows of 5 on desktop (§13). Its one switch is Free \| Symmetry (§2.3.1). |
+| Any sheet | At most 9 tiles plus one two-way switch. **Exception:** the Form sheet shows all 11 Forms, in two rows (6 + 5) on desktop (§13). Its one switch is Free \| Symmetry (§2.3.1). |
 | Toast | One at a time, with at most one action, and only for the events listed in §4 |
 | Sliders / numeric readouts | **0 / 1** |
 
@@ -122,7 +122,7 @@ Rise is a drawing instrument in which every mark is alive.
 
 | Question | Decision | Reason |
 |---|---|---|
-| Forms in P0 | **Line, Echo, Sprout, Drift**. Ripple is P1. *Since shipped:* **Craze, Plume, Caustic, Burin, Plait, Orbit**, promoted from the forms lab (§2.3.10–§2.3.15). | Depth 0 of every Form is the bare nib, so "Bare" is not a separate Form. The six lab Forms each add a primitive the first four lack (network, vane, optics, hatching, weave, kinematics). |
+| Forms in P0 | **Line, Echo, Sprout, Drift**. *Since shipped:* **Craze, Plume, Caustic, Burin, Plait, Orbit**, promoted from the forms lab (§2.3.10–§2.3.15), then **Ripple** (§2.3.7). | Depth 0 of every Form is the bare nib, so "Bare" is not a separate Form. The six lab Forms each add a primitive the first four lack (network, vane, optics, hatching, weave, kinematics). |
 | Depth model | **Base depth per Form** (tool state, bent by dragging the Form chip) **plus local pools where the user holds** | Pools are a new expressive freedom, and they keep rising local and cheap. |
 | Stationary contact | **Tap** gives a radial seed at base depth. **Hold** gives a radial seed that rises. | Holding always means rise, everywhere. |
 | Selecting | **Never with the drawing contact.** Modifier-click on desktop, a finger tap in pen mode, a double-tap on touch-only devices. | Keeps hold = rise unambiguous. |
@@ -148,7 +148,7 @@ Rise is a drawing instrument in which every mark is alive.
 |---|---|---|---|---|
 | **STROKE** | How the hand becomes a mark: the nib's material and the spine it lays down. | Nib: Pen, Brush, Chisel (Charcoal in P1); Erase | Size, remembered per nib | Pressure curve, smoothing, corners, width, tapers and endings, closure, chisel angle, dry-split |
 | **COLOR** | The light (Night) or pigment (Paper) the mark carries, and the ground beneath it. | Ink: 7, plus 2 recents. Ground: Night or Paper. | Hue (x) and tone (y), which creates a custom ink | Variant, lineage, pressure and depth tone, glow budget, hot ink |
-| **FORM** | What the seed grows into, and how far. | Form: Line, Echo, Sprout, Drift, Craze, Plume, Caustic, Burin, Plait, Orbit (Ripple in P1) | Base depth, remembered per Form | Roughness, asymmetry, generator, branch template, angle, side, spacing, field, filament length, plate size, barb sweep, lamp direction, hatch side, braid period, orbit radius, response to crowding and to closed loops. Pools come from holding. |
+| **FORM** | What the seed grows into, and how far. | Form: Line, Echo, Sprout, Drift, Craze, Plume, Caustic, Burin, Plait, Orbit, Ripple | Base depth, remembered per Form | Roughness, asymmetry, generator, branch template, angle, side, spacing, field, filament length, plate size, barb sweep, lamp direction, hatch side, braid period, orbit radius, response to crowding and to closed loops. Pools come from holding. |
 
 ### 2.2 STROKE
 
@@ -255,7 +255,7 @@ Rise is a drawing instrument in which every mark is alive.
 | 8 | **Burin** | new (forms lab) | Shades beside it | 0–4 (**2**) | Hatch → doubled hatch → cross-hatch → second diagonal and stipple | Local (8 sp) | 40 per unit; 16k per stroke, causal | P0 (added) |
 | 9 | **Plait** | new (forms lab) | Transforms the seed (core strand) | 0–4 (**2**) | Strands arrive one per level, the core thins, then the carver's groove | Local (108 sp) | 220 per unit; 20k per stroke, causal | P0 (added) |
 | 0 | **Orbit** | new (forms lab) | Orbits it | 0–4 (**2**) | Loops → five-lobed frill → scalloped lace → swell | Local (54 sp) | 220 per orbit; 24k per stroke, causal | P0 (added) |
-| — | **Ripple** | new | Grows from it | 0–6 (**2**) | More contour rings | Local (24 sp) | 16k | P1 |
+| — | **Ripple** | new | Grows from it | 0–6 (**2**) | More contour rings | Local (52 sp) | 16k | shipped (v2) |
 
 The six lab Forms were designed and judged in `lab/forms` (briefs in `lab/forms/briefs/`), then promoted unchanged into `src/ink/operators/<name>.v1.ts`. Where a brief and the operator disagree, the operator's header comment records the decision and the operator wins. Ripple has no key and no operator yet: its recipes cook as Line.
 
@@ -437,13 +437,31 @@ The demo's three rule strings are kept verbatim as **branch templates**. Depth n
   - The limit depends only on position along the filament, so truncation stays a prefix and depth stays continuous; each filament writes exactly v1’s points.
   - Result on Night: the trunk keeps its ink colour instead of adding into a near-white core. Filaments the field carries across a different part of the stroke still brighten where they cross (as with Sprout v2).
 
-#### 2.3.7 Ripple (P1)
+#### 2.3.7 Ripple: interference contours
+
+*Shipped as Ripple v2, promoted from lab prototype v107. The brief `lab/forms/briefs/ripple.md` and the header of `src/ink/operators/ripple.v2.ts` are authoritative; Ripple v1 never had an operator, so v1 recipes keep cooking as Line.*
+
+Contour rings run parallel to the stroke on both sides, ever wider apart outward, and wrap open ends in round caps. Each ring breathes along the arc in a slow sine whose phase lags ring by ring, so neighbouring rings, and the rings of neighbouring strokes, beat into moiré. On Night it is an interference glow; on Paper, survey-map contours.
+
+- **Rings:** `K(D) = 2·D·(0.6 + 0.8p)`, up to 10 per side; ring `k` has weight `clamp(K − k + 1, 0, 1)`, arriving as a centred dash that lengthens until it joins (no pops).
+- **Spacing:** ring `k` at `b·1.18^(k−1)`, `b = 1.2·w̄ + 3` sp. Breathing wavelength `32 + 2.5S` sp, phase lag 0.35 rad per ring; amplitude 7 %–27 % of the offset with speed (below the 43 % at which rings could cross).
+- **Placement:** both sides for open strokes; closed loops shrink inward to a bullseye until collapse, plus outward; the seam joins exactly.
+- **Cleanup:** a soft fade against the spine within ±40 sp gives mitred V's inside corners (replaces the spatial hash + Chaikin, which could not stay exact under incremental cooking).
+- **Look:** inner rings hairlines, outer rings bands (0.38 × the gap, ≤ 3.2 sp); odd rings ≈ 1.7× brighter; tone alternates buckets 3/4 so Spectral steps per ring and flickers.
+- **Radial seed:** a bullseye spiral of arcs; a second family 1.6 gaps off-centre fades in over depth 0.5–2 and beats against it.
+
+The draft P1 numbers (`round(1.4·d)` rings, ratio 1.22, reach 24 sp) gave a thin 2–3-ring tube at base depth and a cleanup that could not see across corners; the brief records each departure.
+
+<details><summary>Original P1 sketch</summary>
+
 
 - **Rings:** `round(1.4·d)`.
 - **Spacing:** `δ_i = (1.2·w̄ + 3)·1.22^i` sp.
 - **Placement:** both sides for open strokes. For closed loops, inward until collapse plus outward.
 - **Cleanup:** drop points within `0.9δ_i` of the seed (spatial hash), then apply Chaikin once.
 - **Noise:** displacement of `0.4i` sp.
+
+</details>
 
 #### 2.3.8 Radial seeds: tap and bloom
 
@@ -928,7 +946,7 @@ The recipes are the same on both grounds. Each ink has designed ramps for each, 
 | **Delete** | just above the selection's bounds; on phones, the leading dock slot | selection only | hidden | — | Deletes the selection (un-grow). |
 | Stroke sheet | grows out of its chip | — | — | ✓ | Pen · Brush · Chisel (· Charcoal P1) · Erase, as labelled live tiles. Drag the active tile vertically to set size. |
 | Color sheet | grows out of its chip | — | — | ✓ | 7 inks and 2 recents as labelled tiles, plus the Night \| Paper switch |
-| Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift · Craze · Plume · Caustic · Burin · Plait · Orbit (· Ripple P1) as labelled live tiles: ten, in two rows of five on desktop and tablet, a 3-column grid on phones (the one sheet over the 9-tile cap, §13). Tooltips name the key (1–9, 0). Re-tapping the selection's Form tile reseeds it. Below the tiles, the **Free \| Symmetry** switch: tap toggles, drag sideways steps the folds (§2.3.1). |
+| Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift · Craze · Plume · Caustic · Burin · Plait · Orbit · Ripple as labelled live tiles: eleven, in two rows (6 + 5) on desktop and tablet, a 3-column grid on phones (the one sheet over the 9-tile cap, §13). Tooltips name the key (1–9, 0). Re-tapping the selection's Form tile reseeds it. Below the tiles, the **Free \| Symmetry** switch: tap toggles, drag sideways steps the folds (§2.3.1). |
 | Menu sheet | top-left | — | — | ✓ | Items listed above. Recent: the last 12 documents with date, a 96 px thumbnail, open, and delete. |
 | Help sheet | full sheet | — | — | `?`, F1 or the menu | Ink Grammar; Keys (desktop) or Gestures (touch), with labels from `navigator.keyboard.getLayoutMap()` where it exists; **Reset calibration** |
 | Toast | above the dock | — | — | listed events only | **New:** "New canvas. The last one is in Recent." **Open / drop:** "Opened ⟨title⟩". **Export:** a progress toast with **Cancel** while it takes > 300 ms, then "Image saved". **Autosave failure:** "Not autosaving" with **Save**. **Pen mode:** on the first finger pan of a session, "Fingers pan while a pen is in use" with **Draw with fingers**. 6 s; one at a time. |
@@ -1084,7 +1102,7 @@ Phone, landscape:
 
 | Key (`e.code`) | Action |
 |---|---|
-| `Digit1`–`Digit9`, `Digit0` | Form, in sheet order: Line, Echo, Sprout, Drift, Craze, Plume, Caustic, Burin, Plait, Orbit. Ripple (P1) has no key yet. |
+| `Digit1`–`Digit9`, `Digit0` | Form, in sheet order: Line, Echo, Sprout, Drift, Craze, Plume, Caustic, Burin, Plait, Orbit. Ripple, the eleventh, has no key. |
 | `KeyB` / `Shift+KeyB` | Next / previous nib (never cycles into Erase) |
 | `KeyC` / `Shift+KeyC` | Next / previous ink |
 | `KeyG` | Night / Paper |
@@ -1218,7 +1236,7 @@ Edge cases:
 | **Burin** | Scratched film; a triple crossing is a bright knot, never a white patch | Its home: a steel engraving, the lozenge swell exactly the burin's cut |
 | **Plait** | A cord of light; over-crossings are bright lozenges, the gaps keep the cord off white | Its home: a carved stone knot; over-crossings read as the carver's shadow |
 | **Orbit** | A rope of light-loops, each deepening in colour around itself | A copperplate flourish, the nib loading and unloading around every loop |
-| **Ripple** (P1) | Interference moiré glow | Survey-map contours |
+| **Ripple** | Interference moiré glow | Survey-map contours |
 
 ### 6.6 Growth animation (implementation)
 
@@ -1327,7 +1345,7 @@ src/
     operators/types.ts        FormOps (trunk, chain of growth units, radial seed), Sink, UnitGeom, shared helpers
     operators/registry.ts     FORMS metadata, CURRENT_V, operatorFor(FormId, v), registerOperator (forms lab, tests)
     operators/line.v1.ts  echo.v1.ts  sprout.v1.ts  sprout.v2.ts  drift.v1.ts
-    operators/craze.v1.ts  plume.v1.ts  caustic.v1.ts  burin.v1.ts  plait.v1.ts  orbit.v1.ts   (ripple P1: cooks as Line)
+    operators/craze.v1.ts  plume.v1.ts  caustic.v1.ts  burin.v1.ts  plait.v1.ts  orbit.v1.ts  ripple.v2.ts   (ripple v1: cooks as Line)
     cook.ts                   createIncrementalCook(); cook(r) = place(createIncrementalCook(draftOf(r)).finish(r), r.xf); cookPreview, spineOf
     symmetry.ts               symmetry copies: placements (symmetryXf), copy colours, placeCooked / placeSpine / placedSamples
   doc/         (pure)
@@ -1395,8 +1413,8 @@ export type NibId = 'pen' | 'brush' | 'chisel' | 'charcoal';
 export type InkId = 'graphite' | 'indigo' | 'oxide' | 'ochre' | 'moss' | 'rose' | 'spectral' | 'custom';
 export type FormId = 'line' | 'echo' | 'sprout' | 'drift' | 'ripple'
   | 'craze' | 'plume' | 'caustic' | 'burin' | 'plait' | 'orbit';
-/** Forms offered in the UI, in sheet and number-key order (ripple is P1). */
-export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'];
+/** Forms offered in the UI, in sheet order; Digit1–Digit0 pick the first ten (Ripple has no key). */
+export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit', 'ripple'];
 export type Ground = 'night' | 'paper';
 export type Vec2 = readonly [number, number];
 export type LCh = readonly [L: number, C: number, h: number];
@@ -1968,7 +1986,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 | **Phone** | width < 600 px, or coarse pointer with short side < 500 px | Bottom dock above `env(safe-area-inset-bottom)`: view chip (conditional) · three 48 px chips · Undo · Redo (conditional). Menu top-left at 44 px. Delete takes the view chip's slot during a selection. Sheets are bottom sheets (≤ 46% of the height, 3-column grid, swipe down to close). Long-press a chip for its name and drag. |
 | **Phone landscape** | phone and width > height | The dock goes vertical on the trailing edge, and sheets open from that edge. |
 | **Tablet** | coarse pointer, larger screen | Desktop layout with 48 px targets. Pen hover reveals the chrome. P2: drag the dock to any edge for handedness. |
-| **Desktop** | ≥ 1100 px wide and a fine pointer | 40 px chips. Sheets 7–9 tiles wide in one row; the ten-tile Form sheet is two rows of five. Tooltips after 600 ms that include the shortcut and the drag ("Form · Sprout · 1–0 · drag ↕ to deepen"). Nib cursor. |
+| **Desktop** | ≥ 1100 px wide and a fine pointer | 40 px chips. Sheets 7–9 tiles wide in one row; the eleven-tile Form sheet is two rows (6 + 5). Tooltips after 600 ms that include the shortcut and the drag ("Form · Sprout · 1–0 · drag ↕ to deepen"). Nib cursor. |
 
 **Viewport handling:**
 - Canvases resize on `resize` and `visualViewport` changes, debounced 120 ms. Tiles are kept, since they are world-anchored.
@@ -1983,7 +2001,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - **Beyond the plan, shipped:** six more Forms (Craze, Plume, Caustic, Burin, Plait, Orbit, §2.3.10–§2.3.15) with keys 5–9 and 0 and a ten-tile Form sheet, and Sprout v2 (§2.3.5).
 - **Shipped after the build:** Drift v2 (§2.3.6).
 - **Shipped after the build:** symmetry drawing: Mirror (P1) and radial symmetry (P2) as one feature (§2.3.1, §13 After the build #6), with `.rise` format v2.
-- **Still P1 and P2:** everything listed under those headings below. Ripple, Charcoal and paper tooth, tilt shading, view rotation, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
+- **Still P1 and P2:** everything listed under those headings below. Charcoal and paper tooth, tilt shading, view rotation, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
 
 ### P0: one focused build, in six milestones (built)
 
@@ -2053,7 +2071,6 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 ### P1
 
 **Forms, nibs and materials:**
-- Ripple.
 - Charcoal, with paper tooth and the drying rim.
 - Tilt shading.
 - Bud dots on Sprout tips.
@@ -2278,7 +2295,8 @@ Decisions taken once P0 was running. Same verdict scale.
 |---|---|---|---|
 | 1 | Promote six lab Forms (Craze, Plume, Caustic, Burin, Plait, Orbit) into the app | A | Each was judged in the forms lab against its brief and adds a primitive the first four lack. All are local chains, pass incremental ≡ full and need no change to `cook.ts`. They ship with unchanged geometry, as `v1` operators with their own golden hashes. |
 | 2 | The Form sheet shows ten tiles, over the 9-tile cap of §1.2 | A* | Accepted as the one exception. Ten Forms are ten kinds, and hiding some behind a second page or a "more" tile would add a control. The sheet lays out as two rows of five on desktop and tablet and a 3-column grid on phones; no other sheet may exceed 9. |
-| 3 | Number keys for ten Forms | A | `Digit1`–`Digit9` and `Digit0` follow sheet order, so the key is the tile's position. Ripple gets no key until it ships. `Shift+Digit1` and `Shift+Digit0` keep fit and 100%. |
+| 3 | Number keys for ten Forms | A | `Digit1`–`Digit9` and `Digit0` follow sheet order, so the key is the tile's position. Ripple, shipped later as the eleventh Form, has no key (§13 #7). `Shift+Digit1` and `Shift+Digit0` keep fit and 100%. |
 | 4 | Fix Sprout's white dashes on Night by editing `sprout.v1.ts` | R | §7.5 rule 8: operators are frozen by version. The fix ships as `sprout.v2.ts` with `CURRENT_V.sprout = 2`. Old documents keep cooking with v1 and look exactly as they were drawn; moving them to v2 is an explicit restyle. |
 | 5 | Drift v2: filaments emerge from the trunk edge | A | Shipped. Same versioning as Sprout v2: a new `drift.v2.ts`, v1 kept for old documents. |
 | 6 | Symmetry: ship P1 Mirror and P2 radial symmetry as one kaleidoscope feature | A* | One control: the Form sheet's single permitted two-way switch, **Free \| Symmetry**, so the at-rest budget (4/5) and the ten-tile Form sheet are unchanged. The fold count is the switch's amount (drag sideways, the chip rule), shown as spokes, not a number: zero sliders, still one numeric readout. Copies are real recipes placed by `xf` after the cook, not re-cooked transformed samples: re-cooking rotated samples would let Caustic's lamp, Drift's curl field and Float32 rounding differ per petal, while placement keeps every petal bit-identical and costs one cook per gesture. Spectral copies take `dh = 360°·i/n` in the recipe (a rainbow wheel). One gesture is one history entry; afterwards the copies are separate strokes (you erase what you touch). **Changed from the P1 line:** the axis is not draggable at rest; the centre is the view centre when switched on, because a grab target near the centre would conflict with hold = rise. `.rise` goes to format v2. |
+| 7 | Ship Ripple (P1) as the eleventh Form | A* | Promoted from lab prototype v107 as `ripple.v2.ts` (v1 recipes keep cooking as Line, §7.5 rule 8). The Form sheet grows to 11 tiles (6 + 5 on desktop); this widens exception #2 rather than adding a control, and the at-rest budget is unchanged. No number key: `Digit1`–`Digit0` are full, and a letter would break the position rule. The P1 numbers in §2.3.7 were revised in the lab (see the brief). |

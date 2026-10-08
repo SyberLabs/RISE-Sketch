@@ -38,6 +38,7 @@ The sheets show *your own last stroke* drawn through each option, so you can see
 | 8 | Burin | engraver's hatching on the shadow side |
 | 9 | Plait | three strands braiding over and under |
 | 0 | Orbit | a rope of looping orbits; a tap draws a spirograph rose |
+| — | Ripple | interference contours that breathe and beat into moiré; a tap is a bullseye |
 
 ### Symmetry: Mirror and kaleidoscope
 

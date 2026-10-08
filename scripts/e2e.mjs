@@ -228,7 +228,7 @@ await scenario('draw-new-forms', async ({ page, cdp }) => {
     const chip = await page.$('.r-chip[data-chip="form"]');
     await chip.screenshot({ path: `${OUT}/new-forms-chip-${forms[i][0]}.png` });
   }
-  // the Form sheet offers all ten as labelled tiles, two rows of five on desktop
+  // the Form sheet offers all eleven as labelled tiles, two rows (6 + 5) on desktop
   await dispatch(page, { k: 'openSheet', sheet: 'form' });
   await idle(page);
   await sleep(400);
@@ -236,12 +236,41 @@ await scenario('draw-new-forms', async ({ page, cdp }) => {
     const b = t.getBoundingClientRect();
     return { label: t.textContent.trim(), top: Math.round(b.top) };
   }));
-  assert(tiles.length === 10, `ten Form tiles, got ${tiles.length}`);
+  assert(tiles.length === 11, `eleven Form tiles, got ${tiles.length}`);
   const labels = tiles.map(t => t.label).join(',');
-  assert(labels === 'Line,Echo,Sprout,Drift,Craze,Plume,Caustic,Burin,Plait,Orbit', `tile labels ${labels}`);
+  assert(labels === 'Line,Echo,Sprout,Drift,Craze,Plume,Caustic,Burin,Plait,Orbit,Ripple', `tile labels ${labels}`);
   const rows = new Set(tiles.map(t => t.top)).size;
   assert(rows === 2, `two rows of tiles on desktop, got ${rows}`);
   await shot(page, 'new-forms-sheet');
+});
+
+await scenario('ripple', async ({ page, cdp }) => {
+  // Ripple v2: interference contours on both sides of the stroke, more rings with depth; a tap is a bullseye
+  await dispatch(page, { k: 'pickForm', form: 'ripple' });
+  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
+  await penStroke(cdp, wave(160, 300, 1100, 90, 90, 2));
+  await idle(page);
+  let s = await last(page);
+  assert(s && s.form === 'ripple', `stroke form ripple, got ${s && s.form}`);
+  assert(s.nPts > 200, `ripple produced rings (${s.nPts} pts)`);
+  assert(s.gens >= 3, `ripple grew several rings (gens=${s.gens})`);
+  await penStroke(cdp, line(250, 520, 1050, 520, 60));
+  await idle(page);
+  const plain = await last(page);
+  await penStroke(cdp, line(250, 640, 1050, 640, 60), { hold: 1400 });
+  await idle(page);
+  const held = await last(page);
+  assert(held.nPts > plain.nPts, `holding blooms more rings (${plain.nPts} → ${held.nPts} pts)`);
+  await penStroke(cdp, [[640, 720, 0.6], [640.5, 720.3, 0.7], [640.8, 720.4, 0.7]]);
+  await idle(page);
+  s = await last(page);
+  assert(s.form === 'ripple' && s.radial && s.nPts > 3, `ripple tap is a radial bullseye (${s.nPts} pts)`);
+  const h0 = await R(page, () => window.__rise.sceneHash());
+  const text = await R(page, () => window.__rise.serialize());
+  await R(page, t => window.__rise.load(t), text);
+  await idle(page);
+  assert(await R(page, () => window.__rise.sceneHash()) === h0, 'ripple round trip keeps the scene hash');
+  await shot(page, 'ripple-night');
 });
 
 await scenario('rise-hold-pen', async ({ page, cdp }) => {
@@ -640,7 +669,7 @@ await scenario('symmetry', async ({ page, cdp }) => {
   const sw = await page.$('.r-symswitch');
   assert(sw, 'the Form sheet has the symmetry switch');
   const sheetBtns = await R(page, () => document.querySelectorAll('.r-sheet[data-sheet="form"] button:not([hidden])').length);
-  assert(sheetBtns === 11, `the Form sheet holds 10 tiles plus one switch (got ${sheetBtns} buttons)`);
+  assert(sheetBtns === 12, `the Form sheet holds 11 tiles plus one switch (got ${sheetBtns} buttons)`);
   await sw.click();
   await sleep(100);
   let st = await R(page, () => window.__rise.state());
