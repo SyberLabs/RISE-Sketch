@@ -24,6 +24,7 @@ import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, rmSync } f
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import UPNG from 'upng-js';
 import { launch, penStroke, mouseStroke, pinch, tap, wheel, key, wave, circle, line, sleep, measureFrames } from './harness.mjs';
 
 const argv = process.argv.slice(2);
@@ -917,8 +918,27 @@ await scenario('symmetry', async ({ page, cdp }) => {
 });
 
 // Remix links (DESIGN §8): a symmetry drawing becomes a link; a visitor with a drawing of their own
-// opens it as a new document that replays once and cooks bit-identically, their own drawing stays in
-// Recent, the fragment leaves the address bar, and a truncated link loads nothing.
+// opens it as a new document that replays once and looks the same as the sender's (a pixel-diff
+// bound: v2 links round the input, so the cook is not bit-identical), their own drawing stays in
+// Recent, the fragment leaves the address bar, sharing the remix again gives the same link, and a
+// truncated link loads nothing.
+/** The stage alone (chrome hidden), as RGBA. */
+async function stage(page) {
+  await page.addStyleTag({ content: '#chrome{display:none!important}' });
+  const img = UPNG.decode(await page.screenshot());
+  return { w: img.width, h: img.height, d: new Uint8Array(UPNG.toRGBA8(img)[0]) };
+}
+/** Mean absolute difference per channel (0..255) and the share of pixels off by more than 16 in any channel. */
+function pixelDiff(a, b) {
+  let sum = 0, over = 0;
+  const n = a.w * a.h;
+  for (let i = 0; i < n; i++) {
+    let m = 0;
+    for (let c = 0; c < 3; c++) { const d = Math.abs(a.d[i * 4 + c] - b.d[i * 4 + c]); sum += d; if (d > m) m = d; }
+    if (m > 16) over++;
+  }
+  return { mean: sum / (3 * n), over: over / n };
+}
 await scenario('remix-link', async ({ page, cdp }) => {
   await dispatch(page, { k: 'pickInk', ink: 'spectral' });
   await dispatch(page, { k: 'pickForm', form: 'sprout' });
@@ -926,13 +946,15 @@ await scenario('remix-link', async ({ page, cdp }) => {
   await penStroke(cdp, line(700, 300, 980, 330, 50), { hold: 600 });
   await idle(page, 15000);
   assert(await count(page) === 6, `six strokes to share (${await count(page)})`);
-  const h = await R(page, () => window.__rise.sceneHash());
   const link = await R(page, () => window.__rise.remixUrl());
   assert(link && link.startsWith('https://sketch.syberlabs.io/#r='), `a remix link (${link && link.slice(0, 40)})`);
   // the menu item copies it (or says why not) without an error
   await dispatch(page, { k: 'copyRemix' });
   await page.waitForFunction(() => /Remix link copied|Couldn’t copy/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
   const fragment = link.slice(link.indexOf('#'));
+  await dispatch(page, { k: 'symmetry', on: false }); // its guides are not part of the drawing
+  await sleep(6500); // the toast leaves
+  const sent = await stage(page);
 
   // the visitor: a fresh browser with a drawing of their own
   const v = await open();
@@ -951,20 +973,28 @@ await scenario('remix-link', async ({ page, cdp }) => {
     let st = await R(v.page, () => window.__rise.state());
     assert(!st.replaying, 'the replay finished');
     assert(await count(v.page) === 6, `the shared drawing opens (${await count(v.page)} strokes)`);
-    assert(await R(v.page, () => window.__rise.sceneHash()) === h, 'the remix cooks bit-identically (sceneHash)');
     assert(st.currentDocId !== own, 'it opens as a new document');
+    const h = await R(v.page, () => window.__rise.sceneHash());
+    assert(h !== ownHash, 'the two drawings differ');
+    assert(await R(v.page, () => window.__rise.remixUrl()) === link, 'sharing the remix again gives the same link');
     await sleep(700);
     await dispatch(v.page, { k: 'openSheet', sheet: 'menu' });
     await sleep(900);
     st = await R(v.page, () => window.__rise.state());
     assert(st.recentDocs.some(d => d.id === own && d.strokes === 1), `the visitor's own drawing is still in Recent (${st.recentDocs.map(d => d.id + ':' + d.strokes)})`);
     await dispatch(v.page, { k: 'openSheet', sheet: null });
+    await sleep(6500); // the toast and the sheet leave
+    const got = await stage(v.page);
     await shot(v.page, 'remix-opened');
+    const diff = pixelDiff(sent, got);
+    console.log(`    remix vs sender: mean ${diff.mean.toFixed(3)}/255, ${(100 * diff.over).toFixed(3)} % of pixels off by > 16`);
+    // runs measure 0.08–0.59 % of pixels off by > 16 (sub-pixel edge shifts, invisible side by side); 1 % keeps
+    // headroom without letting a real change through (a re-grown stroke moves several %)
+    assert(diff.mean < 0.5 && diff.over < 0.01, `the remix looks like the sender's drawing (mean ${diff.mean.toFixed(3)}, ${(100 * diff.over).toFixed(3)} % > 16)`);
     // a truncated link (pasted into the open app) loads nothing and says so
     await R(v.page, f => { location.hash = f; }, fragment.slice(0, fragment.length >> 1));
     await v.page.waitForFunction(() => /damaged or incomplete/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
     assert(await R(v.page, () => window.__rise.sceneHash()) === h, 'a bad link changes nothing');
-    assert(ownHash !== h, 'the two drawings differ');
     const errs = v.errors.filter(e => !/favicon/.test(e));
     assert(errs.length === 0, 'visitor console/page errors:\n  ' + errs.join('\n  '));
   } finally {

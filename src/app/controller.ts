@@ -24,8 +24,7 @@ import { prefs } from '../persist/prefs';
 import { exportFilename, renderPng } from '../export/png';
 import { pickCodec, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
 import { downloadBlob } from '../persist/files';
-import { remixUrl } from '../persist/remix';
-import { VERSION } from './version';
+import { remixLink } from './remix';
 import type { Runtime } from './runtime';
 import { View } from './view';
 import { Drafts, formName } from './draft';
@@ -680,7 +679,7 @@ export class Controller implements InputSink {
     if (deliver) toast();
     const cancelled = (): boolean => this.timelapseCancel || gen !== this.timelapseGen;
     let res: TimelapseResult | null = null;
-    const link = remixUrl(rt.doc, VERSION).catch(() => null);
+    const link = remixLink(rt.doc).catch(() => null);
     try {
       const rs = rt.doc.ordered();
       try { await rt.scene.ensure(rs.map(r => r.id), 'visible'); } catch { /* uncooked strokes are skipped */ }

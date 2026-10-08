@@ -18,7 +18,8 @@ import { DEFAULT_TITLE, newMeta } from '../doc/document';
 import { makeDocId } from '../doc/ids';
 import { parseDoc, serializeDoc } from '../doc/serialize';
 import { downloadBlob, pickFile, readFileText, riseFilename } from '../persist/files';
-import { decodeRemix, remixUrl } from '../persist/remix';
+import { decodeRemix } from '../persist/remix';
+import { remixLink } from './remix';
 import type { RecentDoc } from './types';
 import type { Runtime } from './runtime';
 import type { Controller } from './controller';
@@ -118,7 +119,7 @@ export class Library {
   /** Menu → Copy remix link: the clipboard gets this drawing's link, or the person learns it is too big. */
   copyRemix(): void {
     const store = this.rt.store;
-    const url = remixUrl(this.rt.doc, VERSION);
+    const url = remixLink(this.rt.doc);
     const link = url.then(u => u ?? Promise.reject(new RangeError('the link would be too long')));
     let write: Promise<void>;
     try {
