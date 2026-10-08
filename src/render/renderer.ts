@@ -282,9 +282,9 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
     update() { touchLive(); live.update(); },
     predict(tail) { requestFrame(); live.predict(tail); },
     halo(h) { touchLive(); live.halo(h); },
-    commit(r, c, copies) {
+    commit(r, c, copies = []) {
       holdLive(r.id);
-      if (copies) for (const cp of copies) holdLive(cp.r.id);
+      for (const cp of copies) holdLive(cp.r.id);
       touchLive();
       live.commit(r, c, copies);
     },

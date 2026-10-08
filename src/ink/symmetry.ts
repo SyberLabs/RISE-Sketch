@@ -19,8 +19,6 @@ import type { Cooked, ColorStyle, Mat2x3, Spine, StrokeRecipe, Vec2 } from '../c
 import { S } from '../core/types';
 import { datan2, dcos, dsin, TAU } from '../core/det';
 
-export { SYM_FOLDS, SYM_DEFAULT_FOLDS, clampFolds, foldsAt, stepFolds } from '../core/folds';
-
 /**
  * Placement of copy i (1 ≤ i < folds) of a stroke whose origin is `o`, about the centre (cx, cy):
  * folds = 2 reflects across the vertical line x = cx; otherwise rotates by 360°·i/folds.

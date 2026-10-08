@@ -24,9 +24,9 @@
  *             undo removes the whole gesture (ink/symmetry.ts).
  */
 import type {
-  ColorStyle, Command, Cooked, Device, DraftStroke, InputSample, Mat2x3, NibId, PoolBuf, SampleBuf, StrokeId, StrokeRecipe,
+  Command, Cooked, Device, DraftStroke, InputSample, NibId, PoolBuf, SampleBuf, StrokeId, StrokeRecipe,
 } from '../core/types';
-import type { Halo } from '../render/types';
+import type { Halo, LiveCopy } from '../render/types';
 import { PL, S } from '../core/types';
 import { createInkCook, type InkIncrementalCook } from '../ink/cook';
 import { createRise, type Rise, type RiseInput } from '../ink/rise';
@@ -103,7 +103,7 @@ class Live {
   /** Committed pieces of an auto-split stroke (one history batch at the end). */
   readonly pieces: { cmd: Command; inv: Command }[] = [];
   /** Symmetry copies: placement and colour of each, fixed at pen-down. */
-  copies: { xf: Mat2x3; color: ColorStyle }[] = [];
+  copies: LiveCopy[] = [];
 
   constructor(d: Mutable<DraftStroke>, cook: InkIncrementalCook, rise: Rise, id: StrokeId, created: number,
     device: Device, t0: number, sx0: number, sy0: number) {
@@ -167,7 +167,7 @@ export class Drafts {
     this.cur = L;
     this.row(L, s);
     rt.renderer.overlay.cursor(null, null);
-    rt.renderer.live.begin(d, cook, L.copies.length ? L.copies : undefined);
+    rt.renderer.live.begin(d, cook, L.copies);
     rt.loop.request();
   }
 
@@ -341,7 +341,7 @@ export class Drafts {
         rt.history.push(cmd, inv);
       }
     }
-    rt.renderer.live.commit(r, c, copies.length ? copies : undefined);
+    rt.renderer.live.commit(r, c, copies);
     this.observe(L.device, r.samples, L.cook.jitter(), L.z);
     this.ev.committed(r, L.maxLevel);
   }
@@ -416,7 +416,7 @@ export class Drafts {
     L.pieces.push({ cmd, inv: rt.doc.apply(cmd) });
     if (L.haloOn) { rt.renderer.live.halo(null); L.haloOn = false; }
     rt.renderer.overlay.weld(null, 0);
-    rt.renderer.live.commit(piece, c, copies.length ? copies : undefined);
+    rt.renderer.live.commit(piece, c, copies);
     this.observe(L.device, piece.samples, L.cook.jitter(), L.z);
     // the continuation: same origin, its first row on the snapshot station
     const rows = continuationSamples(d.samples.data, d.samples.n, snap);
@@ -434,7 +434,7 @@ export class Drafts {
     L.pending = n;
     L.spineN = -1;
     L.quietUntil = L.travel + SEAM_QUIET;
-    rt.renderer.live.begin(next, L.cook, L.copies.length ? L.copies : undefined);
+    rt.renderer.live.begin(next, L.cook, L.copies);
   }
 }
 
