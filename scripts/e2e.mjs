@@ -93,8 +93,10 @@ async function scenario(name, fn, opts) {
     results.push({ name, ok: true, ms: Date.now() - t0 });
     console.log(`  PASS ${name} (${Date.now() - t0} ms)`);
   } catch (e) {
-    results.push({ name, ok: false, ms: Date.now() - t0, err: String(e && e.stack || e) });
-    console.log(`  FAIL ${name}: ${e && e.message}`);
+    if (env && !env.browser.connected) await sleep(500); // let the exit status arrive
+    const why = env && env.gone.length ? ` [${env.gone.join('; ')}]` : '';
+    results.push({ name, ok: false, ms: Date.now() - t0, err: String(e && e.stack || e) + why });
+    console.log(`  FAIL ${name}: ${e && e.message}${why}`);
     if (env) { try { await shot(env.page, `FAIL-${name}`); } catch {} }
   } finally {
     if (env) await env.browser.close();
@@ -447,10 +449,10 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
   await R(page, () => { Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true }); });
   await key(page, 'P', ['Shift']);
-  await sleep(100);
   let st = await R(page, () => window.__rise.state());
   assert(st.recording, 'Shift+P starts recording');
-  assert(await R(page, () => document.querySelector('.r-toast')?.textContent || '') .then(t => /Recording timelapse/.test(t)), 'a progress toast shows');
+  // the toast follows the async encoder probe (VideoEncoder.isConfigSupported), which takes no fixed time
+  assert(await page.waitForFunction(() => /Recording timelapse/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 10000 }).then(() => true, () => false), 'a progress toast shows');
   // drawing goes on while it records
   await penStroke(cdp, line(200, 700, 420, 690, 20));
   await page.waitForFunction(() => !window.__rise.state().recording, { timeout: 90000 });
