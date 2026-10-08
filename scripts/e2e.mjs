@@ -952,6 +952,7 @@ await scenario('remix-link', async ({ page, cdp }) => {
   await dispatch(page, { k: 'copyRemix' });
   await page.waitForFunction(() => /Remix link copied|Couldn’t copy/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
   const fragment = link.slice(link.indexOf('#'));
+  await dispatch(page, { k: 'symmetry', on: false }); // its guides are not part of the drawing
   await sleep(6500); // the toast leaves
   const sent = await stage(page);
 
@@ -987,7 +988,7 @@ await scenario('remix-link', async ({ page, cdp }) => {
     await shot(v.page, 'remix-opened');
     const diff = pixelDiff(sent, got);
     console.log(`    remix vs sender: mean ${diff.mean.toFixed(3)}/255, ${(100 * diff.over).toFixed(3)} % of pixels off by > 16`);
-    assert(diff.mean < 1 && diff.over < 0.01, `the remix looks like the sender's drawing (mean ${diff.mean.toFixed(3)}, ${(100 * diff.over).toFixed(3)} % > 16)`);
+    assert(diff.mean < 0.5 && diff.over < 0.005, `the remix looks like the sender's drawing (mean ${diff.mean.toFixed(3)}, ${(100 * diff.over).toFixed(3)} % > 16)`);
     // a truncated link (pasted into the open app) loads nothing and says so
     await R(v.page, f => { location.hash = f; }, fragment.slice(0, fragment.length >> 1));
     await v.page.waitForFunction(() => /damaged or incomplete/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
