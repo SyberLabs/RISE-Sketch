@@ -41,10 +41,10 @@ export function exportFrame(content: AABB, cam: Camera, cls: DeviceClass = devic
   return { box, pxPerDoc: px, width, height, k };
 }
 
-/** `rise-YYYYMMDD-HHMM.png` in local time. */
-export function exportFilename(d = new Date()): string {
+/** `rise-YYYYMMDD-HHMM.<ext>` in local time (`.png` for images, `.mp4` / `.webm` for timelapses). */
+export function exportFilename(d = new Date(), ext = 'png'): string {
   const p = (n: number, w = 2): string => String(n).padStart(w, '0');
-  return `rise-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`;
+  return `rise-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.${ext}`;
 }
 
 export interface ExportOptions {

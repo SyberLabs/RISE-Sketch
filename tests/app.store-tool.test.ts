@@ -9,7 +9,7 @@ const base = (): AppState => ({
   tool: defaultTool(), ground: 'night', selection: [], selectionRect: null, canUndo: false, canRedo: false,
   hasInk: false, zoom: 100, inkInView: true, inkDirection: null, chromeHidden: false, sheet: null,
   lastRecipe: null, docTitle: 'Untitled', currentDocId: 'd', recentDocs: [], autosaveOk: true,
-  replaying: false, replayProgress: 0, exporting: false, penMode: false, firstRun: false,
+  replaying: false, replayProgress: 0, exporting: false, recording: false, penMode: false, firstRun: false,
   hints: { draw: 'done', rise: 'pending', form: 'pending', nav: 'pending' },
   reducedMotion: false, isTouch: false, isMac: false,
 });

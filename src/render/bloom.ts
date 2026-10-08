@@ -24,7 +24,7 @@ export const CURE_MS = 400;
 /** Weight of the coarser level in each upsample mix. */
 const MIX = 0.6;
 /** Bloom resolution relative to the viewport's device px. */
-const SCALE = 0.25;
+export const SCALE = 0.25;
 
 export interface BloomView { cam: Camera; cssW: number; cssH: number; dpr: number }
 
@@ -62,6 +62,55 @@ interface Buf { el: HTMLCanvasElement; cam: Camera | null }
 
 function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function prep(ctx: CanvasRenderingContext2D): void {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+}
+
+/** dst = src scaled to dst's size (dst cleared first). */
+function down(src: HTMLCanvasElement, dst: HTMLCanvasElement): void {
+  const ctx = dst.getContext('2d')!;
+  prep(ctx);
+  ctx.clearRect(0, 0, dst.width, dst.height);
+  ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, dst.width, dst.height);
+}
+
+/** dst = (1 - MIX)*dst + MIX*up(src). */
+function mixUp(src: HTMLCanvasElement, dst: HTMLCanvasElement): void {
+  const ctx = dst.getContext('2d')!;
+  prep(ctx);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.globalAlpha = MIX;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, dst.width, dst.height);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, dst.width, dst.height);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * Render the bloom of `src` into `dst` (the bloom buffer, SCALE of src's size) through `chain`,
+ * three scratch canvases each half the size of the one before. Shared by the live bloom and the
+ * timelapse export, so a video glows exactly as the screen does.
+ */
+export function bloomOf(src: HTMLCanvasElement, dst: HTMLCanvasElement, chain: readonly HTMLCanvasElement[]): void {
+  const ctx = dst.getContext('2d');
+  if (!ctx) return;
+  prep(ctx);
+  ctx.clearRect(0, 0, dst.width, dst.height);
+  ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, dst.width, dst.height);
+  down(dst, chain[0]);
+  down(chain[0], chain[1]);
+  down(chain[1], chain[2]);
+  mixUp(chain[2], chain[1]);
+  mixUp(chain[1], chain[0]);
+  mixUp(chain[0], dst);
 }
 
 /** Bloom over two existing canvases (the compositor's #bloomA / #bloomB). */
@@ -117,36 +166,6 @@ export function createBloom(a: HTMLCanvasElement, b: HTMLCanvasElement, ledger: 
     return true;
   }
 
-  function prep(ctx: CanvasRenderingContext2D): void {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-  }
-
-  /** dst = src scaled to dst's size (dst cleared first). */
-  function down(src: HTMLCanvasElement, dst: HTMLCanvasElement): void {
-    const ctx = dst.getContext('2d')!;
-    prep(ctx);
-    ctx.clearRect(0, 0, dst.width, dst.height);
-    ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, dst.width, dst.height);
-  }
-
-  /** dst = (1 − MIX)·dst + MIX·up(src). */
-  function mixUp(src: HTMLCanvasElement, dst: HTMLCanvasElement): void {
-    const ctx = dst.getContext('2d')!;
-    prep(ctx);
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.globalAlpha = MIX;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, dst.width, dst.height);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, dst.width, dst.height);
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
   function transformFor(x: Buf, v: BloomView): string {
     if (!x.cam) return '';
     const k = v.cam.scale, k0 = x.cam.scale;
@@ -178,15 +197,7 @@ export function createBloom(a: HTMLCanvasElement, b: HTMLCanvasElement, ledger: 
       const ctx = sized(back.el, bw, bh);
       if (!ctx || !ensureChain()) return;
       rstats.c.bloomRenders++;
-      prep(ctx);
-      ctx.clearRect(0, 0, bw, bh);
-      ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, bw, bh);
-      down(back.el, chain[0]);
-      down(chain[0], chain[1]);
-      down(chain[1], chain[2]);
-      mixUp(chain[2], chain[1]);
-      mixUp(chain[1], chain[0]);
-      mixUp(chain[0], back.el);
+      bloomOf(src, back.el, chain);
       back.cam = view.cam;
       back.el.style.transform = '';
       const old = bufs[front];

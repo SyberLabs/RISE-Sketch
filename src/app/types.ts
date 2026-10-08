@@ -23,6 +23,8 @@ export type Intent =
   | { k: 'new' } | { k: 'open'; file: File } | { k: 'openPicker' }
   | { k: 'openRecent'; id: string } | { k: 'deleteRecent'; id: string }
   | { k: 'save' } | { k: 'exportPng' } | { k: 'cancelExport' }
+  /** Share timelapse: record (Shift+P / menu), cancel the recording, share the finished video (toast action). */
+  | { k: 'timelapse' } | { k: 'cancelTimelapse' } | { k: 'shareTimelapse' }
   | { k: 'replay' } | { k: 'stopReplay' }
   | { k: 'fit' } | { k: 'resetView' } | { k: 'viewChip' }
   | { k: 'resetCalibration' }
@@ -60,6 +62,8 @@ export interface AppState {
   replaying: boolean;
   replayProgress: number; // 0..1
   exporting: boolean;
+  /** A timelapse is recording (drawing and navigation go on; only the menu items wait). */
+  recording: boolean;
   penMode: boolean;
   firstRun: boolean;
   hints: Readonly<Record<HintId, 'pending' | 'showing' | 'done'>>;
@@ -112,6 +116,11 @@ export interface RiseDebug {
   serialize(): string;
   load(text: string): Promise<void>;
   exportPng(): Promise<{ width: number; height: number; bytes: number }>;
+  /**
+   * Record the timelapse without delivering it. `url` is an object URL of the video (the e2e loads
+   * it into a <video>); null when nothing was recorded.
+   */
+  timelapse(): Promise<{ url: string; mime: string; bytes: number; width: number; height: number; frames: number; durationMs: number } | null>;
   /** Perf counters since the last reset (CPU-side ms). */
   perf(reset?: boolean): { liveFrameP95: number; liveFrameMax: number; inputP95: number; frames: number; longTasks: number };
   /**

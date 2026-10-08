@@ -108,7 +108,7 @@ export async function boot(o: BootOptions): Promise<App> {
     docTitle: doc.meta.title, currentDocId: doc.meta.id,
     recentDocs: [],
     autosaveOk: docStore !== null,
-    replaying: false, replayProgress: 0, exporting: false,
+    replaying: false, replayProgress: 0, exporting: false, recording: false,
     penMode: false, firstRun, hints,
     reducedMotion: reducedMq.matches, isTouch: coarseMq.matches, isMac,
   };

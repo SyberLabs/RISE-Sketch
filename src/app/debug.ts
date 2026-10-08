@@ -124,6 +124,11 @@ export function installDebug(app: App): void {
       adoptDocument(rt, app.ctl, meta, strokes, 'fade');
     },
     exportPng: async () => (await app.ctl.exportPng(false)) ?? { width: 0, height: 0, bytes: 0 },
+    async timelapse() {
+      const r = await app.ctl.shareTimelapse(false);
+      if (!r) return null;
+      return { url: URL.createObjectURL(r.blob), mime: r.mime, bytes: r.blob.size, width: r.width, height: r.height, frames: r.frames, durationMs: r.durationMs };
+    },
     perf: reset => rt.perf.read(reset),
     renderStats: opts => readStats(opts),
     probe: (sx, sy) => probe(app, sx, sy),

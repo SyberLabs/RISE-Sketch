@@ -585,6 +585,23 @@ describe('replay (play)', () => {
     expect(e.host.bakes.length).toBe(1);
   });
 
+  it('a symmetry group plays as one: six petals never fast-forward each other', () => {
+    const e = setup();
+    const { r, c } = recorded();
+    const xf = Float64Array.of(1, 0, 0, 1, 0, 0);
+    const copies = [1, 2, 3, 4, 5].map(k => ({ r: { ...r, id: 'rec' + k, xf } as StrokeRecipe, c }));
+    e.live.play(r, c);
+    for (const cp of copies) e.live.play(cp.r, cp.c);
+    expect(e.live.animating).toBe(6);
+    expect(e.host.bakes.length).toBe(0);
+    // a later, separate stroke still counts against the cap with the group as one
+    const other = { r: { ...r, id: 'later', created: r.created + 5000 } as StrokeRecipe, c };
+    e.live.play(other.r, other.c);
+    expect(e.host.bakes.length).toBe(0);
+    settle(e, 600);
+    expect(e.host.bakes.length).toBe(7);
+  });
+
   it('rests without baking when asked, and dissolves on demand', () => {
     const e = setup();
     const { r, c } = recorded();

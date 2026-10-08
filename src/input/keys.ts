@@ -13,6 +13,8 @@
  *  - `?` is accepted with AltGr (layouts that need it) but not with Mod alone.
  *  - Digit1–Digit9 and Digit0 pick the first ten Forms in sheet order (P0_FORMS; Ripple has no key); Shift+Digit0 is 100 %.
  *  - P1 bindings (Mod+D, Mod+Shift+E, M, arrows) return null.
+ *  - Shift+P records the Share timelapse (P replays; the timelapse is the replay as a video).
+ *    Not Mod+Shift+E: that is the P1 SVG export, and Ctrl+Shift+E opens Firefox's network panel.
  */
 import type { KeyAction } from './types';
 
@@ -49,6 +51,7 @@ const A = {
   fit: Object.freeze({ k: 'fit' }) as KeyAction,
   resetView: Object.freeze({ k: 'resetView' }) as KeyAction,
   replay: Object.freeze({ k: 'replay' }) as KeyAction,
+  timelapse: Object.freeze({ k: 'timelapse' }) as KeyAction,
   help: Object.freeze({ k: 'help' }) as KeyAction,
   save: Object.freeze({ k: 'save' }) as KeyAction,
   open: Object.freeze({ k: 'open' }) as KeyAction,
@@ -94,7 +97,7 @@ export function keyAction(e: KeyLike, isMac: boolean): KeyAction | null {
     case 'KeyG': return s ? null : A.ground;
     case 'KeyE': return s ? null : A.erase;
     case 'KeyR': return s ? null : A.reseed;
-    case 'KeyP': return s ? null : A.replay;
+    case 'KeyP': return s ? A.timelapse : A.replay;
     case 'KeyM': return s ? A.folds : A.symmetry;
     case 'BracketLeft': return A.smaller;
     case 'BracketRight': return A.larger;

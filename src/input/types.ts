@@ -20,6 +20,7 @@ export type KeyAction =
   | { k: 'selectAll' } | { k: 'delete' } | { k: 'escape' }
   | { k: 'fit' } | { k: 'resetView' }       // Shift+1 / Shift+0
   | { k: 'replay' }                         // P
+  | { k: 'timelapse' }                      // Shift+P
   | { k: 'help' }                           // ? or F1
   | { k: 'save' } | { k: 'open' } | { k: 'export' }; // Mod+S / Mod+O / Mod+E
 

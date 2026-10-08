@@ -93,8 +93,8 @@ describe('Delete', () => {
 });
 
 describe('menu', () => {
-  it('has exactly the seven items of DESIGN §4, in order', () => {
-    expect(menuItems(state()).map(i => i.label)).toEqual(['New', 'Open…', 'Save project', 'Export image', 'Recent', 'Replay', 'Gestures & keys']);
+  it('has exactly the eight items of DESIGN §4, in order', () => {
+    expect(menuItems(state()).map(i => i.label)).toEqual(['New', 'Open…', 'Save project', 'Export image', 'Share timelapse', 'Recent', 'Replay', 'Gestures & keys']);
   });
   it('shows shortcuts on desktop only, with the platform modifier', () => {
     expect(menuItems(state({ isMac: true })).find(i => i.key === 'save')!.kbd).toBe('⌘S');
@@ -107,6 +107,16 @@ describe('menu', () => {
     expect(menuItems(state({ hasInk: true })).find(i => i.key === 'replay')!.disabled).toBe(false);
     expect(menuItems(state()).find(i => i.key === 'help')!.intent).toEqual({ k: 'openSheet', sheet: 'help' });
     expect(menuItems(state()).find(i => i.key === 'recent')!.intent).toBeNull();
+  });
+  it('Share timelapse needs ink, waits while one records, and shows Shift+P on desktop', () => {
+    const tl = (s: Parameters<typeof state>[0]) => menuItems(state(s)).find(i => i.key === 'timelapse')!;
+    expect(tl({}).disabled).toBe(true);
+    expect(tl({ hasInk: true }).disabled).toBe(false);
+    expect(tl({ hasInk: true, recording: true }).disabled).toBe(true);
+    expect(tl({ hasInk: true, exporting: true }).disabled).toBe(false);
+    expect(tl({}).intent).toEqual({ k: 'timelapse' });
+    expect(tl({}).kbd).toBe('⇧P');
+    expect(tl({ isTouch: true }).kbd).toBe(null);
   });
 });
 

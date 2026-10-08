@@ -2647,6 +2647,14 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       killId(r.id);
       const p = new PlayStroke(r, c, opts, now, cx);
       p.refresh(cx);
+      // a symmetry copy plays with the stroke it was drawn by (same pen-down): the group counts as
+      // one animation in capAnimations, so a mandala's petals never pop in fast-forwarded
+      if (r.xf) {
+        for (let k = items.length - 1; k >= 0; k--) {
+          const it = items[k];
+          if (!it.dead && it instanceof PlayStroke && !it.lead && it.r.created === r.created) { p.lead = it; break; }
+        }
+      }
       items.push(p);
       capAnimations(now);
       host.requestFrame();

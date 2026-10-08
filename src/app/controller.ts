@@ -22,6 +22,7 @@ import { chiselAngle, nibWidth } from '../ink/nibs';
 import { clampFolds, foldsName, stepFolds } from '../core/folds';
 import { prefs } from '../persist/prefs';
 import { exportFilename, renderPng } from '../export/png';
+import { mimeExt, pickEncoder, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
 import { downloadBlob } from '../persist/files';
 import type { Runtime } from './runtime';
 import { View } from './view';
@@ -29,7 +30,7 @@ import { Drafts, formName } from './draft';
 import { ERASER_R, Eraser } from './erase';
 import { step } from './edits';
 import { HIT_SP, Selection, type Restyle } from './selection';
-import { Player } from './replay';
+import { Player, timeline } from './replay';
 import { Library } from './library';
 import { HintFlow } from './hints';
 import { clampBase, clampSize, cycleInk, cycleNib, sameCustom, saveTool, toolColor } from './tool';
@@ -41,6 +42,10 @@ type Bend =
 
 /** The export progress toast appears once an export takes longer than this (ms). */
 const EXPORT_TOAST_MS = 300;
+/** The share sheet's title and link (DESIGN §8 Share timelapse). */
+const SHARE_TITLE = 'Made in RISE Sketch', SHARE_URL = 'https://sketch.syberlabs.io';
+/** A finished timelapse waits this long on its Share toast (ms). */
+const SHARE_TOAST_MS = 20000;
 
 export class Controller implements InputSink {
   readonly view: View;
@@ -60,6 +65,10 @@ export class Controller implements InputSink {
   private savedTool: ToolState | null = null;
   private exportGen = 0;
   private exportCancel = false;
+  private timelapseGen = 0;
+  private timelapseCancel = false;
+  /** A finished timelapse waiting for the toast's Share tap (the share sheet needs a fresh user gesture). */
+  private timelapseFile: File | null = null;
   private readonly cursorAt: [number, number] = [0, 0];
   private readonly cursorShape: NibCursor = { kind: 'brush', wCss: 0, angle: 0, css: '#ffffff' };
   private cursorCss = '';
@@ -225,6 +234,7 @@ export class Controller implements InputSink {
         const s = this.rt.store.get();
         if (s.sheet) this.dispatch({ k: 'openSheet', sheet: null });
         else if (s.exporting) this.dispatch({ k: 'cancelExport' });
+        else if (s.recording) this.dispatch({ k: 'cancelTimelapse' });
         else if (s.tool.mode === 'erase') this.dispatch({ k: 'exitErase' });
         else if (s.selection.length) this.dispatch({ k: 'deselect' });
         break;
@@ -232,6 +242,7 @@ export class Controller implements InputSink {
       case 'fit': this.dispatch({ k: 'fit' }); break;
       case 'resetView': this.dispatch({ k: 'resetView' }); break;
       case 'replay': this.dispatch({ k: 'replay' }); break;
+      case 'timelapse': this.dispatch({ k: 'timelapse' }); break;
       case 'help': this.dispatch({ k: 'openSheet', sheet: 'help' }); break;
       case 'save': this.dispatch({ k: 'save' }); break;
       case 'open': this.dispatch({ k: 'openPicker' }); break;
@@ -312,6 +323,9 @@ export class Controller implements InputSink {
       case 'save': this.library.save(); break;
       case 'exportPng': void this.exportPng(true); break;
       case 'cancelExport': this.exportCancel = true; break;
+      case 'timelapse': void this.shareTimelapse(true); break;
+      case 'cancelTimelapse': this.timelapseCancel = true; break;
+      case 'shareTimelapse': void this.shareFile(); break;
       case 'replay': if (!this.busy && !st.replaying) void this.player.start(); break;
       case 'stopReplay': this.player.stop(); break;
     }
@@ -593,7 +607,7 @@ export class Controller implements InputSink {
   // ================================================================ export
 
   /** Mod+E / menu: render the PNG, with a progress toast (+ Cancel) once it takes > 300 ms. */
-  async exportPng(deliver: boolean): Promise<{ width: number; height: number; bytes: number } | null> {
+  async exportPng(deliver: boolean, savedText = 'Image saved'): Promise<{ width: number; height: number; bytes: number } | null> {
     const rt = this.rt;
     if (rt.store.get().exporting || !rt.doc.size) return null;
     const gen = ++this.exportGen;
@@ -624,13 +638,100 @@ export class Controller implements InputSink {
         rt.store.set({ exporting: false });
         if (toastOn) rt.store.emit({ k: 'toastClose', id: 'export' });
         if (out) {
-          if (deliver) rt.store.emit({ k: 'toast', id: 'export', text: 'Image saved' });
+          if (deliver) rt.store.emit({ k: 'toast', id: 'export', text: savedText });
           rt.store.emit({ k: 'announce', text: 'Image saved' });
         } else if (this.exportCancel) rt.store.emit({ k: 'announce', text: 'Export cancelled' });
         else if (performance.now() - t0 > 0) rt.store.emit({ k: 'announce', text: 'Export failed' });
       }
     }
     return out;
+  }
+
+  /**
+   * Share timelapse (Shift+P / menu, DESIGN §8): record the replay as a video (export/timelapse.ts)
+   * with a progress toast and Cancel, then share it where the Web Share sheet takes files, else
+   * download it. The recording runs off the app's renderer, so drawing and navigation go on.
+   * Without MediaRecorder it exports the PNG instead and says why.
+   */
+  async shareTimelapse(deliver: boolean): Promise<TimelapseResult | null> {
+    const rt = this.rt;
+    if (rt.store.get().recording || !rt.doc.size) return null;
+    const gen = ++this.timelapseGen;
+    this.timelapseCancel = false;
+    this.timelapseFile = null;
+    rt.store.set({ recording: true });
+    const encoder = await pickEncoder();
+    if (!encoder) {
+      if (gen === this.timelapseGen) rt.store.set({ recording: false });
+      if (deliver) void this.exportPng(true, 'This browser can’t record video, so here is an image');
+      return null;
+    }
+    let progress = 0, lastToast = 0;
+    const toast = (): void => {
+      lastToast = performance.now();
+      rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Recording timelapse…', progress, action: { label: 'Cancel', intent: { k: 'cancelTimelapse' } } });
+    };
+    if (deliver) toast();
+    const cancelled = (): boolean => this.timelapseCancel || gen !== this.timelapseGen;
+    let res: TimelapseResult | null = null;
+    try {
+      const rs = rt.doc.ordered();
+      try { await rt.scene.ensure(rs.map(r => r.id), 'visible'); } catch { /* uncooked strokes are skipped */ }
+      const items: TimelapseItem[] = [];
+      for (const r of rs) { const c = rt.scene.cooked(r.id); if (c) items.push({ r, c }); }
+      const content = rt.scene.contentBox();
+      if (items.length && content && !cancelled()) {
+        const ledger = rt.renderer.ledger;
+        res = await recordTimelapse(items, timeline(items.map(it => it.r), timelapseSpeed), {
+          ground: rt.store.get().ground, content, encoder, loop: rt.loop,
+          onProgress: f => { progress = f; if (deliver && performance.now() - lastToast > 150) toast(); },
+          cancelled,
+          alloc: (w, h) => ledger.alloc(w, h, 'export'),
+          free: c => ledger.free(c),
+        });
+      }
+    } catch (err) {
+      console.error('[rise] timelapse failed', err);
+    } finally {
+      if (gen === this.timelapseGen) rt.store.set({ recording: false });
+    }
+    if (gen !== this.timelapseGen) return null;
+    if (!res) {
+      if (deliver) rt.store.emit({ k: 'toastClose', id: 'timelapse' });
+      rt.store.emit({ k: 'announce', text: this.timelapseCancel ? 'Timelapse cancelled' : 'Timelapse failed' });
+      return null;
+    }
+    if (deliver) this.deliverTimelapse(res);
+    return res;
+  }
+
+  /** Share sheet where it takes the file (from the toast's Share tap: it needs a user gesture), else a download. */
+  private deliverTimelapse(res: TimelapseResult): void {
+    const name = exportFilename(new Date(), mimeExt(res.mime));
+    const file = typeof File === 'function' ? new File([res.blob], name, { type: res.mime }) : null;
+    const nav = navigator as Navigator & { userActivation?: { isActive: boolean } };
+    if (file && typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare({ files: [file] })) {
+      this.timelapseFile = file;
+      if (nav.userActivation?.isActive) { void this.shareFile(); return; }
+      this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse ready', action: { label: 'Share', intent: { k: 'shareTimelapse' } }, ms: SHARE_TOAST_MS });
+      return;
+    }
+    downloadBlob(res.blob, name);
+    this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse saved' });
+  }
+
+  private async shareFile(): Promise<void> {
+    const file = this.timelapseFile;
+    if (!file) return;
+    try {
+      await navigator.share({ files: [file], title: SHARE_TITLE, url: SHARE_URL });
+      this.timelapseFile = null;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;  // the person closed the sheet
+      this.timelapseFile = null;
+      downloadBlob(file, file.name);
+      this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse saved' });
+    }
   }
 
   // ================================================================ misc

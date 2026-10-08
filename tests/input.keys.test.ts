@@ -27,6 +27,9 @@ describe('keyAction: single keys', () => {
     expect(win(k('NumpadSubtract'))).toEqual({ k: 'depth', delta: -0.5 });
     expect(win(k('KeyR'))).toEqual({ k: 'reseed' });
     expect(win(k('KeyP'))).toEqual({ k: 'replay' });
+    expect(win(k('KeyP', { shiftKey: true }))).toEqual({ k: 'timelapse' }); // Share timelapse
+    expect(mac(k('KeyP', { shiftKey: true }))).toEqual({ k: 'timelapse' });
+    expect(win(k('KeyP', { ctrlKey: true, shiftKey: true }))).toBe(null);
     expect(win(k('Delete'))).toEqual({ k: 'delete' });
     expect(win(k('Backspace'))).toEqual({ k: 'delete' });
     expect(win(k('Escape'))).toEqual({ k: 'escape' });
