@@ -1016,6 +1016,8 @@ abstract class WakeItem implements Item {
   readonly m: Mat2x3 = new Float64Array(6);
   /** Placement of a symmetry copy (doc rel. origin -> doc rel. origin), composed into `m`; null = none. */
   xf: Mat2x3 | null = null;
+  /** A symmetry copy's stroke: the copy never drains its cook, animates and fast-forwards with it. */
+  lead: Item | null = null;
   sc = 1;
   protected camRev = -1;
   protected groundRev = -1;
@@ -1313,8 +1315,6 @@ class LiveStroke extends WakeItem {
   tipW = 0;
   tipCss = '';
   private hasSlot = false;
-  /** A symmetry copy: it mirrors the same cook as the stroke (whose drain events it leaves alone). */
-  follower = false;
 
   constructor(readonly d: DraftStroke, readonly cook: IncrementalCook) {
     super(d, d.origin, d.form.form, new ArcClock(), new PolyStore());
@@ -1355,7 +1355,7 @@ class LiveStroke extends WakeItem {
   private sync(now: number, cx: LayerCx): void {
     this.cookDirty = false;
     this.evN = 0;
-    if (!this.follower) this.cook.drainSettled(this.onDrain);
+    if (!this.lead) this.cook.drainSettled(this.onDrain);
     const v = this.cook.view();
     const g = v.geom, n = g.nPolys;
     const slotRaw = (v as { slot?: unknown }).slot;
@@ -2295,8 +2295,6 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
   let live: LiveStroke | null = null;
   /** Symmetry copies of the live stroke (same cook, own placement and colour). */
   let followers: LiveStroke[] = [];
-  /** A committed symmetry copy's finish -> the stroke's finish (capAnimations). */
-  const copyOf = new WeakMap<Item, Item>();
   let overlay: Pick<OverlayInternal, 'predicted'> | null = (host as LiveHostExt).overlay ?? null;
   let camRev = 1, groundRev = 1;
   let lastW = -1, lastH = -1, lastDpr = -1;
@@ -2448,16 +2446,16 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
 
   /**
    * At most MAX_ANIMATING strokes animate; older ones fast-forward. A symmetry group (a stroke and
-   * its copies, `copyOf`) counts as one and fast-forwards together, so the copies never part ways.
+   * the copies whose `lead` it is) counts as one and fast-forwards together, so they never part ways.
    */
   function capAnimations(now: number): void {
     let n = 0;
-    for (const it of items) if (!it.dead && !copyOf.has(it) && !(it instanceof LiveStroke && it.follower) && it.animating()) n++;
+    for (const it of items) if (!it.dead && !leadOf(it) && it.animating()) n++;
     for (let k = 0; k < items.length && n > MAX_ANIMATING; k++) {
       const it = items[k];
-      if (it.dead || it === live || copyOf.has(it) || (it instanceof LiveStroke && it.follower) || !it.animating()) continue;
+      if (it.dead || it === live || leadOf(it) || !it.animating()) continue;
       it.fastForward(now, cx);
-      for (const c of items) if (copyOf.get(c) === it && !c.dead) c.fastForward(now, cx);
+      for (const c of items) if (leadOf(c) === it && !c.dead) c.fastForward(now, cx);
       n--;
     }
   }
@@ -2467,7 +2465,9 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
     for (const it of items) if (!it.dead && it.id === id && it.tag !== TAG_LIVE && !(it instanceof AnimStroke && it.mode === LIFTED)) it.kill(cx);
   }
 
-  function begin(d: DraftStroke, cook: IncrementalCook, copies?: readonly LiveCopy[]): void {
+  const leadOf = (it: Item): Item | null => (it instanceof WakeItem ? it.lead : null);
+
+  function begin(d: DraftStroke, cook: IncrementalCook, copies: readonly LiveCopy[] = []): void {
     if (live) withdraw();
     const now = host.now();
     prepare(now);
@@ -2478,17 +2478,14 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
     ls.tipW = nibWidth(d.stroke.nib, d.stroke.size, 0.6, 0, d.device) / (d.z > 0 ? d.z : 1);
     live = ls;
     items.push(ls);
-    followers = [];
-    if (copies) {
-      for (const cp of copies) {
-        const f = new LiveStroke({ ...d, color: cp.color }, cook);
-        f.follower = true;
-        f.xf = cp.xf;
-        f.refresh(cx);
-        followers.push(f);
-        items.push(f);
-      }
-    }
+    followers = copies.map(cp => {
+      const f = new LiveStroke({ ...d, color: cp.color }, cook);
+      f.lead = ls;
+      f.xf = cp.xf;
+      f.refresh(cx);
+      items.push(f);
+      return f;
+    });
     host.requestFrame();
   }
 
@@ -2520,12 +2517,19 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
     host.requestFrame();
   }
 
-  function commit(r: StrokeRecipe, c: Cooked, copies?: readonly { r: StrokeRecipe; c: Cooked }[]): void {
+  function commit(r: StrokeRecipe, c: Cooked, copies: readonly { r: StrokeRecipe; c: Cooked }[] = []): void {
     const now = host.now();
     prepare(now);
     const ls = live;
     const fs = followers;
     followers = [];
+    const bake = (br: StrokeRecipe, bc: Cooked): void => {
+      killId(br.id);
+      const a = new AnimStroke(br, bc, br.form.form, BAKE, now, 0);
+      a.refresh(cx);
+      items.push(a);
+    };
+    let baked = 0; // copies with a live follower to finish from; the rest bake directly
     if (ls) {
       live = null;
       endHalo();
@@ -2540,13 +2544,11 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       const f0 = new FinishStroke(ls, r, c, now, cx, fold);
       ls.dead = true;
       replace(ls, f0);
-      const n = copies ? copies.length : 0;
-      for (let k = 0; k < fs.length; k++) {
-        const fl = fs[k];
-        if (k < n) {
+      for (const fl of fs) {
+        if (baked < copies.length) {
           // drawn from the stroke's own geometry through the copy's placement; bakes the placed geometry
-          const fk = new FinishStroke(fl, copies![k].r, c, now, cx, fold, copies![k].c);
-          copyOf.set(fk, f0);
+          const fk = new FinishStroke(fl, copies[baked].r, c, now, cx, fold, copies[baked++].c);
+          fk.lead = f0;
           fl.dead = true;
           replace(fl, fk);
         } else fl.kill(cx);
@@ -2554,19 +2556,9 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       capAnimations(now);
     } else {
       for (const f of fs) f.kill(cx);
-      killId(r.id);
-      const a = new AnimStroke(r, c, r.form.form, BAKE, now, 0);
-      a.refresh(cx);
-      items.push(a);
+      bake(r, c);
     }
-    if (copies && (!ls || fs.length < copies.length)) {
-      for (let k = ls ? fs.length : 0; k < copies.length; k++) {
-        killId(copies[k].r.id);
-        const a = new AnimStroke(copies[k].r, copies[k].c, copies[k].r.form.form, BAKE, now, 0);
-        a.refresh(cx);
-        items.push(a);
-      }
-    }
+    for (const cp of copies.slice(baked)) bake(cp.r, cp.c);
     host.requestFrame();
   }
 

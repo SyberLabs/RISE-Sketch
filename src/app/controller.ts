@@ -19,7 +19,7 @@ import type { HintId, Intent } from './types';
 import type { NibCursor } from '../render/types';
 import { bendColor, customFromLch, lchAt, swatchCss } from '../ink/color';
 import { chiselAngle, nibWidth } from '../ink/nibs';
-import { clampFolds, stepFolds } from '../ink/symmetry';
+import { clampFolds, foldsName, stepFolds } from '../core/folds';
 import { prefs } from '../persist/prefs';
 import { exportFilename, renderPng } from '../export/png';
 import { downloadBlob } from '../persist/files';
@@ -356,7 +356,7 @@ export class Controller implements InputSink {
       saveTool(this.savedTool);
       this.setTool({ sym }, false);
     } else this.setTool({ sym });
-    this.rt.store.emit({ k: 'announce', text: symmetryName(sym) });
+    this.rt.store.emit({ k: 'announce', text: sym.on ? foldsName(sym.folds) : 'Symmetry off' });
   }
 
   /**
@@ -663,10 +663,4 @@ export class Controller implements InputSink {
     this.stageCursor = c;
     this.stage.style.cursor = c;
   }
-}
-
-/** Spoken name of a symmetry state (announcements, labels). */
-export function symmetryName(s: SymmetryTool): string {
-  if (!s.on) return 'Symmetry off';
-  return s.folds === 2 ? 'Mirror' : `Kaleidoscope, ${s.folds}-fold`;
 }

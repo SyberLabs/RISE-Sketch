@@ -9,7 +9,7 @@ import { INK_ORDER, P0_FORMS, P0_NIBS } from '../core/types';
 import { NIBS } from '../ink/nibs';
 import { FORMS } from '../ink/operators/registry';
 import { prefs } from '../persist/prefs';
-import { clampFolds, SYM_DEFAULT_FOLDS } from '../ink/symmetry';
+import { clampFolds, SYM_DEFAULT_FOLDS } from '../core/folds';
 
 const TOOL_KEY = 'tool';
 

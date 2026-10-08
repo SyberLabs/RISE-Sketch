@@ -7,8 +7,8 @@ import type { Cooked, StrokeRecipe } from '../src/core/types';
 import { S } from '../src/core/types';
 import { cook, spineOf } from '../src/ink/cook';
 import { buildSpine } from '../src/ink/spine';
-import { clampFolds, copyColor, foldsAt, placeCooked, placedSamples, stepFolds, SYM_FOLDS, symmetryXf, symmetryXfs } from '../src/ink/symmetry';
-import { foldsAt as coreFoldsAt } from '../src/core/folds';
+import { copyColor, placeCooked, placedSamples, symmetryXf, symmetryXfs } from '../src/ink/symmetry';
+import { clampFolds, foldsAt, stepFolds, SYM_FOLDS } from '../src/core/folds';
 import { freezeRecipe, peelCommands } from '../src/doc/commands';
 import { createDoc, newMeta } from '../src/doc/document';
 import { sceneHash } from '../src/doc/serialize';
@@ -67,7 +67,6 @@ describe('placements', () => {
     expect(foldsAt(6, 1)).toBe(8);
     expect(foldsAt(6, 9)).toBe(12);
     expect(foldsAt(6, -9)).toBe(2);
-    expect(coreFoldsAt).toBe(foldsAt);
   });
 });
 
