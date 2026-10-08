@@ -312,8 +312,14 @@ export class Selection {
     this.preview = null;
     const after: StrokeRecipe[] = [], from: StrokeRecipe[] = [];
     const cooked: (Cooked | null)[] = [];
+    // symmetry copies share their seed: a reseed gives them one new seed, so they stay symmetric
+    const seeds = new Map<number, number>();
     for (const r of before) {
-      const n = restyleRecipe(r, s, () => rt.doc.nextSeed());
+      const n = restyleRecipe(r, s, () => {
+        let v = seeds.get(r.seed);
+        if (v === undefined) { v = rt.doc.nextSeed(); seeds.set(r.seed, v); }
+        return v;
+      });
       if (n === r) continue;
       from.push(r); after.push(n);
       const pv = preview && preview.key === restyleKey(s) ? preview.items.find(it => it.r.id === r.id) : undefined;
@@ -433,5 +439,5 @@ function sameGeometryInputs(a: StrokeRecipe, b: StrokeRecipe): boolean {
     a.cut === b.cut && a.closed === b.closed && a.radial === b.radial && a.device === b.device &&
     a.stroke.nib === b.stroke.nib && a.stroke.size === b.stroke.size &&
     a.form.form === b.form.form && a.form.v === b.form.v && a.form.base === b.form.base &&
-    a.origin[0] === b.origin[0] && a.origin[1] === b.origin[1] && a.calib === b.calib && a.resume === b.resume;
+    a.origin[0] === b.origin[0] && a.origin[1] === b.origin[1] && a.calib === b.calib && a.resume === b.resume && a.xf === b.xf;
 }

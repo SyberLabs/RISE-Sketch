@@ -2,7 +2,8 @@
  * The overlay (DESIGN §4 feedback list, §2.2.2 latency, §6.2 layer 5): the nib cursor (true
  * width and shape in the ink colour; Chisel is an oriented bar that follows the azimuth), the
  * predicted tail and tip of the live stroke, the closure weld ring, the lasso, the eraser ring
- * with its doom mask, the selection's dashed bounds and 1 px outline, and the size ring.
+ * with its doom mask, the selection's dashed bounds and 1 px outline, the size ring, and the
+ * symmetry guide (a 15 % hairline axis for Mirror, or one spoke per fold, through the centre).
  * None of it is ever interactive.
  *
  * Latency: every call draws at once (the canvas is `desynchronized`), inside dirty rects of the
@@ -132,6 +133,7 @@ export function createOverlay(host: OverlayHost): OverlayInternal {
   const selBox: AABB = { x0: 0, y0: 0, x1: -1, y1: -1 };        // device px (bounds + outlines)
   const ring = { on: false, x: 0, y: 0, w: 0, css: '#ffffff', hideT0: Infinity };
   const pred: CappedPath & { on: boolean; w: number; css: string; age: number } = { on: false, n: 0, xy: new Float64Array(64), w: 1, css: '#ffffff', age: 0 };
+  const guide = { on: false, folds: 2, cx: 0, cy: 0 };
   let lastInk = '';
   const widthCache = new WeakMap<Cooked, number>();
 
@@ -349,6 +351,28 @@ export function createOverlay(host: OverlayHost): OverlayInternal {
     ringAt(c2, er.x, er.y, er.r, t.text, 0.8, 1.5);
   }
 
+  /** Symmetry guide: 1 CSS px at 15 % of the ground's text colour, the whole viewport long. */
+  function drawGuide(c2: Ctx2D): void {
+    const sx = (guide.cx - cam.cx) * cam.scale + W * 0.5, sy = (guide.cy - cam.cy) * cam.scale + H * 0.5;
+    const R = W + H + Math.abs(sx) + Math.abs(sy);
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c2.globalAlpha = 0.15;
+    c2.strokeStyle = tokens().text;
+    c2.lineWidth = 1;
+    c2.beginPath();
+    if (guide.folds === 2) { c2.moveTo(sx, -1); c2.lineTo(sx, H + 1); }
+    else {
+      for (let i = 0; i < guide.folds; i++) {
+        const t = -Math.PI / 2 + (TAU * i) / guide.folds;
+        c2.moveTo(sx + 4 * Math.cos(t), sy + 4 * Math.sin(t));
+        c2.lineTo(sx + R * Math.cos(t), sy + R * Math.sin(t));
+      }
+      c2.moveTo(sx + 4, sy);
+      c2.arc(sx, sy, 4, 0, TAU);
+    }
+    c2.stroke();
+  }
+
   function drawWeld(c2: Ctx2D): void {
     if (!weld.on) return;
     const u = weld.t0 === weld.t0 ? easeOutCubic((now - weld.t0) / WELD_IN_MS) : 0;
@@ -459,7 +483,8 @@ export function createOverlay(host: OverlayHost): OverlayInternal {
     dirty.clear();
     c2.globalCompositeOperation = 'source-over';
     c2.globalAlpha = 1;
-    // bottom to top: outlines first (their interior is cut away), then everything else
+    // bottom to top: the guide, outlines (their interior is cut away), then everything else
+    if (guide.on) { c2.save(); drawGuide(c2); c2.restore(); }
     if ((sel.on || selRes.length > 0) && hits(selBox)) { c2.save(); drawSelection(c2); c2.restore(); }
     if (doom.length > 0 && hits(doomBox)) { c2.save(); drawDoom(c2); c2.restore(); }
     if (lasso.on) { c2.save(); drawLasso(c2); c2.restore(); }
@@ -549,6 +574,15 @@ export function createOverlay(host: OverlayHost): OverlayInternal {
       }
       flush();
     },
+    symmetry(g: { folds: number; cx: number; cy: number } | null): void {
+      const on = !!g && g.folds >= 2 && Number.isFinite(g.cx) && Number.isFinite(g.cy);
+      if (!on && !guide.on) return;
+      if (on && guide.on && g!.folds === guide.folds && g!.cx === guide.cx && g!.cy === guide.cy) return;
+      guide.on = on;
+      if (on) { guide.folds = g!.folds; guide.cx = g!.cx; guide.cy = g!.cy; }
+      dirty.setFull();
+      flush();
+    },
     clear(): void {
       cur.on = false; weld.on = false; lasso.on = false; lasso.n = 0; er.on = false; ring.on = false; pred.on = false;
       sel.on = false; selIds = []; selRes.length = 0; doomIds = []; doom.length = 0;
@@ -575,6 +609,7 @@ export function createOverlay(host: OverlayHost): OverlayInternal {
       if (g !== ground) { ground = g; dirty.setFull(); }
       if (c.cx !== cam.cx || c.cy !== cam.cy || c.scale !== cam.scale || c.rot !== cam.rot) {
         const docAnchored = sel.on || selRes.length > 0 || doom.length > 0;
+        if (guide.on) dirty.setFull();
         if (docAnchored) { dirtyDev(selBox); dirtyDev(doomBox); }
         cam = { cx: c.cx, cy: c.cy, scale: c.scale, rot: c.rot };
         if (docAnchored) {

@@ -59,8 +59,13 @@ describe('keyAction: single keys', () => {
     expect(win(k('Digit0', { altKey: true }))).toBe(null);
   });
 
+  it('M toggles symmetry, Shift+M steps its fold count', () => {
+    expect(win(k('KeyM'))).toEqual({ k: 'symmetry', step: false });
+    expect(win(k('KeyM', { shiftKey: true }))).toEqual({ k: 'symmetry', step: true });
+    expect(win(k('KeyM', { ctrlKey: true }))).toBe(null);
+  });
+
   it('P1 keys and unbound keys return null', () => {
-    expect(win(k('KeyM'))).toBe(null);
     expect(win(k('ArrowLeft'))).toBe(null);
     expect(win(k('Digit2', { shiftKey: true }))).toBe(null);
     expect(win(k('KeyG', { shiftKey: true }))).toBe(null);

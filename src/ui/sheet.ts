@@ -7,7 +7,12 @@
  *    focus trap, Esc, focus return, swipe-to-close on phones.
  *  - `createTileSheet`: the Stroke / Color / Form sheets: labelled tiles of the user's last
  *    stroke (rendered by `glyphs.tile`) in a radiogroup with roving tabindex, the active nib
- *    tile's size drag, and the Night | Paper switch.
+ *    tile's size drag, the Night | Paper switch (Color) and the Free | Symmetry switch (Form).
+ *
+ * The Form sheet's switch is its one permitted two-way switch (DESIGN §1.2, §4): tap toggles
+ * symmetry (centred on the view); dragging it sideways steps the fold count (Mirror, 3, 4, 5, 6,
+ * 8, 12; the chip rule: tap a kind, drag an amount); ArrowLeft / ArrowRight step it from the
+ * keyboard. The count shows as a spoke glyph, never as a number.
  *
  * Decisions: without a selection, choosing a tile closes its sheet (the next touch draws); with a
  * selection the sheet stays open so restyles can be compared. The ground switch never closes.
@@ -16,8 +21,18 @@ import { INK_ORDER, P0_FORMS, P0_NIBS } from '../core/types';
 import type { ColorStyle } from '../core/types';
 import type { AppState, Intent, SheetId } from '../app/types';
 import type { TileOption } from '../render/types';
-import { bindPress, fitCanvas, FORM_NAMES, INK_NAMES, NIB_NAMES, sizeFactor, fmtSize, type ChipKind } from './chip';
+import { bindPress, fitCanvas, foldsGlyph, FORM_NAMES, INK_NAMES, NIB_NAMES, sizeFactor, fmtSize, type ChipKind } from './chip';
 import type { Layout, UICtx } from './index';
+import { foldsAt } from '../core/folds';
+
+/** Horizontal drag (CSS px) per fold step on the Form sheet's symmetry switch. */
+export const FOLD_STEP_PX = 28;
+
+/** The symmetry switch's accessible name for a fold count. Pure. */
+export function symmetryAria(on: boolean, folds: number): string {
+  const kind = folds === 2 ? 'Mirror' : `Kaleidoscope, ${folds}-fold`;
+  return `Symmetry: ${kind}${on ? '' : ' (off)'}. Drag sideways or use arrow keys to change the folds.`;
+}
 
 export const SHEET_MS = 160;
 
@@ -346,7 +361,7 @@ export function tileSpecs(kind: ChipKind, s: AppState): TileSpec[] {
     return out;
   }
   return P0_FORMS.map((form, i): TileSpec => ({
-    key: form, label: FORM_NAMES[form], aria: FORM_NAMES[form], tip: `${FORM_NAMES[form]} · ${(i + 1) % 10}`,
+    key: form, label: FORM_NAMES[form], aria: FORM_NAMES[form], tip: i < 10 ? `${FORM_NAMES[form]} · ${(i + 1) % 10}` : FORM_NAMES[form],
     opt: { k: 'form', form }, checked: t.form === form, intent: { k: 'pickForm', form }, drag: false,
   }));
 }
@@ -372,7 +387,7 @@ export function rovingNext(i: number, n: number, key: string, cols: number): num
 
 /**
  * Grid columns for a tile sheet (phones use a grid; elsewhere one row, or two balanced rows
- * past 9 tiles: the ten-Form sheet is 5 + 5).
+ * past 9 tiles: the eleven-Form sheet is 6 + 5).
  */
 export function tileCols(layout: Layout, n: number): number {
   if (layout === 'phone') return n > 4 ? 3 : 4;
@@ -531,8 +546,10 @@ export function createTileSheet(kind: ChipKind, ctx: UICtx): TileSheet {
   };
   group.addEventListener('keydown', onGroupKey);
 
-  // ---- extras: Stroke caption, Color ground switch
+  // ---- extras: Stroke caption, Color ground switch, Form symmetry switch
   let sw: HTMLButtonElement | null = null;
+  let symSw: HTMLButtonElement | null = null, symLabel: HTMLSpanElement | null = null;
+  let shownFolds = -1;
   if (kind === 'stroke') {
     const cap = document.createElement('p');
     cap.className = 'r-caption';
@@ -557,6 +574,48 @@ export function createTileSheet(kind: ChipKind, ctx: UICtx): TileSheet {
     sw.addEventListener('click', () => ctx.dispatch({ k: 'ground', g: ctx.state().ground === 'night' ? 'paper' : 'night' }));
     unbinds.push(ctx.tip.bind(sw, () => 'Night | Paper · G'));
     frame.body.appendChild(sw);
+  } else if (kind === 'form') {
+    const el = document.createElement('button');
+    symSw = el;
+    el.type = 'button';
+    el.className = 'r-switch r-symswitch r-noswipe';
+    el.setAttribute('role', 'switch');
+    const thumb = document.createElement('span');
+    thumb.className = 'r-thumb';
+    thumb.setAttribute('aria-hidden', 'true');
+    const free = document.createElement('span');
+    free.textContent = 'Free';
+    free.dataset.v = 'free';
+    free.setAttribute('aria-hidden', 'true');
+    const on = document.createElement('span');
+    on.dataset.v = 'sym';
+    on.setAttribute('aria-hidden', 'true');
+    symLabel = on;
+    el.append(thumb, free, on);
+    let dragFolds = 0, dragSteps = 0;
+    unbinds.push(bindPress(el, {
+      tap: () => ctx.dispatch({ k: 'symmetry', on: !ctx.state().tool.sym.on }),
+      drag: (dx, _dy, phase) => {
+        if (phase === 'start') { dragFolds = ctx.state().tool.sym.folds; dragSteps = 0; el.classList.add('is-dragging'); return; }
+        if (phase === 'move' || phase === 'end') {
+          const steps = Math.trunc(dx / FOLD_STEP_PX);
+          if (steps !== dragSteps) {
+            dragSteps = steps;
+            ctx.dispatch({ k: 'symmetry', folds: foldsAt(dragFolds, steps) });
+          }
+        }
+        if (phase === 'end' || phase === 'cancel') el.classList.remove('is-dragging');
+      },
+    }));
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      ctx.dispatch({ k: 'symmetry', folds: foldsAt(ctx.state().tool.sym.folds, e.key === 'ArrowRight' ? 1 : -1) });
+    };
+    el.addEventListener('keydown', onKey);
+    unbinds.push(() => el.removeEventListener('keydown', onKey));
+    unbinds.push(ctx.tip.bind(el, () => 'Free | Symmetry · M · drag ↔ for folds'));
+    frame.body.appendChild(el);
   }
 
   build(tileSpecs(kind, ctx.state()));
@@ -576,6 +635,16 @@ export function createTileSheet(kind: ChipKind, ctx: UICtx): TileSheet {
       if (sw && (force || !prev || prev.ground !== s.ground)) {
         sw.setAttribute('aria-checked', String(s.ground === 'paper'));
         sw.dataset.on = s.ground;
+      }
+      if (symSw && symLabel && (force || !prev || prev.tool.sym !== s.tool.sym)) {
+        const sy = s.tool.sym;
+        symSw.setAttribute('aria-checked', String(sy.on));
+        symSw.setAttribute('aria-label', symmetryAria(sy.on, sy.folds));
+        symSw.dataset.on = sy.on ? 'sym' : 'free';
+        if (shownFolds !== sy.folds) {
+          shownFolds = sy.folds;
+          symLabel.innerHTML = `${foldsGlyph(sy.folds)}<b>${sy.folds === 2 ? 'Mirror' : 'Kaleido'}</b>`;
+        }
       }
       const inputs = force || !prev || prev.lastRecipe !== s.lastRecipe || prev.tool !== s.tool || prev.ground !== s.ground;
       if (inputs) markStale();

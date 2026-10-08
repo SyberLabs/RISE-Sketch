@@ -12,13 +12,14 @@
  * restyles the selection, relatively per stroke (one `replace` on release, live preview for
  * ≤ 12 strokes); otherwise it bends the tool.
  */
-import type { Camera, ColorStyle, Device, DocChange, FormId, Ground, InputSample, NibId, StrokeRecipe, ToolState } from '../core/types';
+import type { Camera, ColorStyle, Device, DocChange, FormId, Ground, InputSample, NibId, StrokeRecipe, SymmetryTool, ToolState } from '../core/types';
 import { P0_FORMS } from '../core/types';
 import type { InputSink, KeyAction } from '../input/types';
 import type { HintId, Intent } from './types';
 import type { NibCursor } from '../render/types';
 import { bendColor, customFromLch, lchAt, swatchCss } from '../ink/color';
 import { chiselAngle, nibWidth } from '../ink/nibs';
+import { clampFolds, stepFolds } from '../ink/symmetry';
 import { prefs } from '../persist/prefs';
 import { exportFilename, renderPng } from '../export/png';
 import { downloadBlob } from '../persist/files';
@@ -213,6 +214,9 @@ export class Controller implements InputSink {
       case 'size': this.dispatch({ k: 'bendSize', factor: a.factor, done: true }); break;
       case 'depth': this.dispatch({ k: 'bendDepth', delta: a.delta, done: true }); break;
       case 'reseed': this.dispatch({ k: 'reseed' }); break;
+      case 'symmetry':
+        this.dispatch(a.step ? { k: 'symmetry', folds: stepFolds(t.sym.folds, 1) } : { k: 'symmetry', on: !t.sym.on });
+        break;
       case 'undo': this.dispatch({ k: 'undo' }); break;
       case 'redo': this.dispatch({ k: 'redo' }); break;
       case 'selectAll': this.dispatch({ k: 'selectAll' }); break;
@@ -286,6 +290,7 @@ export class Controller implements InputSink {
       case 'undo': this.undo(true); break;
       case 'redo': this.undo(false); break;
       case 'ground': this.setGround(i.g); break;
+      case 'symmetry': this.setSymmetry(i.on, i.folds); break;
       case 'fit': if (!this.busy) this.view.fit(); break;
       case 'resetView': if (!this.busy) this.view.resetZoom(); break;
       case 'viewChip': if (!this.busy) this.view.chip(); break;
@@ -321,11 +326,37 @@ export class Controller implements InputSink {
     this.toolChanged();
   }
 
-  /** Cached cursor colour (no colour string per hover event). */
+  /** Cached cursor colour (no colour string per hover event); the symmetry guide follows the tool. */
   private toolChanged(): void {
     const s = this.rt.store.get();
     this.cursorCss = swatchCss(toolColor(s.tool), s.ground);
     if (this.cursorOn) this.drawCursor();
+    const sym = s.tool.sym;
+    this.rt.renderer.overlay.symmetry(sym.on ? sym : null);
+  }
+
+  /**
+   * Symmetry (DESIGN §2.3.1): turning it on centres it on the view; a fold count turns it on.
+   * Tool state like the rest (persisted, never in history); a selection's saved tool follows, so
+   * deselecting does not undo the switch.
+   */
+  private setSymmetry(on: boolean | undefined, folds: number | undefined): void {
+    const cur = this.rt.store.get().tool.sym;
+    const nextOn = folds !== undefined ? true : on ?? !cur.on;
+    const recentre = nextOn && !cur.on;
+    const cam = this.view.cam;
+    const sym: SymmetryTool = {
+      on: nextOn,
+      folds: folds !== undefined ? clampFolds(folds) : cur.folds,
+      cx: recentre ? cam.cx : cur.cx, cy: recentre ? cam.cy : cur.cy,
+    };
+    if (sym.on === cur.on && sym.folds === cur.folds && sym.cx === cur.cx && sym.cy === cur.cy) return;
+    if (this.savedTool) {
+      this.savedTool = { ...this.savedTool, sym };
+      saveTool(this.savedTool);
+      this.setTool({ sym }, false);
+    } else this.setTool({ sym });
+    this.rt.store.emit({ k: 'announce', text: symmetryName(sym) });
   }
 
   /**
@@ -437,7 +468,10 @@ export class Controller implements InputSink {
     if (this.selection.active) { this.selection.restyle({ kind: 'reseed' }); return; }
     const ord = this.rt.doc.ordered();
     if (!ord.length) return;
-    const n = this.selection.restyleStrokes([ord[ord.length - 1]], { kind: 'reseed' });
+    // the last gesture: the last stroke and its symmetry copies (same pen-down, same seed)
+    const last = ord[ord.length - 1];
+    const group = ord.filter(r => r.created === last.created && r.seed === last.seed);
+    const n = this.selection.restyleStrokes(group, { kind: 'reseed' });
     if (n) this.rt.store.emit({ k: 'announce', text: `Another ${formName(ord[ord.length - 1])}` });
   }
 
@@ -475,6 +509,9 @@ export class Controller implements InputSink {
   adoptView(g: Ground, cam: Camera): void {
     if (g !== this.rt.store.get().ground) this.showGround(g, false);
     this.view.reset(cam);
+    // symmetry stays on across documents, centred on the new document's view
+    const sym = this.rt.store.get().tool.sym;
+    if (sym.on) this.setTool({ sym: { ...sym, cx: this.view.cam.cx, cy: this.view.cam.cy } });
   }
 
   /** Before a document switch: nothing of the old document may stay on screen or in flight. */
@@ -626,4 +663,10 @@ export class Controller implements InputSink {
     this.stageCursor = c;
     this.stage.style.cursor = c;
   }
+}
+
+/** Spoken name of a symmetry state (announcements, labels). */
+export function symmetryName(s: SymmetryTool): string {
+  if (!s.on) return 'Symmetry off';
+  return s.folds === 2 ? 'Mirror' : `Kaleidoscope, ${s.folds}-fold`;
 }

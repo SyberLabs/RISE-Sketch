@@ -213,11 +213,13 @@ export const batchCmd = (cmds: readonly Command[]): Command => ({ k: 'batch', cm
  * The recipe left in the document is `r` itself, so geometry cooked from `r`
  * (`cook.finish(r)`) can be registered for it directly. The bare stroke shares
  * `r`'s samples and gets a fresh geomRev, so it never shares a cache key with `r`.
+ * Symmetry copies (same pools) ride in the same two commands: one gesture, one undo.
  */
-export function peelCommands(r: StrokeRecipe): Command[] {
-  if (r.pools.length === 0) return [addCmd([r])];
-  const bare = build({ ...recipeFields(r), pools: NO_POOLS }, bumpFrom(r.geomRev), r.colorRev, true);
-  return [addCmd([bare]), replaceCmd([bare], [r])];
+export function peelCommands(r: StrokeRecipe, copies: readonly StrokeRecipe[] = []): Command[] {
+  const all = copies.length ? [r, ...copies] : [r];
+  if (r.pools.length === 0) return [addCmd(all)];
+  const bare = all.map(x => build({ ...recipeFields(x), pools: NO_POOLS }, bumpFrom(x.geomRev), x.colorRev, true));
+  return [addCmd(bare), replaceCmd(bare, all)];
 }
 
 /** True when a command changes nothing (empty add/remove/replace/batch, empty meta patch). */

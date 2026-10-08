@@ -16,6 +16,7 @@
 import { S, PolyKind } from '../core/types';
 import type { AABB, Cooked, Spine, StrokeRecipe } from '../core/types';
 import { segDist2 } from '../core/geom';
+import { placedSamples } from '../ink/symmetry';
 
 /** Capsule width of a recipe without a cook, doc units (matches occupancy); 0 when z or size is unusable. */
 export const nominalWidth = (r: StrokeRecipe): number => {
@@ -50,8 +51,9 @@ export function trackOf(r: StrokeRecipe, sp: Readonly<Spine> | null, into: Track
     into.n = sp.n; into.xs = sp.x; into.ys = sp.y; into.xo = 0; into.yo = 0; into.stride = 1;
     into.ws = sp.w;
   } else {
-    into.n = (r.samples.length / S.STRIDE) | 0;
-    into.xs = r.samples; into.ys = r.samples; into.xo = S.X; into.yo = S.Y; into.stride = S.STRIDE;
+    const smp = placedSamples(r);
+    into.n = (smp.length / S.STRIDE) | 0;
+    into.xs = smp; into.ys = smp; into.xo = S.X; into.yo = S.Y; into.stride = S.STRIDE;
     into.ws = null;
   }
   return into;
@@ -254,7 +256,7 @@ export function liftTime(r: StrokeRecipe): number {
 
 /** Conservative doc-space box of an uncooked recipe: sample bbox padded by (64 + 3·S)/z (DESIGN BUILD §8). */
 export function conservativeBox(r: StrokeRecipe, out: AABB): AABB {
-  const smp = r.samples;
+  const smp = placedSamples(r);
   const n = (smp.length / S.STRIDE) | 0;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < n; i++) {

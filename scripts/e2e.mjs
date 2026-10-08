@@ -3,7 +3,8 @@
 // ?debug, driving real pen / mouse / touch input through CDP and asserting through
 // window.__rise (src/app/types.ts RiseDebug).
 //
-//   node scripts/e2e.mjs [--only name,name] [--keep] [--out dir] [--url URL] [--no-build]
+//   node scripts/e2e.mjs [--only name,name] [--budget] [--keep] [--out dir] [--url URL] [--no-build]
+//   --budget runs the control-budget scenarios only (DESIGN §1.2): boot-budget, phone-layout, symmetry.
 //
 // The production single file (`npm run build:single`, dist-single/) carries no debug hooks:
 // window.__rise is compiled in only when __DEBUG__ is set (vite.config.ts). So the suite first runs
@@ -27,7 +28,8 @@ import { launch, penStroke, mouseStroke, pinch, tap, wheel, key, wave, circle, l
 
 const argv = process.argv.slice(2);
 const arg = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
-const ONLY = (arg('--only', '') || '').split(',').filter(Boolean);
+const ONLY = argv.includes('--budget') ? ['boot-budget', 'phone-layout', 'symmetry']
+  : (arg('--only', '') || '').split(',').filter(Boolean);
 const OUT = resolve(arg('--out', 'e2e-out'));
 const URL_ARG = arg('--url', '');
 const URL = (URL_ARG || pathToFileURL(resolve('dist-debug/index.html')).href) + '?debug';
@@ -226,7 +228,7 @@ await scenario('draw-new-forms', async ({ page, cdp }) => {
     const chip = await page.$('.r-chip[data-chip="form"]');
     await chip.screenshot({ path: `${OUT}/new-forms-chip-${forms[i][0]}.png` });
   }
-  // the Form sheet offers all ten as labelled tiles, two rows of five on desktop
+  // the Form sheet offers all eleven as labelled tiles, two rows (6 + 5) on desktop
   await dispatch(page, { k: 'openSheet', sheet: 'form' });
   await idle(page);
   await sleep(400);
@@ -234,12 +236,41 @@ await scenario('draw-new-forms', async ({ page, cdp }) => {
     const b = t.getBoundingClientRect();
     return { label: t.textContent.trim(), top: Math.round(b.top) };
   }));
-  assert(tiles.length === 10, `ten Form tiles, got ${tiles.length}`);
+  assert(tiles.length === 11, `eleven Form tiles, got ${tiles.length}`);
   const labels = tiles.map(t => t.label).join(',');
-  assert(labels === 'Line,Echo,Sprout,Drift,Craze,Plume,Caustic,Burin,Plait,Orbit', `tile labels ${labels}`);
+  assert(labels === 'Line,Echo,Sprout,Drift,Craze,Plume,Caustic,Burin,Plait,Orbit,Ripple', `tile labels ${labels}`);
   const rows = new Set(tiles.map(t => t.top)).size;
   assert(rows === 2, `two rows of tiles on desktop, got ${rows}`);
   await shot(page, 'new-forms-sheet');
+});
+
+await scenario('ripple', async ({ page, cdp }) => {
+  // Ripple v2: interference contours on both sides of the stroke, more rings with depth; a tap is a bullseye
+  await dispatch(page, { k: 'pickForm', form: 'ripple' });
+  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
+  await penStroke(cdp, wave(160, 300, 1100, 90, 90, 2));
+  await idle(page);
+  let s = await last(page);
+  assert(s && s.form === 'ripple', `stroke form ripple, got ${s && s.form}`);
+  assert(s.nPts > 200, `ripple produced rings (${s.nPts} pts)`);
+  assert(s.gens >= 3, `ripple grew several rings (gens=${s.gens})`);
+  await penStroke(cdp, line(250, 520, 1050, 520, 60));
+  await idle(page);
+  const plain = await last(page);
+  await penStroke(cdp, line(250, 640, 1050, 640, 60), { hold: 1400 });
+  await idle(page);
+  const held = await last(page);
+  assert(held.nPts > plain.nPts, `holding blooms more rings (${plain.nPts} → ${held.nPts} pts)`);
+  await penStroke(cdp, [[640, 720, 0.6], [640.5, 720.3, 0.7], [640.8, 720.4, 0.7]]);
+  await idle(page);
+  s = await last(page);
+  assert(s.form === 'ripple' && s.radial && s.nPts > 3, `ripple tap is a radial bullseye (${s.nPts} pts)`);
+  const h0 = await R(page, () => window.__rise.sceneHash());
+  const text = await R(page, () => window.__rise.serialize());
+  await R(page, t => window.__rise.load(t), text);
+  await idle(page);
+  assert(await R(page, () => window.__rise.sceneHash()) === h0, 'ripple round trip keeps the scene hash');
+  await shot(page, 'ripple-night');
 });
 
 await scenario('rise-hold-pen', async ({ page, cdp }) => {
@@ -374,7 +405,7 @@ await scenario('rise-file-roundtrip', async ({ page, cdp }) => {
   const h = await R(page, () => window.__rise.sceneHash());
   const text = await R(page, () => window.__rise.serialize());
   const json = JSON.parse(text);
-  assert(json.format === 'rise' && json.version === 1, '.rise header');
+  assert(json.format === 'rise' && json.version === 2, '.rise header (format v2)');
   await dispatch(page, { k: 'new' });
   await idle(page);
   assert(await count(page) === 0, 'new canvas is empty');
@@ -625,6 +656,79 @@ await scenario('hints', async ({ page, cdp }) => {
   await idle(page, 15000);
   st = await R(page, () => window.__rise.state());
   assert(st.hints.rise === 'done' && st.hints.form === 'done', 'hints are remembered across reloads');
+});
+
+// Symmetry (DESIGN §2.3.1): the Form sheet's switch, no extra control at rest, one gesture = six
+// strokes that live-draw, undo as one, redo, survive a reload and keep their rainbow hues.
+await scenario('symmetry', async ({ page, cdp }) => {
+  await dispatch(page, { k: 'ground', g: 'night' });
+  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
+  await dispatch(page, { k: 'pickForm', form: 'sprout' });
+  await page.click('.r-chip[data-chip="form"]');
+  await sleep(300);
+  const sw = await page.$('.r-symswitch');
+  assert(sw, 'the Form sheet has the symmetry switch');
+  const sheetBtns = await R(page, () => document.querySelectorAll('.r-sheet[data-sheet="form"] button:not([hidden])').length);
+  assert(sheetBtns === 12, `the Form sheet holds 11 tiles plus one switch (got ${sheetBtns} buttons)`);
+  await sw.click();
+  await sleep(100);
+  let st = await R(page, () => window.__rise.state());
+  assert(st.tool.sym.on && st.tool.sym.folds === 6, `the switch turns on 6-fold symmetry (${JSON.stringify(st.tool.sym)})`);
+  assert(await R(page, () => document.querySelector('.r-symswitch').getAttribute('aria-checked')) === 'true', 'aria-checked follows');
+  await dispatch(page, { k: 'openSheet', sheet: null });
+  await idle(page);
+  const c0 = await controls(page);
+  assert(c0.count === 4, `symmetry adds no control at rest (got ${c0.count}: ${c0.labels})`);
+  // the copies draw live, while the pen is still down: probe the 180° copy of the nib's path
+  const pts = line(700, 300, 980, 330, 50);
+  const rot = ([x, y]) => [W - x, H - y];
+  const probeAt = async ([x, y]) => (await R(page, (a, b) => window.__rise.probe(a, b), x, y)).slice(0, 3).reduce((u, v) => u + v, 0);
+  const mid = pts[30];
+  const bg = await probeAt(rot(mid));
+  const ev = (type, [x, y], extra = {}) => cdp.send('Input.dispatchMouseEvent', { type, x, y, force: 0.6, pointerType: 'pen', button: 'left', buttons: 1, ...extra });
+  await ev('mouseMoved', pts[0], { force: 0, buttons: 0 });
+  await ev('mousePressed', pts[0], { clickCount: 1 });
+  for (let i = 1; i < pts.length; i++) { await ev('mouseMoved', pts[i]); await sleep(4); }
+  await sleep(250);
+  const liveInk = await probeAt(rot(mid));
+  await ev('mouseReleased', pts[pts.length - 1], { buttons: 0, clickCount: 1, force: 0 });
+  await idle(page);
+  assert(liveInk > bg + 60, `the copies draw while the pen is down (probe ${bg} -> ${liveInk})`);
+  assert(await count(page) === 6, `one stroke in 6-fold makes 6 strokes (got ${await count(page)})`);
+  const c1 = await controls(page);
+  assert(c1.count === 5, `with ink: 5 controls (got ${c1.count}: ${c1.labels})`);
+  const doc = await R(page, () => window.__rise.serialize());
+  const strokes = doc.trim().split('\n').filter(l => l.startsWith('{"id"')).map(l => JSON.parse(l.replace(/,$/, '')));
+  assert(strokes.length === 6, `six recipes serialised (${strokes.length})`);
+  assert(strokes.filter(s => s.xf).length === 5, 'five copies carry a placement');
+  const hues = new Set(strokes.map(s => Math.round(s.color.dh) % 360));
+  assert(hues.size === 6, `Spectral copies take six hues (${[...hues]})`);
+  assert(/"version":2/.test(doc), 'the file is format v2');
+  await shot(page, 'symmetry-6');
+  const h = await R(page, () => window.__rise.sceneHash());
+  await dispatch(page, { k: 'undo' });
+  await idle(page);
+  assert(await count(page) === 0, `one undo removes every copy (left ${await count(page)})`);
+  await dispatch(page, { k: 'redo' });
+  await idle(page);
+  assert(await count(page) === 6 && await R(page, () => window.__rise.sceneHash()) === h, 'redo restores all six');
+  await sleep(600); // autosave batch
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.__rise && window.__rise.version, { timeout: 15000 });
+  await idle(page, 15000);
+  assert(await count(page) === 6, `reload keeps the copies (${await count(page)})`);
+  assert(await R(page, () => window.__rise.sceneHash()) === h, 'reload restores the identical scene hash');
+  st = await R(page, () => window.__rise.state());
+  assert(st.tool.sym.on && st.tool.sym.folds === 6, 'symmetry survives a reload');
+  // M toggles, Shift+M steps the folds; Mirror makes two
+  await key(page, 'KeyM');
+  st = await R(page, () => window.__rise.state());
+  assert(!st.tool.sym.on, 'M turns symmetry off');
+  await dispatch(page, { k: 'symmetry', folds: 2 });
+  await penStroke(cdp, wave(250, 600, 500, 40, 40));
+  await idle(page);
+  assert(await count(page) === 8, `Mirror makes two strokes (total ${await count(page)})`);
+  await shot(page, 'symmetry-mirror');
 });
 
 // ---------------------------------------------------------------------------------------------

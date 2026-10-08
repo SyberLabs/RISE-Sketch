@@ -78,9 +78,18 @@ describe('tool', () => {
     saveTool(t);
     const back = loadTool();
     expect([back.nib, back.form, back.sizes.chisel, back.base.drift, back.mode]).toEqual(['chisel', 'drift', 20, 4.5, 'draw']);
-    prefs.set('tool', { nib: 'charcoal', ink: 'custom', custom: null, form: 'ripple', sizes: { pen: 'x' } });
+    prefs.set('tool', { nib: 'charcoal', ink: 'custom', custom: null, form: 'mirage', sizes: { pen: 'x' } });
     const bad = loadTool();
     expect([bad.nib, bad.ink, bad.form, bad.sizes.pen]).toEqual(['brush', 'moss', 'sprout', 2.5]);
+    prefs.remove('tool');
+  });
+
+  it('persists symmetry (on, folds, centre) and rejects odd values', () => {
+    expect(defaultTool().sym).toEqual({ on: false, folds: 6, cx: 0, cy: 0 });
+    saveTool({ ...defaultTool(), sym: { on: true, folds: 8, cx: -12.5, cy: 300 } });
+    expect(loadTool().sym).toEqual({ on: true, folds: 8, cx: -12.5, cy: 300 });
+    prefs.set('tool', { sym: { on: true, folds: 7, cx: 'x', cy: 1 } });
+    expect(loadTool().sym).toEqual({ on: false, folds: 6, cx: 0, cy: 0 });
     prefs.remove('tool');
   });
 
