@@ -106,14 +106,19 @@ export function planShrink(root: string, srcDir = 'src'): { edits: Map<string, E
 
   // Rename: one checker pass over src/ finds every reference (identifiers resolving to a renamed
   // symbol, plus `{ a, b } = this` shorthand bindings, which name the property implicitly).
-  // A parameter property is two symbols (the parameter and the property); both get the new name.
-  const target = new Map<ts.Symbol, string>();
+  // References are matched by declaration, not by symbol identity: the checker can hand back a
+  // fresh symbol for an inherited member (`this.arcReveal = true` in a subclass constructor), and
+  // a missed reference is a silent bug (the subclass writes a property nobody reads). A parameter
+  // property is two symbols (the parameter and the property) with one declaration: both match.
+  const target = new Map<ts.Node, string>();
+  const nameOf = (s: ts.Symbol | undefined): string | undefined => {
+    for (const d of s?.declarations ?? []) { const t = target.get(d); if (t) return t; }
+    return undefined;
+  };
   const privateNames = new Set<string>(); // only identifiers with these texts are worth resolving
   for (const id of [...privates, ...protecteds.filter(p => !publicNames.has(p.text))]) {
     privateNames.add(id.text);
-    const p = id.parent;
-    const syms = ts.isParameter(p) ? checker.getSymbolsOfParameterPropertyDeclaration(p, id.text) : [checker.getSymbolAtLocation(id)];
-    for (const s of syms) if (s) target.set(s, id.text);
+    target.set(id.parent, id.text);
   }
   // `pre` / `post`: text kept around the new name where a shorthand names two things at once.
   const found: { file: string; start: number; end: number; name: string; pre: string; post: string }[] = [];
@@ -122,16 +127,16 @@ export function planShrink(root: string, srcDir = 'src'): { edits: Map<string, E
     const visit = (n: ts.Node): void => {
       if (ts.isIdentifier(n) && privateNames.has(n.text)) {
         const p = n.parent;
-        let name = target.get(checker.getSymbolAtLocation(n)!);
+        let name = nameOf(checker.getSymbolAtLocation(n));
         let pre = '', post = '';
         if (!name && ts.isBindingElement(p) && p.name === n && !p.propertyName && ts.isObjectBindingPattern(p.parent)) {
           // `const { a } = this` with `a` private: the key is renamed, the local keeps its name
           const prop = checker.getTypeAtLocation(p.parent).getProperty(n.text);
-          if (prop && (name = target.get(prop))) post = ': ' + n.text;
+          if (prop && (name = nameOf(prop))) post = ': ' + n.text;
         } else if (ts.isShorthandPropertyAssignment(p) && p.name === n) {
           // `{ a }` reading a renamed parameter property's parameter: the key stays, the value is renamed
           const v = checker.getShorthandAssignmentValueSymbol(p);
-          if (v && (name = target.get(v))) pre = n.text + ': ';
+          if (v && (name = nameOf(v))) pre = n.text + ': ';
         }
         if (name) {
           found.push({ file: sf.fileName, start: n.getStart(sf), end: n.getEnd(), name, pre, post });
