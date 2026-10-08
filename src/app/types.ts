@@ -32,7 +32,7 @@ export type Intent =
   | { k: 'disablePenMode' }
   | { k: 'hintDone'; id: HintId };
 
-export type HintId = 'draw' | 'rise' | 'form' | 'nav';
+export type HintId = 'draw' | 'rise' | 'form' | 'nav' | 'share';
 
 export interface RecentDoc { id: string; title: string; updated: number; strokes: number; thumb: string | null /* object URL / data URL */ }
 

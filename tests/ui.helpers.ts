@@ -14,7 +14,7 @@ export function state(patch: Partial<AppState> = {}): AppState {
     zoom: 100, inkInView: true, inkDirection: null, chromeHidden: false, sheet: null, lastRecipe: null,
     docTitle: 'Untitled', currentDocId: 'doc', recentDocs: [], autosaveOk: true, replaying: false, replayProgress: 0,
     exporting: false, recording: false, penMode: false, firstRun: false,
-    hints: { draw: 'pending', rise: 'pending', form: 'pending', nav: 'pending' },
+    hints: { draw: 'pending', rise: 'pending', form: 'pending', nav: 'pending', share: 'pending' },
     reducedMotion: false, isTouch: false, isMac: false,
   };
   return { ...base, ...patch };

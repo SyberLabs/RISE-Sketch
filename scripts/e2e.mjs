@@ -751,6 +751,58 @@ await scenario('hints', async ({ page, cdp }) => {
   assert(st.hints.rise === 'done' && st.hints.form === 'done', 'hints are remembered across reloads');
 });
 
+// The share hint (DESIGN §4 hints, §13): at the first pause once the drawing has 6 strokes, once
+// ever (remembered across reloads), never after Share timelapse or Copy remix link.
+const shareHint = page => R(page, () => {
+  const el = document.querySelector('.r-hint[data-hint="share"]');
+  return { st: window.__rise.state().hints.share, on: !!el && el.classList.contains('is-on'), text: el ? el.textContent : '', touch: window.__rise.state().isTouch };
+});
+async function drawSix(page, cdp, x0, x1) {
+  for (let i = 0; i < 6; i++) await penStroke(cdp, line(x0, 160 + i * 70, x1, 170 + i * 70, 30));
+  await idle(page);
+}
+for (const [name, opts] of [['share-hint', {}], ['share-hint-phone', { width: 390, height: 844, touch: true }]]) {
+  await scenario(name, async ({ page, cdp }) => {
+    await dispatch(page, { k: 'pickForm', form: 'sprout' });
+    for (let i = 0; i < 5; i++) await penStroke(cdp, line(60, 160 + i * 70, (opts.width || W) - 60, 170 + i * 70, 30));
+    await sleep(5000);
+    let h = await shareHint(page);
+    assert(h.st === 'pending' && !h.on, `no share hint at 5 strokes (${h.st})`);
+    await penStroke(cdp, line(60, 560, (opts.width || W) - 60, 570, 30));
+    await sleep(2000);
+    h = await shareHint(page);
+    assert(h.st === 'pending', `no share hint right after the 6th stroke (${h.st})`);
+    await sleep(3200);
+    h = await shareHint(page);
+    assert(h.st === 'showing' && h.on, `the share hint shows at the pause after stroke 6 (${h.st})`);
+    assert(h.text === (h.touch ? 'Share it: Menu → Share timelapse' : 'Share it: ⇧P makes a video of it growing'), `share hint text (${h.text})`);
+    assert(!(await R(page, () => Object.entries(window.__rise.state().hints).some(([k, v]) => k !== 'share' && v === 'showing'))), 'one hint at a time');
+    await shot(page, name);
+    await sleep(4500);
+    h = await shareHint(page);
+    assert(h.st === 'done' && !h.on, `the share hint dismisses itself (${h.st})`);
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.__rise && window.__rise.version, { timeout: 15000 });
+    await idle(page, 15000);
+    await penStroke(cdp, line(60, 640, (opts.width || W) - 60, 650, 30));
+    await sleep(5000);
+    h = await shareHint(page);
+    assert(h.st === 'done' && !h.on, `the share hint never comes back after a reload (${h.st})`);
+  }, opts);
+}
+
+await scenario('share-hint-shared', async ({ page, cdp }) => {
+  await penStroke(cdp, line(300, 160, 800, 170, 30));
+  await idle(page);
+  await dispatch(page, { k: 'copyRemix' });
+  await sleep(300);
+  for (let i = 1; i < 7; i++) await penStroke(cdp, line(300, 160 + i * 70, 800, 170 + i * 70, 30));
+  await sleep(5500);
+  const h = await shareHint(page);
+  assert(h.st === 'done' && !h.on, `a user who shared never sees the share hint (${h.st})`);
+  assert(JSON.parse(await R(page, () => localStorage.getItem('rise:hints')) || '[]').includes('share'), 'sharing is remembered in prefs');
+});
+
 // Symmetry (DESIGN §2.3.1): the Form sheet's switch, no extra control at rest, one gesture = six
 // strokes that live-draw, undo as one, redo, survive a reload and keep their rainbow hues.
 await scenario('symmetry', async ({ page, cdp }) => {

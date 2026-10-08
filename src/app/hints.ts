@@ -1,5 +1,5 @@
 /**
- * Hints (DESIGN §3.0, §4): at most four, ever, each shown once and remembered in prefs.
+ * Hints (DESIGN §3.0, §4): at most five, ever, each shown once and remembered in prefs.
  *
  *  draw  "Draw anything. It grows."  — with the first-run seed (boot sets it 'showing'; the UI
  *        fades it at the first contact and dispatches hintDone).
@@ -7,16 +7,19 @@
  *  rise  "Hold still to make it rise." near the end of stroke 5 when nothing has risen yet
  *        (neither in this session nor in the document).
  *  nav   A navigation hint on the first stroke whose ink spills off-screen, or after 10 strokes.
+ *  share "Share it: ⇧P makes a video of it growing" (touch: Menu → Share timelapse) at the first
+ *        pause once the drawing has 6 strokes: there is something worth sharing and the user is
+ *        looking at it (DESIGN §13). Never once Share timelapse or Copy remix link has been used.
  *
  * Each dismisses itself after 4 s (the UI dispatches hintDone), or when its action happens:
- * picking a Form, a rise, a navigation gesture. The app only decides *when*; the UI owns text
+ * picking a Form, a rise, a navigation gesture, sharing. The app only decides *when*; the UI owns text
  * placement and timing. hintDone is idempotent (controller).
  */
 import type { StrokeRecipe } from '../core/types';
 import { S } from '../core/types';
-import { defaultHintText } from '../ui/hints';
+import { defaultHintText, HINT_MS } from '../ui/hints';
 import { visibleBox } from '../render/camera';
-import type { HintId } from './types';
+import type { AppState, HintId } from './types';
 import type { Runtime } from './runtime';
 import type { View } from './view';
 
@@ -26,11 +29,24 @@ export const FORM_HINT_DELAY_MS = 1200;
 export const RISE_HINT_AT = 5;
 /** The nav hint appears after this many strokes at the latest. */
 export const NAV_HINT_AT = 10;
+/** The share hint needs this many strokes in the drawing… */
+export const SHARE_HINT_AT = 6;
+/** …and this long without a new stroke (ms). Longer than a hint lives, so one shown at the last
+ *  lift (rise, nav) is gone by then: one hint at a time. */
+export const SHARE_HINT_PAUSE_MS = HINT_MS + 500;
+
+/** Whether the share hint may show now (pure): pending, enough ink, and the user idle, looking at
+ *  it: not drawing (chrome back), not replaying or recording, no sheet open, no other hint up. */
+export function shareHintDue(s: AppState, strokes: number): boolean {
+  return s.hints.share === 'pending' && strokes >= SHARE_HINT_AT && !s.chromeHidden && !s.replaying
+    && !s.recording && s.sheet === null && !Object.values(s.hints).includes('showing');
+}
 
 export class HintFlow {
   private strokes = 0;
   private rose = false;
   private formTimer = 0;
+  private shareTimer = 0;
 
   constructor(private readonly rt: Runtime, private readonly view: View) {}
 
@@ -68,6 +84,14 @@ export class HintFlow {
       this.show('rise', 'Hold still to make it rise.', at);
     }
     if (this.pending('nav') && (this.strokes >= NAV_HINT_AT || this.offScreen(r))) this.show('nav', defaultHintText('nav', rt.store.get()), null);
+    // Each stroke restarts the pause; a check that fails waits for the next stroke's pause.
+    if (this.pending('share')) {
+      clearTimeout(this.shareTimer);
+      this.shareTimer = window.setTimeout(() => {
+        const s = rt.store.get();
+        if (shareHintDue(s, rt.doc.size)) this.show('share', defaultHintText('share', s), null);
+      }, SHARE_HINT_PAUSE_MS);
+    }
   }
 
   private docHasPools(): boolean {
@@ -93,6 +117,12 @@ export class HintFlow {
   formPicked(): void {
     if (this.formTimer) { clearTimeout(this.formTimer); this.formTimer = 0; }
     if (this.showing('form')) this.rt.store.dispatch({ k: 'hintDone', id: 'form' });
+  }
+
+  /** Share timelapse or Copy remix link was used: the share hint is moot, now and for good. */
+  shared(): void {
+    clearTimeout(this.shareTimer);
+    this.rt.store.dispatch({ k: 'hintDone', id: 'share' });
   }
 
   /** A navigation gesture: the nav hint did its job. */
