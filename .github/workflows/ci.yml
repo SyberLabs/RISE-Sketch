@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a PR supersedes its running checks; main runs every push to completion.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx vitest run
+      # `npm run build` is typecheck + vite build; the typecheck already ran above.
+      - run: npx vite build
+      - name: lab typecheck
+        run: npx tsc --noEmit -p lab/tsconfig.json
+      - name: lab tests
+        run: npx vitest run --config lab/vitest.config.ts
+
+  # Scenarios are split across shards by scripts/e2e.mjs itself (--shard i/n, balanced by measured
+  # times), so a new scenario lands in some shard with no edit here. Each shard builds its own
+  # dist-debug/ and dist-single/: that is quicker than one build job plus an artifact hop.
+  e2e:
+    name: e2e ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: '1/4', slug: shard-1, args: '--shard 1/4' }
+          - { name: '2/4', slug: shard-2, args: '--shard 2/4' }
+          - { name: '3/4', slug: shard-3, args: '--shard 3/4' }
+          - { name: '4/4', slug: shard-4, args: '--shard 4/4' }
+          - { name: budget, slug: budget, args: '--budget' }
+    env:
+      # the runner's preinstalled Chrome (scripts/harness.mjs reads CHROME_PATH)
+      CHROME_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: $CHROME_PATH --version
+      - name: build dist-debug and dist-single
+        run: npx vite build --mode debug --logLevel warn && npx vite build --mode single --logLevel warn
+      - run: node scripts/e2e.mjs --no-build ${{ matrix.args }}
+      - if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: e2e-out-${{ matrix.slug }}
+          path: e2e-out/
+          retention-days: 14
