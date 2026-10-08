@@ -111,9 +111,10 @@ describe('registry', () => {
 describe('continuity in depth (bounded change per 1/16 level)', () => {
   // sp at z = 1; Echo's crystal appears off the trunk by at most the 3%-of-chord RDP tolerance
   const bound: Record<string, number> = { line: 1.6, echo: 8, sprout: 7, drift: 4, 
-    // the promoted lab Forms (measured worst: craze 2.1, plume 3.2, caustic 4.3, burin 2.8, plait 3.9, orbit 0.6)
-    craze: 4, plume: 6, caustic: 7, burin: 5, plait: 7, orbit: 1.2 };
-  for (const [form, v] of [...ALL.map((f): [FormId, number] => [f, 1]), ['sprout', 2] as [FormId, number], ['drift', 2] as [FormId, number]]) {
+    // the promoted lab Forms (measured worst: craze 2.1, plume 3.2, caustic 4.3, burin 2.8, plait 3.9, orbit 0.6;
+    // ripple v2 8.7: a ring arrives as dashes and cap prefixes that lengthen with f_k)
+    craze: 4, plume: 6, caustic: 7, burin: 5, plait: 7, orbit: 1.2, ripple: 12 };
+  for (const [form, v] of [...ALL.map((f): [FormId, number] => [f, 1]), ['sprout', 2] as [FormId, number], ['drift', 2] as [FormId, number], ['ripple', 2] as [FormId, number]]) {
     it(v === 1 ? form : `${form}@${v}`, () => {
       const rows = medium(5).rows();
       const dMax = FORMS[form].dMax;
@@ -250,7 +251,7 @@ describe('budgets and operator safety', () => {
       { name: 'zigzag', rows: (() => { const h = new Hand(0, 0); for (let k = 0; k < 20; k++) h.moveTo(10 * k, k % 2 ? 30 : 0, 2.5); return h; })().rows() },
       { name: 'chisel tilt', rows: new Hand(0, 0, { alt: 0.5, az: 2 }).moveTo(200, 50, 0.8).rows(), o: { nib: 'chisel', size: 12 } },
     ];
-    const variants: [FormId, number][] = [...ALL.map((f): [FormId, number] => [f, 1]), ['sprout', 2], ['drift', 2]];
+    const variants: [FormId, number][] = [...ALL.map((f): [FormId, number] => [f, 1]), ['sprout', 2], ['drift', 2], ['ripple', 2]];
     for (const [form, v] of variants) for (const h of hard) for (const base of [0, 1.5, FORMS[form].dMax]) {
       const r = formRecipe(h.rows, { v, form, base, ...(h.o ?? {}), pools: [30, 1] });
       const c = cook(r);
