@@ -286,7 +286,7 @@ export class FakeLive implements LiveLayerInternal {
   halo(): void { /* no-op */ }
   commit(r: StrokeRecipe, c: Cooked): void { mark('live.commit', r.id); this.shown.set(r.id, { r, c }); }
   withdraw(): void { mark('live.withdraw'); }
-  play(r: StrokeRecipe, c: Cooked): void { mark('live.play', r.id); this.shown.set(r.id, { r, c }); }
+  play(r: StrokeRecipe, c: Cooked): number { mark('live.play', r.id); this.shown.set(r.id, { r, c }); return 0; }
   dissolve(): void { /* no-op */ }
   fastForward(): void { mark('live.fastForward'); }
   readonly animating = 0;

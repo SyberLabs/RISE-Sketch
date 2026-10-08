@@ -98,8 +98,11 @@ export interface LiveLayer {
   commit(r: StrokeRecipe, c: Cooked, copies?: readonly { r: StrokeRecipe; c: Cooked }[]): void;
   /** Cancel the live stroke with an un-grow; nothing enters the document. */
   withdraw(): void;
-  /** Play a recorded/committed stroke growing in (replay, first-run seed, redo). */
-  play(r: StrokeRecipe, c: Cooked, opts?: { durationScale?: number; bake?: boolean }): void;
+  /**
+   * Play a recorded/committed stroke growing in (replay, first-run seed, redo). Returns when the
+   * play (trunk, growth, pools) will end on the host clock, unless something fast-forwards it.
+   */
+  play(r: StrokeRecipe, c: Cooked, opts?: { durationScale?: number; bake?: boolean }): number;
   /** Un-grow something that is only in the live layer (first-run seed dissolve). */
   dissolve(ms: number): void;
   fastForward(): void;

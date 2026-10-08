@@ -486,17 +486,31 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
       return { px: ctx.getImageData(0, 0, c.width, c.height).data, png: c.toDataURL('image/png') };
     };
     const first = await grab(0), mid = await grab(el.duration * 0.4), last = await grab(Math.max(0, el.duration - 0.05));
-    let diff = 0;
-    for (let i = 0; i < first.px.length; i += 4) diff += Math.abs(first.px[i] - last.px[i]) + Math.abs(first.px[i + 1] - last.px[i + 1]) + Math.abs(first.px[i + 2] - last.px[i + 2]);
-    return { duration: el.duration, w: el.videoWidth, h: el.videoHeight, diff: diff / (first.px.length / 4), b64: btoa(bin), first: first.png, mid: mid.png, last: last.png };
+    const diff = (a, b) => {
+      let d = 0;
+      for (let i = 0; i < a.length; i += 4) d += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+      return d / (a.length / 4);
+    };
+    return { duration: el.duration, w: el.videoWidth, h: el.videoHeight, seam: diff(first.px, last.px), grow: diff(first.px, mid.px), b64: btoa(bin), first: first.png, mid: mid.png, last: last.png };
   }, r.url);
   writeFileSync(`${OUT}/timelapse.mp4`, Buffer.from(v.b64, 'base64'));
   for (const k of ['first', 'mid', 'last']) writeFileSync(`${OUT}/timelapse-${k}.png`, Buffer.from(v[k].split(',')[1], 'base64'));
   assert(v.w === r.width && v.h === r.height, `the video is ${v.w}×${v.h}`);
   assert(v.duration >= 3 && v.duration <= 12.5, `plausible duration (${v.duration} s)`);
   near(v.duration, r.durationMs / 1000, 0.1, 'the container duration matches the frames');
-  assert(v.diff > 2, `the ink grows: first and last frames differ (mean |Δ| ${v.diff.toFixed(2)})`);
+  // frame 0 is the finished piece and the hold ends on it: the clip loops without a seam
+  assert(v.seam < 4, `the last frame is the first (mean |Δ| ${v.seam.toFixed(2)})`);
+  assert(v.grow > 2, `the ink grows: the middle differs from the finished piece (mean |Δ| ${v.grow.toFixed(2)})`);
 });
+
+// On a phone or tablet (coarse pointer) the timelapse is the 9:16 frame the feed apps want.
+await scenario('timelapse-vertical', async ({ page, cdp }) => {
+  assert((await R(page, () => window.__rise.state())).isTouch, 'a touch device');
+  await penStroke(cdp, wave(60, 400, 340, 60, 40), { delay: 4 });
+  await idle(page);
+  const r = await R(page, () => window.__rise.timelapse());
+  assert(r && r.width === 1080 && r.height === 1920, `vertical timelapse ${JSON.stringify(r && { ...r, url: 0 })}`);
+}, { touch: true, width: 400, height: 860 });
 
 await scenario('first-run-seed', async ({ page, cdp }) => {
   await sleep(2600); // seed plays after 600 ms idle and takes ~2.4 s

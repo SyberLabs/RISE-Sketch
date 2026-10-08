@@ -15,12 +15,17 @@
  *    timestamps, encoded as fast as the device allows (a few frames per rAF, yielding in between),
  *    then export/mp4.ts writes a fast-start MP4. Without WebCodecs H.264 there is no video (the
  *    caller exports the PNG instead).
- *  - Framing. 1080 × 1080, or 1080 × 1350 (4:5) for a drawing taller than wide; the content plus
- *    a 10 % margin, centred, never magnified past 3× the zoom it was drawn at.
- *  - Duration. Gap-capped drawing time T plays at k = T / clamp(T / 1.5, 5 s, 10 s), never
- *    slower than half speed; then the last growth finishes and the piece holds for 1 s. Anything
- *    still growing at 11 s fast-forwards, so a video is at most 12 s.
- *  - A small `sketch.syberlabs.io` wordmark sits in the bottom-right corner.
+ *  - Framing. Vertical 1080 × 1920 from a phone or tablet (where it will be posted to Reels,
+ *    TikTok or Shorts), the content kept inside the feed apps' safe zone; elsewhere 1080 × 1080,
+ *    or 1080 × 1350 (4:5) for a drawing taller than wide. The content plus a 10 % margin, never
+ *    magnified past 3× the zoom it was drawn at.
+ *  - Timing. Frame 0 is the finished piece (the poster frame a chat app shows), which dissolves
+ *    over 0.6 s into the replay already under way. Gap-capped drawing time T plays at
+ *    k = T / clamp(T / 1.5, 5 s, 10 s), never slower than half speed; the last growth finishes,
+ *    on Night the bloom swells once, and the piece holds 1 s, so the last frame is the first
+ *    and the clip loops without a seam. Anything still growing at 11 s fast-forwards: at most 12 s.
+ *  - A `sketch.syberlabs.io` wordmark, legible at phone size: bottom right, or centred under
+ *    the drawing above the feed captions in the vertical frame.
  */
 import type { AABB, Cooked, Ground, StrokeRecipe } from '../core/types';
 import type { LiveHost } from '../render/types';
@@ -31,8 +36,13 @@ import { opFor } from '../render/compositor';
 import { BLOOM_ALPHA, CURE_MS, SCALE as BLOOM_SCALE, bloomOf } from '../render/bloom';
 import { muxMp4, nclx, type Mp4Sample } from './mp4';
 
-/** Output width (px); the height is WIDTH (square) or PORTRAIT_H (4:5). */
-export const WIDTH = 1080, PORTRAIT_H = 1350;
+/** Output width (px); the height is WIDTH (square), PORTRAIT_H (4:5) or VERTICAL_H (9:16). */
+export const WIDTH = 1080, PORTRAIT_H = 1350, VERTICAL_H = 1920;
+/**
+ * The vertical frame's safe zone (px): the feed apps lay their header over the top and the caption,
+ * account name and buttons over the bottom and right edge, so the drawing stays in between.
+ */
+export const SAFE_TOP = 240, SAFE_BOTTOM = 520, SAFE_SIDE = 60;
 /** A drawing at least this much taller than wide gets the portrait frame. */
 export const PORTRAIT_ASPECT = 1.12;
 /** Margin around the content, as a fraction of its long edge. */
@@ -43,12 +53,18 @@ export const MAX_MAGNIFY = 3;
 export const PLAY_MIN_MS = 5000, PLAY_MAX_MS = 10000, PREFERRED_SPEED = 1.5, MIN_SPEED = 0.5;
 /** The finished piece holds this long; anything still growing at MAX_MS − HOLD_MS fast-forwards. */
 export const HOLD_MS = 1000, MAX_MS = 12000;
+/** Frame 0 is the finished piece; it dissolves into the replay over this long. */
+export const OPEN_MS = 600;
+/** Night: as the last growth ends, the bloom swells by this much of its weight and settles. */
+const PULSE_MS = 900, PULSE = 0.8;
 export const FPS = 30;
 /** A keyframe every this many frames (2 s): scrubbing and upload transcoders stay quick. */
 const GOP = 60;
 /** Bitrate: fine ink lines over a grained ground need room. */
 export const BITS_PER_SECOND = 12_000_000;
 export const WORDMARK = 'sketch.syberlabs.io';
+/** Wordmark size and inset as fractions of the width: 37 px of 1080, about 13 pt on a phone. */
+const MARK_SIZE = 0.034, MARK_PAD = 0.04;
 /** WebCodecs: main-thread time spent rendering and encoding per rAF, and the encode queue cap. */
 const SLICE_MS = 10, MAX_QUEUE = 4;
 
@@ -67,21 +83,29 @@ export function timelapseSpeed(t: number): number {
   return Math.max(MIN_SPEED, t / play);
 }
 
-export interface TimelapseFrame { box: AABB; pxPerDoc: number; width: number; height: number }
+export interface TimelapseFrame {
+  box: AABB; pxPerDoc: number; width: number; height: number;
+  /** The area (px) the content is centred in: the whole frame, or the vertical frame's safe zone. */
+  fit: AABB;
+}
 
 /**
- * Framing (pure): the content plus a 10 % margin, centred in 1080 × 1080, or 1080 × 1350 when the
- * content is taller than wide; magnified at most `maxPx` px per doc unit.
+ * Framing (pure): the content plus a 10 % margin, centred in 1080 × 1920 (`vertical`, inside the
+ * safe zone), 1080 × 1080, or 1080 × 1350 when the content is taller than wide; magnified at most
+ * `maxPx` px per doc unit.
  */
-export function timelapseFrame(content: AABB, maxPx = Infinity): TimelapseFrame {
+export function timelapseFrame(content: AABB, maxPx = Infinity, vertical = false): TimelapseFrame {
   const w = Math.max(1e-6, content.x1 - content.x0), h = Math.max(1e-6, content.y1 - content.y0);
-  const width = WIDTH, height = h / w >= PORTRAIT_ASPECT ? PORTRAIT_H : WIDTH;
+  const width = WIDTH, height = vertical ? VERTICAL_H : h / w >= PORTRAIT_ASPECT ? PORTRAIT_H : WIDTH;
+  const fit: AABB = vertical
+    ? { x0: SAFE_SIDE, y0: SAFE_TOP, x1: width - SAFE_SIDE, y1: height - SAFE_BOTTOM }
+    : { x0: 0, y0: 0, x1: width, y1: height };
   const m = MARGIN * Math.max(w, h);
-  let px = Math.min(width / (w + 2 * m), height / (h + 2 * m));
+  let px = Math.min((fit.x1 - fit.x0) / (w + 2 * m), (fit.y1 - fit.y0) / (h + 2 * m));
   if (maxPx > 0 && px > maxPx) px = maxPx;
-  const cx = 0.5 * (content.x0 + content.x1), cy = 0.5 * (content.y0 + content.y1);
-  const hw = 0.5 * width / px, hh = 0.5 * height / px;
-  return { box: { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh }, pxPerDoc: px, width, height };
+  const x0 = 0.5 * (content.x0 + content.x1) - 0.5 * (fit.x0 + fit.x1) / px;
+  const y0 = 0.5 * (content.y0 + content.y1) - 0.5 * (fit.y0 + fit.y1) / px;
+  return { box: { x0, y0, x1: x0 + width / px, y1: y0 + height / px }, pxPerDoc: px, width, height, fit };
 }
 
 // ---------------------------------------------------------------------------- codec choice
@@ -108,6 +132,8 @@ export interface TimelapseItem { r: StrokeRecipe; c: Cooked }
 export interface TimelapsePlan {
   /** Start of each item on the replay clock (ms), from app/replay timeline(rs, timelapseSpeed). */
   starts: Float64Array;
+  /** End of the last pen stroke on the same clock: the length before any growth that follows it. */
+  total: number;
   /** Speed: durations are scaled by 1 / k. */
   k: number;
 }
@@ -116,6 +142,8 @@ export interface TimelapseOptions {
   ground: Ground;
   /** Bounds of every item's ink (doc). */
   content: AABB;
+  /** The 9:16 frame for the feed apps (phones and tablets) instead of square / 4:5. */
+  vertical: boolean;
   /** H.264 codec string (pickCodec). */
   codec: string;
   /** Frame scheduler: the app's single rAF loop. */
@@ -144,8 +172,9 @@ interface Film {
 
 function createFilm(items: readonly TimelapseItem[], plan: TimelapsePlan, o: TimelapseOptions): Film | null {
   const maxZ = items.reduce((z, it) => Math.max(z, it.r.z > 0 ? it.r.z : 1), 0) || 1;
-  const f = timelapseFrame(o.content, MAX_MAGNIFY * maxZ);
+  const f = timelapseFrame(o.content, MAX_MAGNIFY * maxZ, o.vertical);
   const W = f.width, H = f.height, g = o.ground, op = opFor(g), night = g === 'night';
+  const FRAME_MS = 1000 / FPS;
 
   const owned: HTMLCanvasElement[] = [];
   const canvas = (w: number, h: number): HTMLCanvasElement => {
@@ -158,19 +187,46 @@ function createFilm(items: readonly TimelapseItem[], plan: TimelapsePlan, o: Tim
     for (const c of owned) { if (o.free) o.free(c); else { c.width = 0; c.height = 0; } }
     owned.length = 0;
   };
-  const out = canvas(W, H), ground = canvas(W, H), base = canvas(W, H), dry = canvas(W, H), wet = canvas(W, H);
+  const out = canvas(W, H), ground = canvas(W, H), base = canvas(W, H), dry = canvas(W, H), wet = canvas(W, H), poster = canvas(W, H);
   const bw = Math.max(1, Math.ceil(W * BLOOM_SCALE)), bh = Math.max(1, Math.ceil(H * BLOOM_SCALE));
   const bloom = night ? [canvas(bw, bh), canvas(bw, bh)] : [];
   const chain: HTMLCanvasElement[] = [];
   if (night) for (let i = 0, w = bw, h = bh; i < 3; i++) { w = Math.max(1, Math.ceil(w / 2)); h = Math.max(1, Math.ceil(h / 2)); chain.push(canvas(w, h)); }
 
   const octx = out.getContext('2d', { alpha: false }) as CanvasRenderingContext2D | null;
+  const pctx = poster.getContext('2d', { alpha: false }) as CanvasRenderingContext2D | null;
   const gctx = ground.getContext('2d');
   const bctx = base.getContext('2d');
-  if (!octx || !gctx || !bctx) { release(); return null; }
+  if (!octx || !pctx || !gctx || !bctx) { release(); return null; }
   paintGround(gctx, W, H, g);
   // Paper tiles start white and multiply (DESIGN §6.2); Night tiles start transparent and add
-  if (!night) { bctx.fillStyle = '#fff'; bctx.fillRect(0, 0, W, H); }
+  const clearBase = (): void => {
+    bctx.clearRect(0, 0, W, H);
+    if (!night) { bctx.fillStyle = '#fff'; bctx.fillRect(0, 0, W, H); }
+  };
+  const clip: AABB = { x0: 0, y0: 0, x1: W, y1: H };
+  const bakeInk = (r: StrokeRecipe, c: Cooked): void => {
+    drawInk(bctx, c, inkTableFor(r, g), regionMatrix(r.origin, f.box, f.pxPerDoc), r.form.form, { clipDev: clip });
+  };
+
+  // the wordmark, set once: bottom right, or centred under the vertical frame's safe zone
+  const size = Math.round(W * MARK_SIZE), font = `600 ${size}px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`;
+  octx.font = font;
+  try { octx.letterSpacing = `${(size * 0.04).toFixed(1)}px`; } catch { /* older engines */ }
+  const mw = Math.ceil(octx.measureText(WORDMARK).width) + 4, mh = Math.ceil(size * 1.4);
+  const mark = canvas(mw, mh);
+  const mctx = mark.getContext('2d');
+  if (mctx) {
+    mctx.clearRect(0, 0, mw, mh);
+    mctx.font = font;
+    try { mctx.letterSpacing = octx.letterSpacing; } catch { /* older engines */ }
+    mctx.textBaseline = 'alphabetic';
+    mctx.fillStyle = night ? 'rgba(232, 236, 243, 0.66)' : 'rgba(36, 33, 28, 0.62)';
+    mctx.fillText(WORDMARK, 2, Math.round(size * 1.05));
+  }
+  const pad = Math.round(W * MARK_PAD);
+  const markX = o.vertical ? Math.round((W - mw) / 2) : W - pad - mw;
+  const markY = (o.vertical ? Math.round(f.fit.y1 + 1.6 * size) : H - pad) - Math.round(size * 1.05);
 
   // the private live layer: video px, video clock, bakes into `base`
   let vt = 0;
@@ -189,27 +245,18 @@ function createFilm(items: readonly TimelapseItem[], plan: TimelapsePlan, o: Tim
     now: () => vt,
   };
   const layer = createLiveLayer(host);
-  const clip: AABB = { x0: 0, y0: 0, x1: W, y1: H };
 
   // bloom: rendered from `base` after a bake and cured in over CURE_MS, as on screen
-  let front = 0, cureT0 = 0, bloomOn = false, bloomDirty = false;
-
-  const wordmark = (ctx: CanvasRenderingContext2D): void => {
-    const size = Math.round(W * 0.021), pad = Math.round(W * 0.037);
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.font = `500 ${size}px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`;
-    try { ctx.letterSpacing = `${(size * 0.06).toFixed(1)}px`; } catch { /* older engines */ }
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = night ? 'rgba(228, 232, 239, 0.42)' : 'rgba(36, 33, 28, 0.46)';
-    ctx.fillText(WORDMARK, W - pad, H - pad);
-    ctx.restore();
+  let front = 0, cureT0 = -Infinity, bloomOn = false;
+  const renderBloom = (): void => {
+    if (bloomOn) front = 1 - front;
+    bloomOf(base, bloom[front], chain);
+    cureT0 = vt;
+    bloomOn = true;
   };
 
-  const composite = (): void => {
-    const ctx = octx;
+  /** ground, base and bloom (`swell` adds to the bloom's weight), then #dry and #wet. */
+  const composite = (ctx: CanvasRenderingContext2D, swell: number): void => {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
@@ -223,56 +270,72 @@ function createFilm(items: readonly TimelapseItem[], plan: TimelapsePlan, o: Tim
       const u = Math.min(1, Math.max(0, (vt - cureT0) / CURE_MS));
       // linear on both buffers, so their sum is constant where nothing changed
       if (u < 1) { ctx.globalAlpha = BLOOM_ALPHA * (1 - u); ctx.drawImage(bloom[1 - front], 0, 0, bw, bh, 0, 0, W, H); }
-      ctx.globalAlpha = BLOOM_ALPHA * u;
+      ctx.globalAlpha = BLOOM_ALPHA * (u + swell);
       ctx.drawImage(bloom[front], 0, 0, bw, bh, 0, 0, W, H);
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = op;
     }
     ctx.drawImage(dry, 0, 0);
     ctx.drawImage(wet, 0, 0);
-    wordmark(ctx);
   };
+
+  // the poster (frame 0 and the loop's seam): the finished piece, then the base starts empty
+  for (const it of items) bakeInk(it.r, it.c);
+  if (night) renderBloom();
+  vt = Infinity;  // fully cured
+  composite(pctx, 0);
+  clearBase();
+  bloomOn = false; front = 0; cureT0 = -Infinity;
 
   const n = items.length;
   const t0 = n ? plan.starts[0] : 0;
-  let next = 0, ended = -1, ffDone = false;
-  const play = (it: TimelapseItem): void => layer.play(it.r, it.c, { durationScale: 1 / plan.k });
+  let next = 0, ended = -1, swellAt = -1, ffDone = false;
+  // the expected end of the last growth: the pen strokes' end, raised as each play reports its own
+  let endsAt = t0 + plan.total;
+  const play = (it: TimelapseItem): void => {
+    const e = layer.play(it.r, it.c, { durationScale: 1 / plan.k });
+    if (e > endsAt) endsAt = e;
+  };
 
   return {
     out, width: W, height: H,
     render(i) {
-      vt = t0 + i * 1000 / FPS;
+      const t = i * FRAME_MS;
+      vt = t0 + t;
       if (ended >= 0 && vt > ended + HOLD_MS) return false;
       // strokes start on the timeline; anything still growing at the cap fast-forwards
       while (next < n && plan.starts[next] <= vt) play(items[next++]);
-      if (!ffDone && vt - t0 >= MAX_MS - HOLD_MS) {
+      if (!ffDone && t >= MAX_MS - HOLD_MS) {
         ffDone = true;
         while (next < n) play(items[next++]);
         layer.fastForward();
       }
       layer.frame(vt);
       // strokes whose play finished bake into `base`, then leave #dry (their done())
-      while (bakes.length) {
-        const b = bakes.shift()!;
-        drawInk(bctx, b.c, inkTableFor(b.r, g), regionMatrix(b.r.origin, f.box, f.pxPerDoc), b.r.form.form, { clipDev: clip });
-        b.done();
-        bloomDirty = night;
+      if (bakes.length) {
+        while (bakes.length) { const b = bakes.shift()!; bakeInk(b.r, b.c); b.done(); }
+        if (night) renderBloom();
       }
-      if (bloomDirty) {
-        bloomDirty = false;
-        if (bloomOn) front = 1 - front;
-        bloomOf(base, bloom[front], chain);
-        cureT0 = vt;
-        bloomOn = true;
+      // Night: the bloom swells once as the last growth ends (the hot ink is still cooling)
+      if (swellAt < 0 && next >= n && (vt >= endsAt || layer.animating === 0)) swellAt = vt;
+      const p = night && swellAt >= 0 ? (vt - swellAt) / PULSE_MS : 1;
+      composite(octx, p < 1 ? PULSE * Math.sin(Math.PI * p) : 0);
+      // the opening: the finished piece dissolves into the replay under way
+      octx.globalCompositeOperation = 'source-over';
+      if (t < OPEN_MS) {
+        const u = t / OPEN_MS;
+        octx.globalAlpha = 1 - u * u * (3 - 2 * u);
+        octx.drawImage(poster, 0, 0);
+        octx.globalAlpha = 1;
       }
-      composite();
+      octx.drawImage(mark, markX, markY);
       if (ended < 0 && next >= n && layer.animating === 0) ended = vt;
       return true;
     },
     progress(i) {
-      const v = t0 + i * 1000 / FPS;
-      const end = ended >= 0 ? ended + HOLD_MS : Math.min(t0 + MAX_MS, Math.max(v, n ? plan.starts[n - 1] : 0) + HOLD_MS);
-      return Math.min(1, (v - t0) / Math.max(1, end - t0));
+      const v = t0 + i * FRAME_MS;
+      const end = ended >= 0 ? ended : Math.min(t0 + MAX_MS - HOLD_MS, Math.max(v, endsAt));
+      return Math.min(1, (v - t0) / Math.max(1, end - t0 + HOLD_MS));
     },
     release,
   };

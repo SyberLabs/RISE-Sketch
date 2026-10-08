@@ -289,7 +289,7 @@ export function createRenderer(deps: RendererDeps | RendererOptions): RendererIm
       live.commit(r, c, copies);
     },
     withdraw() { touchLive(); live.withdraw(); },
-    play(r, c, o) { if (!o || o.bake !== false) holdLive(r.id); touchLive(); live.play(r, c, o); },
+    play(r, c, o) { if (!o || o.bake !== false) holdLive(r.id); touchLive(); return live.play(r, c, o); },
     dissolve(ms) { touchLive(); live.dissolve(ms); },
     fastForward() { touchLive(); live.fastForward(); },
     get animating() { return live.animating; },

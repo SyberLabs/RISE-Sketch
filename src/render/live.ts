@@ -1745,7 +1745,8 @@ class PlayStroke extends WakeItem {
   readonly bakeAfter: boolean;
   private readonly tStart: number;
   private readonly scale: number;
-  private readonly tEnd: number;
+  /** When the whole play (trunk, growth, pools) ends, on the host clock. */
+  readonly tEnd: number;
   private resting = false;
   private baking = false;
   private ffDone = false;
@@ -2641,7 +2642,7 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
     halo: setHalo,
     commit,
     withdraw,
-    play(r: StrokeRecipe, c: Cooked, opts?: PlayOpts): void {
+    play(r: StrokeRecipe, c: Cooked, opts?: PlayOpts): number {
       const now = host.now();
       prepare(now);
       killId(r.id);
@@ -2658,6 +2659,7 @@ export function createLiveLayer(host: LiveHost): LiveLayerInternal & LiveLayerEx
       items.push(p);
       capAnimations(now);
       host.requestFrame();
+      return p.tEnd;
     },
     dissolve(ms: number): void {
       const now = host.now();
