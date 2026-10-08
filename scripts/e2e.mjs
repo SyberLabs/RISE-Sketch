@@ -988,7 +988,9 @@ await scenario('remix-link', async ({ page, cdp }) => {
     await shot(v.page, 'remix-opened');
     const diff = pixelDiff(sent, got);
     console.log(`    remix vs sender: mean ${diff.mean.toFixed(3)}/255, ${(100 * diff.over).toFixed(3)} % of pixels off by > 16`);
-    assert(diff.mean < 0.5 && diff.over < 0.005, `the remix looks like the sender's drawing (mean ${diff.mean.toFixed(3)}, ${(100 * diff.over).toFixed(3)} % > 16)`);
+    // runs measure 0.08–0.59 % of pixels off by > 16 (sub-pixel edge shifts, invisible side by side); 1 % keeps
+    // headroom without letting a real change through (a re-grown stroke moves several %)
+    assert(diff.mean < 0.5 && diff.over < 0.01, `the remix looks like the sender's drawing (mean ${diff.mean.toFixed(3)}, ${(100 * diff.over).toFixed(3)} % > 16)`);
     // a truncated link (pasted into the open app) loads nothing and says so
     await R(v.page, f => { location.hash = f; }, fragment.slice(0, fragment.length >> 1));
     await v.page.waitForFunction(() => /damaged or incomplete/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
