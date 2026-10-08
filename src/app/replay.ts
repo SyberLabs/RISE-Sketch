@@ -44,8 +44,14 @@ export function strokeDuration(r: StrokeRecipe): number {
   return t;
 }
 
-/** The replay timeline (pure): per-stroke start offsets on the scaled clock, total and speed. */
-export function timeline(rs: readonly StrokeRecipe[]): { starts: Float64Array; total: number; k: number } {
+/** Replay speed for a timeline of `t` ms (gap-capped drawing time): k = max(1.5, t / 18 s). */
+export const replaySpeed = (t: number): number => Math.max(MIN_SPEED, t / TARGET_MS);
+
+/**
+ * The replay timeline (pure): per-stroke start offsets on the scaled clock, total and speed.
+ * `speed` maps the unscaled total to k (Replay's rule by default; the timelapse has its own).
+ */
+export function timeline(rs: readonly StrokeRecipe[], speed: (t: number) => number = replaySpeed): { starts: Float64Array; total: number; k: number } {
   const n = rs.length;
   const starts = new Float64Array(n);
   let t = 0;
@@ -62,7 +68,7 @@ export function timeline(rs: readonly StrokeRecipe[]): { starts: Float64Array; t
       t += gap === gap ? Math.max(0, Math.min(GAP_CAP_MS, gap)) : GAP_CAP_MS;
     }
   }
-  const k = Math.max(MIN_SPEED, t / TARGET_MS);
+  const k = speed(t);
   for (let i = 0; i < n; i++) starts[i] /= k;
   return { starts, total: t / k, k };
 }

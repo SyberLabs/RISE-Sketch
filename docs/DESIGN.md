@@ -6,8 +6,9 @@ This is the build spec for Rise (`rise-sketch`). It replaces the v1 draft and se
 
 **Status (2026-10-05).** P0 is built (§11 lists what is not), plus six Forms beyond the original plan.
 - **Forms:** eleven in the app. Line, Echo, Sprout and Drift as specified; Craze, Plume, Caustic, Burin, Plait and Orbit promoted from the forms lab (`lab/forms`) with unchanged geometry (§2.3.10–§2.3.15); Ripple v2 promoted from lab prototype v107 (§2.3.7). New Sprout and Drift strokes cook with v2 operators (§2.3.5, §2.3.6); old documents keep v1.
-- **Tests:** `npx vitest run` passes 1105 tests in 71 files under `tests/` (the forms lab has its own suite, §7.6).
-- **e2e:** `scripts/e2e.mjs` has 24 scenarios (23 on the debug build, plus `prod-file`), §7.6.
+- **Tests:** `npx vitest run` passes 1179 tests in 75 files under `tests/` (the forms lab has its own suite, §7.6).
+- **e2e:** `scripts/e2e.mjs` has 27 scenarios (26 on the debug build, plus `prod-file`), §7.6.
+- **Share timelapse:** every drawing can leave the app as a short MP4 of its ink growing (§8).
 - **Not met:** the single-file bundle budget (§9).
 - The user-facing summary is `README.md` at the repo root.
 
@@ -936,7 +937,7 @@ The recipes are the same on both grounds. Each ink has designed ramps for each, 
 
 | Control | Location | At rest | While drawing | On demand | Behaviour |
 |---|---|---|---|---|---|
-| **Menu mark** | top-left | ✓ (hidden during selection) | hidden | Menu sheet | New · Open… · Save project · Export image · Recent ▸ · Replay · Gestures & keys. The not-autosaving dot rides on the mark. |
+| **Menu mark** | top-left | ✓ (hidden during selection) | hidden | Menu sheet | New · Open… · Save project · Export image · Share timelapse · Recent ▸ · Replay · Gestures & keys. The not-autosaving dot rides on the mark. |
 | **Stroke chip** | dock | ✓ | hidden | Stroke sheet | 40×28 glyph: an S-curve in the current nib, size and ink. **Tap** opens the sheet. **Vertical drag** sets size. **In erase mode** the glyph becomes an eraser with an accent outline, and one tap returns to the last nib without opening the sheet. |
 | **Color chip** | dock | ✓ | hidden | Color sheet | Glyph of the current ink's ramp on the current ground. **Tap** opens the sheet. **2D drag** sets hue (x) and tone (y), creating a custom ink. |
 | **Form chip** | dock | ✓ | hidden | Form sheet | Glyph of a tiny squiggle grown at the current base depth. **Tap** opens the sheet. **Vertical drag** sets base depth. While symmetry is on, a small spoke badge (state, not a control) shows Mirror or the fold count. |
@@ -949,7 +950,7 @@ The recipes are the same on both grounds. Each ink has designed ramps for each, 
 | Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift · Craze · Plume · Caustic · Burin · Plait · Orbit · Ripple as labelled live tiles: eleven, in two rows (6 + 5) on desktop and tablet, a 3-column grid on phones (the one sheet over the 9-tile cap, §13). Tooltips name the key (1–9, 0). Re-tapping the selection's Form tile reseeds it. Below the tiles, the **Free \| Symmetry** switch: tap toggles, drag sideways steps the folds (§2.3.1). |
 | Menu sheet | top-left | — | — | ✓ | Items listed above. Recent: the last 12 documents with date, a 96 px thumbnail, open, and delete. |
 | Help sheet | full sheet | — | — | `?`, F1 or the menu | Ink Grammar; Keys (desktop) or Gestures (touch), with labels from `navigator.keyboard.getLayoutMap()` where it exists; **Reset calibration** |
-| Toast | above the dock | — | — | listed events only | **New:** "New canvas. The last one is in Recent." **Open / drop:** "Opened ⟨title⟩". **Export:** a progress toast with **Cancel** while it takes > 300 ms, then "Image saved". **Autosave failure:** "Not autosaving" with **Save**. **Pen mode:** on the first finger pan of a session, "Fingers pan while a pen is in use" with **Draw with fingers**. 6 s; one at a time. |
+| Toast | above the dock | — | — | listed events only | **New:** "New canvas. The last one is in Recent." **Open / drop:** "Opened ⟨title⟩". **Export:** a progress toast with **Cancel** while it takes > 300 ms, then "Image saved". **Share timelapse:** "Recording timelapse…" with progress and **Cancel**; then "Timelapse ready" with **Share** (20 s) where the share sheet takes files, else "Timelapse saved"; without video support, "This browser can’t record video, so here is an image". **Autosave failure:** "Not autosaving" with **Save**. **Pen mode:** on the first finger pan of a session, "Fingers pan while a pen is in use" with **Draw with fingers**. 6 s; one at a time. |
 | Hints | in context | — | — | at most 4, ever | (1) "Draw anything. It grows." with the first-run seed. (2) "Hold still to make it rise." at stroke 5 if there has been no rise. (3) The Form chip pulses once, "Try another Form", 1.2 s after the first stroke. (4) A navigation hint on the first off-screen stroke or after 10 strokes. Each is shown once, dismissed by doing the action or after 4 s, and remembered in prefs. |
 | *Feedback (not controls)* | at the nib / pointer | — | ✓ | — | **Nib cursor:** true width and shape in the ink colour; Chisel shows an oriented bar that follows azimuth live; it replaces the demo's crosshair. **Rise halo**, drawn as ink. **Weld ring** at the start point when closure is on. **Lasso path.** **Eraser ring**, with a doom mask over the strokes that will go. **Selection bounds and outlines.** |
 
@@ -1116,6 +1117,7 @@ Phone, landscape:
 | `Space`+drag | Pan |
 | `Shift+Digit1` / `Shift+Digit0` | Fit content / reset to 100% |
 | `KeyP` | Replay |
+| `Shift+KeyP` | Share timelapse (the replay as a video, §8) |
 | `?` (by `e.key`) or `F1` | Help |
 | `Mod+S` / `Mod+O` / `Mod+E` | Save `.rise` / open / export PNG |
 | P1: `Mod+D`, arrows (`Shift`: ×10), `Mod+Shift+E`, `Alt`+wheel | Duplicate, nudge, export SVG, rotate |
@@ -1373,7 +1375,8 @@ src/
     idb.ts (database `rise` v1)  prefs.ts (localStorage `rise:*`, try/catch)
     files.ts (.rise download/open/drop; reads gzip)  autosave.ts (batched writes, snapshots, thumbnails, quota)
   export/
-    png.ts  (svg.ts P1)
+    png.ts  timelapse.ts (Share timelapse: private live layer, one composited canvas, WebCodecs or MediaRecorder)
+    mp4.ts (pure: one H.264 track into a fast-start MP4)  (svg.ts P1)
   ui/
     index.ts (the whole chrome: reads AppState, dispatches Intents)
     dock.ts  chip.ts (tap/drag rule, dead zone, long-press label, tooltip)  sheet.ts  menu.ts  recent.ts
@@ -1730,7 +1733,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 
 ### 7.6 Tests
 
-**Status (2026-10-08):** 1144 vitest tests in 73 files under `tests/`, all passing (symmetry: `tests/ink-symmetry.test.ts`, the v2 format fixture); 25 e2e scenarios. The forms lab has its own suite (`npx vitest run --config lab/vitest.config.ts`).
+**Status (2026-10-08):** 1179 vitest tests in 75 files under `tests/`, all passing (symmetry: `tests/ink-symmetry.test.ts`, the v2 format fixture; Share timelapse: `tests/export.timelapse.test.ts`, schedule, framing, encoder choice and the MP4 box layout); 27 e2e scenarios. The forms lab has its own suite (`npx vitest run --config lab/vitest.config.ts`).
 
 **vitest (Node):**
 - **`det`:** bit-exact golden vectors, plus relative error ≤ 1e-12 against `Math.*` over Rise's ranges.
@@ -1749,7 +1752,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 **e2e (`scripts/e2e.mjs` on `harness.mjs`):**
 - **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps. The suite drives the **debug variant** (`vite build --mode debug` → `dist-debug/index.html`, which it builds itself): the same app with `window.__rise` compiled in. The production file (`build:single`) has no debug hooks (`__DEBUG__` is a build-time constant), so the `prod-file` scenario only checks that it boots, draws, logs no errors and exposes nothing.
 - **Golden fixtures in other engines:** Firefox via puppeteer-core BiDi; the step reports SKIPPED when `FIREFOX_PATH` is absent. WebKit (Playwright) is P1. **Not built yet.**
-- **Scenarios** (25; `--only name,name` runs a subset; `--budget` runs `boot-budget`, `phone-layout` and `symmetry`):
+- **Scenarios** (27; `--only name,name` runs a subset; `--budget` runs `boot-budget`, `phone-layout` and `symmetry`):
   - `prod-file`: the production file boots, draws, logs no errors and has no `window.__rise`
   - `boot-budget`, `phone-layout`: control-budget DOM counts at rest, with ink and after an undo, on desktop and phone (the selection counts are checked in the selection scenarios)
   - `draw-each-form` (the first four), `draw-new-forms` (the six lab Forms, their taps, and a `.rise` round trip of their ids), `radial-seeds`
@@ -1760,6 +1763,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
   - `undo-redo-50`
   - `reload-persist` (identical `sceneHash`), `rise-file-roundtrip`, `export-png` (dimensions), `documents` (New, reopen and delete from Recent)
   - `first-run-seed`, `hints`, `replay`
+  - `timelapse`: `Shift+P` shows the progress toast, drawing goes on while it records, the video downloads (`rise-*.mp4`, intercepted); the debug hook's recording loads in a `<video>` at 1080 px wide with a 3–12.5 s duration that matches its frame count, and its first and last frames differ. The video and three frames are written to `e2e-out/`
   - `symmetry`: the Form sheet holds 10 tiles plus the switch; the switch turns on 6-fold symmetry with no extra control at rest; the copies draw while the pen is down (pixel probe); one stroke makes 6 strokes with 6 Spectral hues in a v2 file; one undo removes them, redo restores them, a reload keeps them (identical `sceneHash`) and the switch state; `M` turns it off; Mirror makes 2
   - `navigate`, `touch-pinch`
   - `stress-300`: a 300-stroke document with 20 wheel zoom steps
@@ -1864,13 +1868,23 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 - The UI is hidden, a 1 px progress line runs along the bottom, and any input stops playback.
 - The same `app/replay.ts` drives the first-run seed and the e2e suite.
 
+**Share timelapse.** Menu → Share timelapse or `Shift+P`. No dialog.
+- **What:** the drawing replays stroke by stroke, each Form growing exactly as in Replay, then the finished piece holds for 1 s. A small `sketch.syberlabs.io` wordmark sits in the bottom-right corner, on the current ground.
+- **Render path:** the screen is a stack of CSS-blended canvases (§6.2), so it cannot be recorded. `export/timelapse.ts` builds a **private live layer** (`createLiveLayer`) over two offscreen canvases at video size and calls the same `play` as Replay, on a video clock. Strokes that finish bake into an offscreen base through the tiles' `drawInk`, and on Night the base's bloom (`bloomOf`, shared with `render/bloom.ts`) cures in over 400 ms as on screen. Each frame composites ground, base, bloom, `#dry` and `#wet` into **one** canvas with `lighter` / `multiply`, the canvas ops behind the CSS blends, as the snapshot does. The app's renderer, tiles and camera are untouched, so drawing and navigation go on while it records.
+- **Framing:** 1080 × 1080, or 1080 × 1350 (4:5) when the content is ≥ 1.12× taller than wide; the content plus a 10% margin, centred, magnified at most 3× the zoom it was drawn at.
+- **Duration:** the replay timeline (gaps capped at 250 ms) of drawing time `T` plays at `k = T / clamp(T / 1.5, 5 s, 10 s)`, never slower than 0.5×; the last growth finishes, then a 1 s hold. Anything still growing at 11 s fast-forwards, so a video lasts at most 12 s.
+- **Encoding:** WebCodecs `VideoEncoder`, H.264 (High, then Main, then Constrained Baseline, level 4.0) at 30 fps and 12 Mb/s, a keyframe every 2 s; every frame gets its exact timestamp and frames are encoded as fast as the device allows (≤ 10 ms of work per rAF, at most 4 frames queued). `export/mp4.ts` writes a fast-start MP4 (`moov` before `mdat`). **Fallback** where WebCodecs or H.264 encoding is missing: `MediaRecorder` on `captureStream(0)` with one `requestFrame()` per frame, in real time on the wall clock (paused while the page is hidden), MP4 where supported, else WebM VP9 / VP8.
+- **Delivery:** where `navigator.canShare({ files })` is true, the share sheet (title "Made in RISE Sketch", url `https://sketch.syberlabs.io`). The sheet needs a fresh user gesture, which a recording outlasts, so a **Share** toast action opens it; a closed sheet keeps nothing, any other failure downloads instead. Elsewhere the file downloads as `rise-YYYYMMDD-HHMM.mp4` (or `.webm`).
+- **Unsupported:** with neither WebCodecs H.264 nor `MediaRecorder`, the item exports the PNG instead, and its toast says why.
+- **Progress:** one toast with progress and **Cancel** (`Escape` cancels too). The menu item waits while a recording runs.
+
 **SVG (P1):**
 - One `<path>` per batch, decimated with RDP at 0.25 output px, coordinates to 2 decimals, grouped per stroke.
 - An `isolation: isolate` root over a ground `<rect>`, with `mix-blend-mode: plus-lighter` on Night (browser-fidelity target) and `multiply` on Paper (portable).
 - Hairline polys become an opacity multiplier.
 
 **P2:**
-- WebM via `captureStream` and `MediaRecorder`.
+- ~~WebM via `captureStream` and `MediaRecorder`~~ **Shipped** as Share timelapse (MP4 through WebCodecs, `MediaRecorder` as the fallback), above.
 - PNG files with the project embedded in a `tEXt` chunk (hand-written CRC32).
 - Banded export of very large images through a hand-written PNG encoder over `CompressionStream`.
 
@@ -2001,6 +2015,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - **Beyond the plan, shipped:** six more Forms (Craze, Plume, Caustic, Burin, Plait, Orbit, §2.3.10–§2.3.15) with keys 5–9 and 0 and a ten-tile Form sheet, and Sprout v2 (§2.3.5).
 - **Shipped after the build:** Drift v2 (§2.3.6).
 - **Shipped after the build:** symmetry drawing: Mirror (P1) and radial symmetry (P2) as one feature (§2.3.1, §13 After the build #6), with `.rise` format v2.
+- **Shipped after the build:** Share timelapse, the P2 WebM timelapse as a shareable MP4 (§8, §13 After the build #8).
 - **Still P1 and P2:** everything listed under those headings below. Charcoal and paper tooth, tilt shading, view rotation, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
 
 ### P0: one focused build, in six milestones (built)
@@ -2067,6 +2082,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - **Sprout v2:** clean crotches, so branches no longer stack into white dashes on Night (§2.3.5).
 - **Cheaper pan and zoom:** transform-only gesture frames, one settle per gesture, blank layers skipped (§6.2, §6.7, §6.9).
 - **A debug build:** `__DEBUG__`, `build:debug` and the `prod-file` check (§7.6, §9).
+- **Share timelapse:** the replay as a 6–12 s MP4, shared or downloaded (§8).
 
 ### P1
 
@@ -2111,7 +2127,7 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 **Files and output:**
 - PNG with the project embedded.
 - Banded giant export.
-- WebM timelapse and replay scrubbing.
+- ~~WebM timelapse~~ (**shipped** as Share timelapse, §8); replay scrubbing.
 - Persisted undo history.
 
 **Interaction:**
@@ -2300,3 +2316,4 @@ Decisions taken once P0 was running. Same verdict scale.
 | 5 | Drift v2: filaments emerge from the trunk edge | A | Shipped. Same versioning as Sprout v2: a new `drift.v2.ts`, v1 kept for old documents. |
 | 6 | Symmetry: ship P1 Mirror and P2 radial symmetry as one kaleidoscope feature | A* | One control: the Form sheet's single permitted two-way switch, **Free \| Symmetry**, so the at-rest budget (4/5) and the ten-tile Form sheet are unchanged. The fold count is the switch's amount (drag sideways, the chip rule), shown as spokes, not a number: zero sliders, still one numeric readout. Copies are real recipes placed by `xf` after the cook, not re-cooked transformed samples: re-cooking rotated samples would let Caustic's lamp, Drift's curl field and Float32 rounding differ per petal, while placement keeps every petal bit-identical and costs one cook per gesture. Spectral copies take `dh = 360°·i/n` in the recipe (a rainbow wheel). One gesture is one history entry; afterwards the copies are separate strokes (you erase what you touch). **Changed from the P1 line:** the axis is not draggable at rest; the centre is the view centre when switched on, because a grab target near the centre would conflict with hold = rise. `.rise` goes to format v2. |
 | 7 | Ship Ripple (P1) as the eleventh Form | A* | Promoted from lab prototype v107 as `ripple.v2.ts` (v1 recipes keep cooking as Line, §7.5 rule 8). The Form sheet grows to 11 tiles (6 + 5 on desktop); this widens exception #2 rather than adding a control, and the at-rest budget is unchanged. No number key: `Digit1`–`Digit0` are full, and a letter would break the position rule. The P1 numbers in §2.3.7 were revised in the lab (see the brief). |
+| 8 | Share timelapse: ship the P2 WebM timelapse as the way a drawing leaves the app | A* | One menu item and `Shift+P`, no settings, so the control budget is unchanged (the menu grows to eight items). **Changed from P2:** MP4/H.264 through WebCodecs with a hand-written fast-start MP4 writer (`export/mp4.ts`, about 150 lines, no dependency) instead of WebM through `MediaRecorder`: every social app and the iOS share sheet take MP4 and few take WebM, and `MediaRecorder` stamps frames with the wall clock, so a busy main thread drops frames (in headless Chrome it lost whole seconds), while WebCodecs gets an exact timestamp per frame and runs faster than real time. `MediaRecorder` stays as the fallback, and the PNG export when neither exists. Frames come from a private live layer on the same `play` as Replay, so the video is what Replay shows; nothing about operators, recipes or the format changes. `Shift+P`, not `Mod+Shift+E`: that chord is the P1 SVG export, Firefox opens its network panel on Ctrl+Shift+E, and P is already Replay. Square 1080 px by default, 4:5 for tall drawings (the portrait feed format); the wordmark is the loop back to the app. Fixed on the way: a symmetry copy's replay now counts with its stroke against the four-animation cap (`live.play`), so six petals grow together instead of two popping in. Cost: +13 kB minified, +5 kB gzipped on the single file. |

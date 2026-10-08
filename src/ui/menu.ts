@@ -1,6 +1,6 @@
 /**
- * The menu sheet (DESIGN §4): New · Open… · Save project · Export image · Recent ▸ · Replay ·
- * Gestures & keys. Seven items, no settings. Recent drills into its own view inside the sheet.
+ * The menu sheet (DESIGN §4): New · Open… · Save project · Export image · Share timelapse ·
+ * Recent ▸ · Replay · Gestures & keys. Eight items, no settings. Recent drills into its own view inside the sheet.
  * The not-autosaving state shows on the mark (dot) and as a note on Save.
  */
 import type { AppState, Intent } from '../app/types';
@@ -10,7 +10,7 @@ import { createRecent } from './recent';
 import { createSheetFrame, type SheetFrame } from './sheet';
 
 export interface MenuItemSpec {
-  key: 'new' | 'open' | 'save' | 'export' | 'recent' | 'replay' | 'help';
+  key: 'new' | 'open' | 'save' | 'export' | 'timelapse' | 'recent' | 'replay' | 'help';
   label: string;
   icon: IconName;
   /** Shortcut hint (desktop only), or the Recent count. */
@@ -21,7 +21,7 @@ export interface MenuItemSpec {
   disabled: boolean;
 }
 
-/** The seven menu items for a state (pure). */
+/** The eight menu items for a state (pure). */
 export function menuItems(s: AppState): MenuItemSpec[] {
   const mod = s.isMac ? '⌘' : 'Ctrl+';
   const keys = !s.isTouch;
@@ -30,6 +30,7 @@ export function menuItems(s: AppState): MenuItemSpec[] {
     { key: 'open', label: 'Open…', icon: 'open', kbd: keys ? `${mod}O` : null, intent: { k: 'openPicker' }, note: null, disabled: false },
     { key: 'save', label: 'Save project', icon: 'save', kbd: keys ? `${mod}S` : null, intent: { k: 'save' }, note: s.autosaveOk ? null : 'Not autosaving', disabled: false },
     { key: 'export', label: 'Export image', icon: 'image', kbd: keys ? `${mod}E` : null, intent: { k: 'exportPng' }, note: null, disabled: !s.hasInk || s.exporting },
+    { key: 'timelapse', label: 'Share timelapse', icon: 'share', kbd: keys ? '⇧P' : null, intent: { k: 'timelapse' }, note: null, disabled: !s.hasInk || s.recording },
     { key: 'recent', label: 'Recent', icon: 'clock', kbd: s.recentDocs.length ? String(Math.min(12, s.recentDocs.length)) : null, intent: null, note: null, disabled: false },
     { key: 'replay', label: 'Replay', icon: 'play', kbd: keys ? 'P' : null, intent: { k: 'replay' }, note: null, disabled: !s.hasInk },
     { key: 'help', label: 'Gestures & keys', icon: 'keys', kbd: keys ? '?' : null, intent: { k: 'openSheet', sheet: 'help' }, note: null, disabled: false },
@@ -133,7 +134,7 @@ export function createMenu(ctx: UICtx): Menu {
     update(s, prev, force) {
       if (prev && prev.sheet === 'menu' && s.sheet !== 'menu' && view !== 'main') show('main');
       if (force || !prev || prev.autosaveOk !== s.autosaveOk || prev.hasInk !== s.hasInk || prev.recentDocs !== s.recentDocs
-        || prev.isTouch !== s.isTouch || prev.exporting !== s.exporting || prev.docTitle !== s.docTitle) {
+        || prev.isTouch !== s.isTouch || prev.exporting !== s.exporting || prev.recording !== s.recording || prev.docTitle !== s.docTitle) {
         specs = menuItems(s);
         for (const spec of specs) {
           const b = buttons[spec.key];

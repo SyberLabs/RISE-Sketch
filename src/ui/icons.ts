@@ -6,7 +6,7 @@
 
 export type IconName =
   | 'mark' | 'undo' | 'redo' | 'trash' | 'arrow' | 'close' | 'back' | 'chevron'
-  | 'plus' | 'open' | 'save' | 'image' | 'clock' | 'play' | 'keys' | 'eraser' | 'reset';
+  | 'plus' | 'open' | 'save' | 'image' | 'clock' | 'play' | 'keys' | 'eraser' | 'reset' | 'share';
 
 /** Inner markup per icon (viewBox 0 0 24 24). */
 export const ICONS: Readonly<Record<IconName, string>> = {
@@ -40,6 +40,10 @@ export const ICONS: Readonly<Record<IconName, string>> = {
     '<path d="m4.9 14.6 8.4-8.4a2 2 0 0 1 2.8 0l2.3 2.3a2 2 0 0 1 0 2.8l-7.3 7.3a3 3 0 0 1-2.1.9H8.7a2 2 0 0 1-1.4-.6l-2.4-2.4a1.3 1.3 0 0 1 0-1.9z"/>' +
     '<path d="m9.4 10.1 4.9 4.9"/>',
   reset: '<path d="M5.2 12a6.8 6.8 0 1 0 2-4.8"/><path d="M5 4.6V9h4.4"/>',
+  // a frame with a play triangle, leaving it by an arrow: the drawing as a video, sent out
+  share:
+    '<path d="M13.5 5H6a2.5 2.5 0 0 0-2.5 2.5v9A2.5 2.5 0 0 0 6 19h11a2.5 2.5 0 0 0 2.5-2.5V13"/>' +
+    '<path d="M10 9.6v5.3l4.3-2.65z"/><path d="M16.5 3.5h4v4"/><path d="m20.3 3.7-4.6 4.6"/>',
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

@@ -13,7 +13,7 @@ export function state(patch: Partial<AppState> = {}): AppState {
     ground: 'night', selection: [], selectionRect: null, canUndo: false, canRedo: false, hasInk: false,
     zoom: 100, inkInView: true, inkDirection: null, chromeHidden: false, sheet: null, lastRecipe: null,
     docTitle: 'Untitled', currentDocId: 'doc', recentDocs: [], autosaveOk: true, replaying: false, replayProgress: 0,
-    exporting: false, penMode: false, firstRun: false,
+    exporting: false, recording: false, penMode: false, firstRun: false,
     hints: { draw: 'pending', rise: 'pending', form: 'pending', nav: 'pending' },
     reducedMotion: false, isTouch: false, isMac: false,
   };

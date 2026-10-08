@@ -68,6 +68,7 @@ export function keyRows(isMac: boolean, L: (code: string) => string): HelpRow[] 
     { keys: ['Wheel', 'Pinch'], action: 'Zoom (a trackpad scroll pans)' },
     { keys: [`${sh}${L('Digit1')}`, `${sh}${L('Digit0')}`], action: 'Fit the drawing / 100%' },
     { keys: [L('KeyP')], action: 'Replay' },
+    { keys: [`${sh}${L('KeyP')}`], action: 'Share timelapse (the replay as a video)' },
     { keys: [`${mod}${L('KeyS')}`, `${mod}${L('KeyO')}`, `${mod}${L('KeyE')}`], action: 'Save · open · export image' },
     { keys: ['?'], action: 'This sheet' },
   ];

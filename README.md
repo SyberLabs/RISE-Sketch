@@ -106,6 +106,7 @@ reseeds it.
 | `Ctrl/⌘+A` · `Del` · `Esc` | select all · delete selection · deselect / close |
 | `Shift+1` / `Shift+0` | fit the drawing / 100% |
 | `P` | replay the drawing |
+| `Shift+P` | share a timelapse video of the drawing |
 | `Ctrl/⌘+S` · `Ctrl/⌘+O` · `Ctrl/⌘+E` | save `.rise` · open · export PNG |
 | `?` | gestures and keys |
 
@@ -118,6 +119,10 @@ reseeds it.
   version 1 files still open.
 - **Export image** saves a high-resolution PNG framed to your drawing.
 - **Replay** redraws the whole drawing, stroke by stroke, as it was made.
+- **Share timelapse** turns that replay into a 6–12 second video (MP4, 1080 px square, or 4:5 for a
+  tall drawing) of the ink growing, on your ground, with a small `sketch.syberlabs.io` mark. Where
+  your device can share files, a **Share** button opens the share sheet; otherwise the video
+  downloads. You can keep drawing while it records.
 
 ## Building and running
 

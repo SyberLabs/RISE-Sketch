@@ -20,7 +20,7 @@
 // then shows the not-autosaving dot and toast, DESIGN §8), run the suite over http instead:
 //   npx vite build --mode debug && npx vite preview --outDir dist-debug --port 5191 --strictPort
 //   (in the background), then node scripts/e2e.mjs --url http://localhost:5191/
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -422,6 +422,81 @@ await scenario('export-png', async ({ page, cdp }) => {
   await idle(page);
   const r = await R(page, () => window.__rise.exportPng());
   assert(r.width >= 1000 && r.height > 100 && r.bytes > 5000, `export ${r.width}x${r.height} ${r.bytes}B`);
+});
+
+// Share timelapse (DESIGN §8): Shift+P records the replay as a video and, with no share sheet,
+// downloads it; the debug hook hands back the same recording for inspection in a <video>. The
+// video and its first, middle and last frames land in e2e-out/ for review.
+await scenario('timelapse', async ({ browser, page, cdp }) => {
+  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
+  await dispatch(page, { k: 'pickForm', form: 'sprout' });
+  await dispatch(page, { k: 'symmetry', folds: 6 });
+  await penStroke(cdp, wave(660, 300, 900, 40, 50), { delay: 6 });
+  await idle(page);
+  await dispatch(page, { k: 'symmetry', on: false });
+  await dispatch(page, { k: 'pickForm', form: 'ripple' });
+  await penStroke(cdp, [[640, 410, 0.6], [640.5, 410.3, 0.7], [640.8, 410.4, 0.7]], { hold: 700 });
+  await idle(page);
+  const h = await R(page, () => window.__rise.sceneHash());
+  const n0 = await count(page);
+  // the key, delivered as a download (no share sheet): intercept it
+  const dl = resolve(OUT, 'timelapse-download');
+  rmSync(dl, { recursive: true, force: true });
+  mkdirSync(dl, { recursive: true });
+  const bcdp = await browser.target().createCDPSession();
+  await bcdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
+  await R(page, () => { Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true }); });
+  await key(page, 'P', ['Shift']);
+  await sleep(100);
+  let st = await R(page, () => window.__rise.state());
+  assert(st.recording, 'Shift+P starts recording');
+  assert(await R(page, () => document.querySelector('.r-toast')?.textContent || '') .then(t => /Recording timelapse/.test(t)), 'a progress toast shows');
+  // drawing goes on while it records
+  await penStroke(cdp, line(200, 700, 420, 690, 20));
+  await page.waitForFunction(() => !window.__rise.state().recording, { timeout: 90000 });
+  await page.waitForFunction(() => /Timelapse saved/.test(document.querySelector('.r-toast')?.textContent || ''), { timeout: 5000 });
+  let file = null;
+  for (let t = 0; t < 50 && !file; t++) {
+    file = readdirSync(dl).find(f => /^rise-\d{8}-\d{4}\.(mp4|webm)$/.test(f)) || null;
+    if (!file) await sleep(100);
+  }
+  assert(file, `a video was downloaded (${readdirSync(dl)})`);
+  assert(statSync(resolve(dl, file)).size > 50000, `the download is a real video (${statSync(resolve(dl, file)).size} B)`);
+  assert(await count(page) === n0 + 1, 'the stroke drawn while recording landed');
+  await dispatch(page, { k: 'undo' });
+  await idle(page);
+  assert(await R(page, () => window.__rise.sceneHash()) === h, 'recording changed nothing');
+  // the recording itself, through the debug hook
+  const r = await R(page, () => window.__rise.timelapse());
+  assert(r && r.bytes > 50000 && r.width === 1080 && (r.height === 1080 || r.height === 1350), `timelapse ${JSON.stringify(r && { ...r, url: 0 })}`);
+  const v = await R(page, async url => {
+    const b = new Uint8Array(await (await fetch(url)).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+    const el = document.createElement('video');
+    el.muted = true; el.src = url;
+    await new Promise((ok, no) => { el.onloadedmetadata = ok; el.onerror = () => no(new Error('the video does not load')); });
+    if (!Number.isFinite(el.duration)) { el.currentTime = 1e9; await new Promise(ok => { el.ondurationchange = ok; setTimeout(ok, 3000); }); }
+    const c = document.createElement('canvas'); c.width = el.videoWidth; c.height = el.videoHeight;
+    const ctx = c.getContext('2d');
+    const grab = async t => {
+      el.currentTime = t;
+      await new Promise(ok => { el.onseeked = ok; });
+      ctx.drawImage(el, 0, 0);
+      return { px: ctx.getImageData(0, 0, c.width, c.height).data, png: c.toDataURL('image/png') };
+    };
+    const first = await grab(0), mid = await grab(el.duration * 0.4), last = await grab(Math.max(0, el.duration - 0.05));
+    let diff = 0;
+    for (let i = 0; i < first.px.length; i += 4) diff += Math.abs(first.px[i] - last.px[i]) + Math.abs(first.px[i + 1] - last.px[i + 1]) + Math.abs(first.px[i + 2] - last.px[i + 2]);
+    return { duration: el.duration, w: el.videoWidth, h: el.videoHeight, diff: diff / (first.px.length / 4), b64: btoa(bin), first: first.png, mid: mid.png, last: last.png };
+  }, r.url);
+  const ext = /mp4/.test(r.mime) ? 'mp4' : 'webm';
+  writeFileSync(`${OUT}/timelapse.${ext}`, Buffer.from(v.b64, 'base64'));
+  for (const k of ['first', 'mid', 'last']) writeFileSync(`${OUT}/timelapse-${k}.png`, Buffer.from(v[k].split(',')[1], 'base64'));
+  assert(v.w === r.width && v.h === r.height, `the video is ${v.w}×${v.h}`);
+  assert(v.duration >= 3 && v.duration <= 12.5, `plausible duration (${v.duration} s)`);
+  near(v.duration, r.durationMs / 1000, 0.1, 'the container duration matches the frames');
+  assert(v.diff > 2, `the ink grows: first and last frames differ (mean |Δ| ${v.diff.toFixed(2)})`);
 });
 
 await scenario('first-run-seed', async ({ page, cdp }) => {
