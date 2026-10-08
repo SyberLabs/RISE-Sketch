@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// NOTE: public/og.png and the icons now carry the RISE crystal mark; running this overwrites them.
 // Renders the link-preview image and the app icons with the real engine:
 //   public/og.png (1200×630), public/icons/icon-{192,512}.png, icon-maskable-512.png,
 //   public/apple-touch-icon.png.
