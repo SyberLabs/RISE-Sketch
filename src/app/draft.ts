@@ -29,7 +29,7 @@ import type {
 import type { Halo, LiveCopy } from '../render/types';
 import { PL, S } from '../core/types';
 import { createInkCook, type InkIncrementalCook } from '../ink/cook';
-import { createRise, LIFT_GUARD_MS, type Rise, type RiseInput } from '../ink/rise';
+import { createRise, LIFT_GUARD_MS, type Rise, type RiseInput, type RiseOut } from '../ink/rise';
 import { closureRadius, closureTest } from '../ink/envelope';
 import { nibWidth } from '../ink/nibs';
 import { CURRENT_V, FORMS } from '../ink/operators/registry';
@@ -227,6 +227,16 @@ export class Drafts {
 
   // ---------------------------------------------------------------- per rAF
 
+  /** Step Rise at stroke time `t` from the cook's tip (`this.inp`); the cook regrows what changed. */
+  private stepRise(L: Live, t: number, ceil: (s: number) => number): RiseOut {
+    const tip = L.cook.tip(t), inp = this.inp;
+    inp.x = tip.x; inp.y = tip.y; inp.s = tip.s; inp.p = tip.p; inp.now = t; inp.travel = tip.travel;
+    const out = L.rise.step(inp, L.d.pools, L.d.form.base, ceil);
+    L.riseT = t;
+    if (out.changed) L.cook.regrow(out.changed.s0, out.changed.s1);
+    return out;
+  }
+
   /** Frame participant: batch-append the frame's rows, step Rise, closure, auto-split. */
   frame(now: number): boolean {
     const L = this.cur;
@@ -239,23 +249,15 @@ export class Drafts {
       changed = true;
     }
     if (L.tUp !== L.tUp) {
-      const tNow = Math.max(now - L.t0, 0);
-      const tip = L.cook.tip(tNow);
-      const inp = this.inp;
-      inp.x = tip.x; inp.y = tip.y; inp.s = tip.s; inp.p = tip.p; inp.now = tNow; inp.travel = tip.travel;
-      const out = L.rise.step(inp, L.d.pools, L.d.form.base, this.ceil);
-      L.riseT = tNow;
-      if (out.changed) {
-        L.cook.regrow(out.changed.s0, out.changed.s1);
-        changed = true;
-      }
+      const out = this.stepRise(L, Math.max(now - L.t0, 0), this.ceil);
+      if (out.changed) changed = true;
       if (out.phase === 'moving') {
         if (L.haloOn) { live.halo(null); L.haloOn = false; this.announceRise(L); }
       } else if (out.hold) {
         const h = this.halo, z = L.z;
         const at = this.view.toScreenInto(L.d.origin[0] + out.hold.x / z, L.d.origin[1] + out.hold.y / z, this.haloAt);
         const k = this.view.cam.scale / z;
-        const w = nibWidth(L.d.stroke.nib, L.d.stroke.size, tip.p, 0, L.device);
+        const w = nibWidth(L.d.stroke.nib, L.d.stroke.size, this.inp.p, 0, L.device);
         const ceiling = L.cook.ceiling(out.hold.s);
         h.x = at[0]; h.y = at[1];
         h.rCss = (w * 0.5 + 6) * k;
@@ -318,10 +320,7 @@ export class Drafts {
     // long task, a GPU stall), step it there once, so a hold the input shows is not lost to frame timing
     const tg = tUp - LIFT_GUARD_MS;
     if (tg > L.riseT) {
-      const tip = L.cook.tip(tg), inp = this.inp;
-      inp.x = tip.x; inp.y = tip.y; inp.s = tip.s; inp.p = tip.p; inp.now = tg; inp.travel = tip.travel;
-      const out = L.rise.step(inp, d.pools, d.form.base, s => L.cook.ceiling(s)); // this.cur is already null
-      if (out.changed) L.cook.regrow(out.changed.s0, out.changed.s1);
+      const out = this.stepRise(L, tg, s => L.cook.ceiling(s)); // this.cur is already null
       if (out.hold && out.level > L.maxLevel) L.maxLevel = out.level;
     }
     // the final pointer-up row: the last row again at the lift time, so a dwell before lift
