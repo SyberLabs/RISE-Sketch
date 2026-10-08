@@ -225,6 +225,25 @@ describe('rise: lift guard', () => {
     expect(rise.rose).toBe(false);
   });
 
+  it('a stalled frame loop does not change the result: pools are dated by the hold, not by frames', () => {
+    // dense frames vs a 1.1 s frame stall that ends 30 ms before lift (the pool onset at 608 ms, 600 after the still window opens at 8,
+    // is first seen at 1470 ms, inside the guard window)
+    const still = () => ({ x: 1, s: 20, travel: 20, p: 0.9 });
+    const dense = createRise('mouse', DEFAULT_CALIB.mouse), pd = pools();
+    run(dense, pd, 0, 1500, still, { dt: 16 });
+    dense.liftGuard(pd, 1500);
+    const sparse = createRise('mouse', DEFAULT_CALIB.mouse), ps = pools();
+    run(sparse, ps, 0, 368, still, { dt: 16 });
+    run(sparse, ps, 1470, 1470, still);
+    sparse.liftGuard(ps, 1500);
+    expect(pd.n).toBe(1);
+    expect(ps.n).toBe(1);
+    expect(Math.abs(A(ps) - poolRate(0.9) * (1440 - 608) / 1000)).toBeLessThanOrEqual(1 / 32 + 1e-6);
+    expect(Math.abs(A(ps) - A(pd))).toBeLessThanOrEqual(1 / 16 + 1e-6);
+    expect(ps.data[PL.T0]).toBe(pd.data[PL.T0]); // the onset, not the late frame
+    expect(sparse.rose).toBe(true);
+  });
+
   it('thresholds table', () => {
     expect(HOLD.pen).toEqual({ still: 1.5, move: 3, pre: 250, pool: 450, gate: true });
     expect(HOLD.mouse).toEqual({ still: 1.0, move: 3, pre: 350, pool: 600, gate: false });
