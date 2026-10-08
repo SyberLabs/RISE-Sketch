@@ -254,13 +254,16 @@ await scenario('ripple', async ({ page, cdp }) => {
   assert(s && s.form === 'ripple', `stroke form ripple, got ${s && s.form}`);
   assert(s.nPts > 200, `ripple produced rings (${s.nPts} pts)`);
   assert(s.gens >= 3, `ripple grew several rings (gens=${s.gens})`);
-  await penStroke(cdp, line(250, 520, 1050, 520, 60));
-  await idle(page);
-  const plain = await last(page);
-  await penStroke(cdp, line(250, 640, 1050, 640, 60), { hold: 1400 });
+  // the bloom is a few dozen points, under the jitter between two separate strokes, so compare
+  // the held stroke with itself after the first undo peels its pool
+  await penStroke(cdp, line(250, 580, 1050, 580, 60), { hold: 1400 });
   await idle(page);
   const held = await last(page);
-  assert(held.nPts > plain.nPts, `holding blooms more rings (${plain.nPts} → ${held.nPts} pts)`);
+  await dispatch(page, { k: 'undo' });
+  await idle(page);
+  const peeled = await last(page);
+  assert(held.pools >= 1 && peeled.id === held.id && peeled.pools === 0, `undo peels the hold's pool (pools ${held.pools} → ${peeled.pools})`);
+  assert(held.nPts > peeled.nPts, `holding blooms more rings (${peeled.nPts} → ${held.nPts} pts)`);
   await penStroke(cdp, [[640, 720, 0.6], [640.5, 720.3, 0.7], [640.8, 720.4, 0.7]]);
   await idle(page);
   s = await last(page);
