@@ -1,9 +1,10 @@
 /**
- * Hints and pulses (DESIGN §3.0, §4): at most four, ever, each shown once.
+ * Hints and pulses (DESIGN §3.0, §4): at most five, ever, each shown once.
  *  1. "Draw anything. It grows." at 35 % opacity with the first-run seed; fades at the first contact.
  *  2. "Hold still to make it rise." near the end of stroke 5 if nothing has risen.
  *  3. "Try another Form" with one pulse of the Form chip, 1.2 s after the first stroke.
  *  4. A navigation hint on the first off-screen stroke or after 10 strokes.
+ *  5. A share hint at the first pause once the drawing has 6 strokes (app/hints.ts).
  * Hints are feedback, never controls (pointer-events: none). Except the first, each dismisses
  * itself after 4 s (`hintDone`); the app also hides them when the action is done (`hintHide`).
  * Hint state in AppState is honoured too: 'showing' without an event shows the default text.
@@ -24,6 +25,8 @@ export function defaultHintText(id: HintId, s: Pick<AppState, 'isTouch' | 'penMo
     case 'nav':
       if (s.isTouch) return s.penMode ? 'One finger pans · two fingers zoom.' : 'Two fingers pan and zoom.';
       return 'Space-drag to move · wheel or pinch to zoom.';
+    // Share timelapse (DESIGN §8): the menu shows ⇧P on every platform; touch has no keys.
+    case 'share': return s.isTouch ? 'Share it: Menu → Share timelapse' : 'Share it: ⇧P makes a video of it growing';
   }
 }
 
@@ -120,7 +123,7 @@ export function createHints(ctx: UICtx, chipEl: (t: 'form' | 'stroke' | 'color')
       // Re-read the hint states when they change, and when the chrome comes back (a hint marked
       // 'showing' during a contact waits for it).
       if (prev && prev.hints === s.hints && !(prev.chromeHidden && !s.chromeHidden)) return;
-      for (const id of ['draw', 'rise', 'form', 'nav'] as const) {
+      for (const id of ['draw', 'rise', 'form', 'nav', 'share'] as const) {
         const st = s.hints[id];
         const h = els.get(id);
         if (st === 'showing' && !(h && h.shown) && !spent.has(id) && !s.chromeHidden) show(id, null, null);

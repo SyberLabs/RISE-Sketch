@@ -325,10 +325,10 @@ export class Controller implements InputSink {
       case 'openRecent': if (!this.busy) void this.library.openRecent(i.id); break;
       case 'deleteRecent': void this.library.deleteRecent(i.id); break;
       case 'save': this.library.save(); break;
-      case 'copyRemix': this.library.copyRemix(); break;
+      case 'copyRemix': this.hints.shared(); this.library.copyRemix(); break;
       case 'exportPng': void this.exportPng(true); break;
       case 'cancelExport': this.exportCancel = true; break;
-      case 'timelapse': void this.shareTimelapse(true); break;
+      case 'timelapse': this.hints.shared(); void this.shareTimelapse(true); break;
       case 'cancelTimelapse': this.timelapseCancel = true; break;
       case 'shareTimelapse': void this.shareFile(); break;
       case 'replay': if (!this.busy && !st.replaying) void this.player.start(); break;

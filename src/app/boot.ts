@@ -52,7 +52,7 @@ export interface App {
   busy(): boolean;
 }
 
-const HINT_IDS: readonly HintId[] = ['draw', 'rise', 'form', 'nav'];
+const HINT_IDS: readonly HintId[] = ['draw', 'rise', 'form', 'nav', 'share'];
 
 async function loadLatest(store: DocStore | null): Promise<{ meta: Doc['meta']; strokes: import('../core/types').StrokeRecipe[] } | null> {
   if (!store) return null;
