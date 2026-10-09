@@ -58,11 +58,11 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
   const restore = dialog.querySelector<HTMLButtonElement>('[data-restore]')!;
   const download = dialog.querySelector<HTMLButtonElement>('[data-download]')!;
   let closed = false, busy = false;
-  let pending: { name: string; payload: DrawingPayload; requestId: string } | null = null;
+  let pending: { name: string; payload: DrawingPayload; requestId: string; expectedUserId: string } | null = null;
   const controls = () => { save.disabled = busy || !name.value.trim(); restore.disabled = busy || !list.value || !confirm.checked; download.disabled = busy; name.disabled = busy; list.disabled = busy; confirm.disabled = busy; };
   const sameAccount = async () => { if ((await getAccount()).id !== account.id) throw new AccountError('Your account changed. Close this panel and reopen it before saving or restoring.', 401); };
   const loadList = async () => {
-    const rows = await listDrawings(); if (closed) return;
+    const rows = await listDrawings(account.id); if (closed) return;
     list.replaceChildren();
     for (const row of rows) { const option = document.createElement('option'); option.value = row.id; option.textContent = `${row.name} · ${new Date(row.createdAt).toLocaleDateString()}`; list.append(option); }
     if (!rows.length) list.append(Object.assign(document.createElement('option'), { value: '', textContent: 'No account backups yet' }));
@@ -77,14 +77,14 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
   name.addEventListener('input', () => { pending = null; controls(); }); list.addEventListener('change', () => { confirm.checked = false; controls(); }); confirm.addEventListener('change', controls);
   save.addEventListener('click', () => void run(async () => {
     await sameAccount(); if (closed) return;
-    pending ??= { name: name.value.trim(), payload: drawingPayload(app.rt.doc.meta, app.rt.doc.ordered()), requestId: crypto.randomUUID() };
-    await saveDrawing(pending.name, pending.payload, pending.requestId); pending = null;
+    pending ??= { name: name.value.trim(), payload: drawingPayload(app.rt.doc.meta, app.rt.doc.ordered()), requestId: crypto.randomUUID(), expectedUserId: account.id };
+    await saveDrawing(pending.name, pending.payload, pending.requestId, pending.expectedUserId); pending = null;
     await loadList(); if (!closed) status.textContent = 'Private drawing backup saved to your account.';
   }));
   download.addEventListener('click', () => downloadCurrent());
   restore.addEventListener('click', () => void run(async () => {
     await sameAccount(); if (closed) return;
-    const parsed = await loadDrawing(list.value);
+    const parsed = await loadDrawing(list.value, account.id);
     if (closed) return;
     // Validate first, persist the existing drawing, then use the app's ordinary file-open boundary.
     await app.rt.autosave.flush();

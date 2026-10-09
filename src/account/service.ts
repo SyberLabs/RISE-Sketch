@@ -10,14 +10,20 @@ export interface DrawingPayload { schema: 'sketch.account-document.v1'; document
 export class AccountError extends Error { constructor(message: string, public readonly status = 0) { super(message); } }
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-export async function accountRequest(path: string, body?: unknown, fetcher: typeof fetch = fetch): Promise<Record<string, unknown>> {
+export async function accountRequest(path: string, body?: unknown, fetcher: typeof fetch = fetch, expectedUserId?: string): Promise<Record<string, unknown>> {
   let response: Response;
   try { response = await fetcher(`${ACCOUNT_ORIGIN}/admin/api/v1/${path}`, {
-    credentials: 'include', cache: 'no-store', ...(body === undefined ? {} : {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1' }, body: JSON.stringify(body),
+    credentials: 'include', cache: 'no-store',
+    ...(expectedUserId ? { headers: { 'X-SyberLabs-Expected-User': expectedUserId } } : {}),
+    ...(body === undefined ? {} : {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1', 'X-SyberLabs-Expected-User': expectedUserId || '' }, body: JSON.stringify(body),
     }),
   }); } catch { throw new AccountError('Account storage is unreachable. Your browser drawing is unchanged.'); }
   if (!response.ok) {
+    let code = '';
+    try { const error = await response.json(); if (record(error) && typeof error.error === 'string') code = error.error; } catch { /* status still explains unreadable failures */ }
+    if (code === 'account_changed') throw new AccountError('Your account changed. Close this panel and reopen it before saving or restoring. Your browser drawing is unchanged.', 409);
+    if (code === 'expected_user_required') throw new AccountError('Account backup controls need an update. Reload this page; your browser drawing is unchanged.', 400);
     const errors: Record<number, string> = {
       401: 'Sign in again to use your account.', 403: 'Account access is unavailable from this address.',
       404: 'This backup is unavailable.', 409: 'Your account may be full. Download your drawing or visit Saved things in the portal.',
@@ -35,8 +41,8 @@ export async function getAccount(fetcher?: typeof fetch): Promise<Account> {
   if (!record(user) || typeof user.id !== 'string' || typeof user.label !== 'string') throw new AccountError('Account returned an invalid profile.');
   return { id: user.id, label: user.label };
 }
-export async function listDrawings(fetcher?: typeof fetch): Promise<SavedDrawing[]> {
-  const { saves } = await accountRequest('saves?app=sketch', undefined, fetcher);
+export async function listDrawings(expectedUserId: string, fetcher?: typeof fetch): Promise<SavedDrawing[]> {
+  const { saves } = await accountRequest('saves?app=sketch', undefined, fetcher, expectedUserId);
   if (!Array.isArray(saves) || saves.some(s => !record(s) || s.app !== 'sketch' || typeof s.id !== 'string' || typeof s.name !== 'string' || !Number.isFinite(s.createdAt) || !Number.isFinite(s.bytes))) throw new AccountError('Account returned an invalid backup list.');
   return saves as SavedDrawing[];
 }
@@ -49,12 +55,12 @@ export function parseDrawingPayload(payload: unknown): ReturnType<typeof parseDo
   try { return parseDoc(JSON.stringify(payload.document)); }
   catch { throw new AccountError('This drawing failed validation. Your browser drawing is unchanged.'); }
 }
-export function saveDrawing(name: string, payload: DrawingPayload, requestId: string, fetcher?: typeof fetch) {
+export function saveDrawing(name: string, payload: DrawingPayload, requestId: string, expectedUserId: string, fetcher?: typeof fetch) {
   if (new TextEncoder().encode(JSON.stringify(payload)).length > 1024 * 1024) throw new AccountError('This drawing is too large for an account backup. Download it instead.', 413);
-  return accountRequest('saves', { app: 'sketch', name, payload, requestId }, fetcher);
+  return accountRequest('saves', { app: 'sketch', name, payload, requestId }, fetcher, expectedUserId);
 }
-export async function loadDrawing(id: string, fetcher?: typeof fetch) {
-  const { save } = await accountRequest(`saves/${encodeURIComponent(id)}`, undefined, fetcher);
+export async function loadDrawing(id: string, expectedUserId: string, fetcher?: typeof fetch) {
+  const { save } = await accountRequest(`saves/${encodeURIComponent(id)}`, undefined, fetcher, expectedUserId);
   if (!record(save) || save.app !== 'sketch' || save.id !== id) throw new AccountError('This backup is not the requested Sketch drawing.');
   return parseDrawingPayload(save.payload);
 }

@@ -14,10 +14,10 @@ describe('Sketch private account protocol', () => {
   it('uploads only serialized art on explicit save, with mutation header and caller retry id', async () => {
     const fetcher = mock({ version: 1, save: { id: 'saved' } });
     const payload = drawingPayload(meta(), []);
-    await saveDrawing('Private art', payload, 'same-retry-id', fetcher);
-    await saveDrawing('Private art', payload, 'same-retry-id', fetcher);
+    await saveDrawing('Private art', payload, 'same-retry-id', 'owner-a', fetcher);
+    await saveDrawing('Private art', payload, 'same-retry-id', 'owner-a', fetcher);
     const [, options] = fetcher.mock.calls[0];
-    expect(options?.headers).toEqual({ 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1' });
+    expect(options?.headers).toEqual({ 'Content-Type': 'application/json', 'X-SyberLabs-Account': 'v1', 'X-SyberLabs-Expected-User': 'owner-a' });
     expect(options?.credentials).toBe('include');
     expect(options?.body).toBe(fetcher.mock.calls[1][1]?.body);
     const body = JSON.parse(String(options?.body));
@@ -28,25 +28,44 @@ describe('Sketch private account protocol', () => {
   });
   it('bounds uploaded payload bytes before making a network request', () => {
     const fetcher = mock({ version: 1 });
-    expect(() => saveDrawing('Huge', { schema: 'sketch.account-document.v1', document: { text: '🔥'.repeat(300000) } }, 'id', fetcher)).toThrow('too large');
+    expect(() => saveDrawing('Huge', { schema: 'sketch.account-document.v1', document: { text: '🔥'.repeat(300000) } }, 'id', 'owner-a', fetcher)).toThrow('too large');
     expect(fetcher).not.toHaveBeenCalled();
   });
   it('validates version, profile, backup metadata and unavailable account responses', async () => {
     await expect(getAccount(mock({ version: 2, user: {} }))).rejects.toThrow('unsupported');
     await expect(getAccount(mock({ version: 1, user: { id: [] } }))).rejects.toThrow('invalid profile');
     await expect(getAccount(mock({}, 401))).rejects.toMatchObject({ status: 401 });
-    await expect(listDrawings(mock({ version: 1, saves: [null] }))).rejects.toThrow('invalid backup');
-    await expect(listDrawings(mock({ version: 1, saves: [{ id: 'a', app: 'omni', name: 'foreign', createdAt: 1, bytes: 1 }] }))).rejects.toThrow('invalid backup');
+    await expect(listDrawings('owner-a', mock({ version: 1, saves: [null] }))).rejects.toThrow('invalid backup');
+    await expect(listDrawings('owner-a', mock({ version: 1, saves: [{ id: 'a', app: 'omni', name: 'foreign', createdAt: 1, bytes: 1 }] }))).rejects.toThrow('invalid backup');
     await expect(getAccount(vi.fn<typeof fetch>().mockRejectedValue(new Error('offline')))).rejects.toThrow('browser drawing is unchanged');
   });
   it('parses downloaded art before restore; refuses foreign/malformed snapshots and mismatched ids', async () => {
     const payload = drawingPayload(meta(), []);
-    const loaded = await loadDrawing('saved', mock({ version: 1, save: { id: 'saved', app: 'sketch', payload } }));
+    const loaded = await loadDrawing('saved', 'owner-a', mock({ version: 1, save: { id: 'saved', app: 'sketch', payload } }));
     expect(loaded.meta.title).toBe(meta().title);
     for (const save of [{ id: 'saved', app: 'rise', payload }, { id: 'foreign', app: 'sketch', payload }, { id: 'saved', app: 'sketch', payload: { ...payload, document: {} } }]) {
-      await expect(loadDrawing('saved', mock({ version: 1, save }))).rejects.toThrow();
+      await expect(loadDrawing('saved', 'owner-a', mock({ version: 1, save }))).rejects.toThrow();
     }
     for (const bad of [null, { schema: 'foreign' }, { ...payload, document: { format: 'rise', strokes: ['bad'] } }]) expect(() => parseDrawingPayload(bad)).toThrow();
-    await expect(loadDrawing('other-owner-id', mock({}, 404))).rejects.toMatchObject({ status: 404 });
+    await expect(loadDrawing('other-owner-id', 'owner-a', mock({}, 404))).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+
+describe('captured account ownership', () => {
+  it('pins the captured owner on list and detail reads instead of a refreshed profile', async () => {
+    const list = mock({ version: 1, saves: [] });
+    await listDrawings('owner-a', list);
+    expect(list.mock.calls[0][1]?.headers).toEqual({ 'X-SyberLabs-Expected-User': 'owner-a' });
+    const detail = mock({ version: 1, save: { id: 'saved', app: 'sketch', payload: drawingPayload(meta(), []) } });
+    await loadDrawing('saved', 'owner-a', detail);
+    expect(detail.mock.calls[0][1]?.headers).toEqual({ 'X-SyberLabs-Expected-User': 'owner-a' });
+  });
+  it('refuses changed-owner retries without replacing the UUID or sending the backup again', async () => {
+    const fetcher = mock({ version: 1, error: 'account_changed' }, 409);
+    await expect(saveDrawing('A canvas', drawingPayload(meta(), []), 'retry-a', 'owner-a', fetcher)).rejects.toThrow('account changed');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({ 'X-SyberLabs-Expected-User': 'owner-a' });
+    await expect(listDrawings('owner-a', mock({ version: 1, error: 'expected_user_required' }, 400))).rejects.toThrow('need an update');
   });
 });

@@ -188,4 +188,6 @@ The upper-right **Sign in** entrance connects to an existing SyberLabs account. 
 
 Choose a saved drawing, confirm **Open selected backup in this browser**, and select **Restore drawing** to open it as a new document. The `.rise` parser validates the backup before the canvas changes. The existing drawing is flushed to browser storage and downloaded first, then remains available in Recent. If account storage or browser autosave is unavailable, the current drawing stays in place. **Download drawing** also works as a manual backup, and the account portal lists private saved things.
 
+Backup reads and writes send the account ID captured when the panel opened as `X-SyberLabs-Expected-User`. If another tab changes accounts during a request, the producer refuses it; a pending retry retains its original owner and UUID. Close and reopen the panel to begin a separate save under the new account.
+
 Producer contract: SyberLabs MasterMind `docs/contracts/account-saves-v1.md`. Browser conformance uses a fixture account service, real document serialization/parser and IndexedDB autosave: build debug mode, then run `node scripts/account-e2e.mjs`. This does not establish external-user validation.

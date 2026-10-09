@@ -19,12 +19,21 @@ try {
   env = await launch({ url: 'about:blank', width: 375, height: 812, touch: true });
   const { page, cdp } = env;
   await cdp.send('Page.setDownloadBehavior', { behavior: 'deny' });
-  let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false;
+  let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false, race = false;
+  const attemptedPosts = [];
   await page.setRequestInterception(true);
   page.on('request', req => {
     if (!req.url().startsWith('https://syberlabs.io/admin/api/v1/')) { void req.continue(); return; }
-    const headers = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type,X-SyberLabs-Account', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
+    const headers = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type,X-SyberLabs-Account,X-SyberLabs-Expected-User', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
     if (req.method() === 'OPTIONS') { void req.respond({ status: 204, headers }); return; }
+    if (req.url().includes('/saves')) {
+      const owner = req.headers()['x-syberlabs-expected-user'];
+      if (req.method() === 'POST') attemptedPosts.push({ owner, body: JSON.parse(req.postData()) });
+      if (owner !== user.id || race) {
+        void req.respond({ status: owner ? 409 : 400, headers, contentType: 'application/json', body: JSON.stringify({ version: 1, error: owner ? 'account_changed' : 'expected_user_required' }) });
+        return;
+      }
+    }
     const save = { id: 'saved-one', app: 'sketch', name: '<img src=x>', createdAt: 1234567, bytes: 1000 };
     let body = { user };
     if (req.method() === 'POST') { posts++; const input = JSON.parse(req.postData()); payload = input.payload; assert.equal(input.app, 'sketch'); assert.match(input.requestId, /^[a-f0-9-]{36}$/); body = { save }; }
@@ -62,10 +71,21 @@ try {
   malformed = true; await page.click('[data-confirm]'); await page.click('[data-restore]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('failed validation'));
   assert.deepEqual(await page.evaluate(() => window.__rise.serialize()), before, 'bad remote snapshot never mutates browser drawing');
+  race = true;
+  await page.click('[data-save]');
+  await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('account changed'));
+  await page.click('[data-save]');
+  await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('account changed'));
+  assert.equal(attemptedPosts.length, 3, 'one successful upload plus two explicit refused retries');
+  assert.equal(attemptedPosts[1].owner, 'test-user-one');
+  assert.deepEqual(attemptedPosts[1], attemptedPosts[2], 'race retries retain original captured owner, UUID and snapshot');
+  assert.equal(posts, 1, 'server account switch refuses upload even when profile pre-check still saw A');
   user = { id: 'other-user', label: 'Changed account' }; await page.click('[data-save]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('account changed'));
   assert.equal(posts, 1, 'stale panel cannot upload to a different account');
   mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-phone.png' });
-  assert.deepEqual(env.errors, []);
-  console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account refusal');
+  const expectedConflicts = env.errors.filter(error => error === 'console: Failed to load resource: the server responded with a status of 409 (Conflict)');
+  assert.equal(expectedConflicts.length, 2, 'only the two deliberately refused account-race retries log HTTP conflicts');
+  assert.deepEqual(env.errors.filter(error => !expectedConflicts.includes(error)), []);
+  console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account and server-race refusal');
 } finally { await env?.browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
