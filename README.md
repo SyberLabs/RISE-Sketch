@@ -127,7 +127,7 @@ reseeds it.
   button opens the share sheet; otherwise the video downloads. You can keep drawing while it
   records.
 - **Copy remix link** copies a link that carries the drawing itself. Whoever opens it gets that
-  drawing as a new document, watches it grow, and can keep drawing on it; their own drawing stays
+  drawing as a new document, watches it grow (fitted to their screen, phone or desktop), and can keep drawing on it; their own drawing stays
   in Recent. The link stores your strokes rounded finer than the eye can see, and only where the
   rounded stroke still grows the same way, so the remix looks like yours without being a bit-for-bit
   copy. The drawing rides in the part of the link after `#`, which browsers never send to a

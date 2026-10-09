@@ -145,10 +145,14 @@ export class View {
 
   // ---------------------------------------------------------------- fit / reset
 
-  /** Fit the content (6 % margin); with no ink, back to 100 % at the origin. */
-  fit(): void {
+  /**
+   * Fit the content (6 % margin); with no ink, back to 100 % at the origin. `byUser` false is the
+   * app's own glide (Replay fitting the drawing first): it is not a navigation, so it neither stops
+   * the replay that asked for it nor counts for the nav hint.
+   */
+  fit(byUser = true): void {
     const box = this.rt.scene.contentBox();
-    this.glideTo(box ? fitBox(box, this.W, this.H, 0.06) : { cx: 0, cy: 0, scale: 1, rot: 0 });
+    this.glideTo(box ? fitBox(box, this.W, this.H, 0.06) : { cx: 0, cy: 0, scale: 1, rot: 0 }, byUser);
   }
 
   /** Back to 100 % around the viewport centre. */
@@ -163,10 +167,10 @@ export class View {
     if (s.hasInk && !s.inkInView) this.fit(); else this.resetZoom();
   }
 
-  private glideTo(to: Camera): void {
+  private glideTo(to: Camera, byUser = true): void {
     if (this.rt.reduced()) { this.cam = to; this.settle(); return; }
     this.glide = { from: { ...this.cam }, to, t0: -1 };
-    if (!this.navActive && this.onNavigate) this.onNavigate();
+    if (byUser && !this.navActive && this.onNavigate) this.onNavigate();
     this.navActive = true;
     this.rt.loop.request();
   }

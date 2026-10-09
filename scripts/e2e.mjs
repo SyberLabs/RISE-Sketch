@@ -965,6 +965,61 @@ await scenario('remix-link', async ({ page, cdp }) => {
   }
 });
 
+// A remix link opened on a phone (DESIGN §8 Replay, §13): the drawing is wider than the phone, so
+// Replay fits it first. That glide used to count as the visitor navigating, which stopped the
+// replay before its first frame and left every stroke held out of the tiles: a blank canvas, for
+// good. Now the fit glides, the drawing grows, stays on screen, and the visitor is told to draw on it.
+const inkCover = page => R(page, () => {
+  const el = document.querySelector('#base');
+  const c = document.createElement('canvas');
+  c.width = el.width; c.height = el.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(el, 0, 0);
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
+  let lit = 0;
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 24) lit++;
+  return lit / (c.width * c.height);
+});
+await scenario('remix-phone', async ({ page, cdp }) => {
+  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
+  await dispatch(page, { k: 'pickForm', form: 'sprout' });
+  await dispatch(page, { k: 'symmetry', folds: 6 });
+  await penStroke(cdp, line(700, 180, 1150, 330, 50), { hold: 600 });
+  await idle(page, 15000);
+  const link = await R(page, () => window.__rise.remixUrl());
+  const fragment = link.slice(link.indexOf('#'));
+  // the visitor: a phone that has never opened Rise
+  const v = await open({ width: 390, height: 844, touch: true, firstRun: true });
+  try {
+    await v.page.goto('about:blank');
+    await v.page.goto(URL + fragment, { waitUntil: 'load' });
+    await v.page.waitForFunction(() => window.__rise && window.__rise.state().replaying, { polling: 'raf', timeout: 15000 });
+    await sleep(600);
+    assert(await R(v.page, () => window.__rise.state().replaying), 'the replay survives its own fit glide');
+    await idle(v.page, 30000);
+    assert(!(await R(v.page, () => window.__rise.state().replaying)), 'the replay finished');
+    assert(await count(v.page) === 6, `the shared drawing opens (${await count(v.page)} strokes)`);
+    const cover = await inkCover(v.page);
+    assert(cover > 0.02, `the drawing is on screen after the replay (ink on ${(cover * 100).toFixed(1)} % of the canvas)`);
+    // then the first-run hint, worded for a drawing that is already there, as a legible pill
+    const hint = () => R(v.page, () => {
+      const el = document.querySelector('.r-hint[data-hint="draw"]');
+      return { on: !!el && el.classList.contains('is-on'), bare: !!el && el.classList.contains('is-bare'), text: el ? el.textContent : '', st: window.__rise.state().hints.draw };
+    });
+    let h = await hint();
+    assert(h.on && !h.bare && h.text === 'Draw on it. It grows.', `after the replay: "Draw on it. It grows." (${JSON.stringify(h)})`);
+    await shot(v.page, 'remix-phone');
+    await tap(v.cdp, 200, 700);
+    await idle(v.page);
+    h = await hint();
+    assert(!h.on && h.st === 'done', `the first contact retires it (${JSON.stringify(h)})`);
+    const errs = v.errors.filter(e => !/favicon/.test(e));
+    assert(errs.length === 0, 'visitor console/page errors:\n  ' + errs.join('\n  '));
+  } finally {
+    await v.browser.close();
+  }
+});
+
 // ---------------------------------------------------------------------------------------------
 const failed = results.filter(r => !r.ok);
 writeFileSync(`${OUT}/results.json`, JSON.stringify(results, null, 2));

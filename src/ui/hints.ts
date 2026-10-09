@@ -1,6 +1,7 @@
 /**
  * Hints and pulses (DESIGN §3.0, §4): at most five, ever, each shown once.
  *  1. "Draw anything. It grows." at 35 % opacity with the first-run seed; fades at the first contact.
+ *     After a remix replay on first run: "Draw on it. It grows.", as a pill (there is ink under it).
  *  2. "Hold still to make it rise." near the end of stroke 5 if nothing has risen.
  *  3. "Try another Form" with one pulse of the Form chip, 1.2 s after the first stroke.
  *  4. A navigation hint on the first off-screen stroke or after 10 strokes.
@@ -74,7 +75,7 @@ export function createHints(ctx: UICtx, chipEl: (t: 'form' | 'stroke' | 'color')
       x = at.x - w / 2;
       y = at.y - 36 - hh;
       if (y < 16) y = at.y + 36;
-    } else if (id === 'draw') {
+    } else if (id === 'draw' && !ctx.state().hasInk) {
       x = vw / 2 - w / 2; y = vh * 0.56 - hh / 2;
     } else {
       x = vw / 2 - w / 2; y = Math.max(72, vh * 0.16);
@@ -102,6 +103,7 @@ export function createHints(ctx: UICtx, chipEl: (t: 'form' | 'stroke' | 'color')
     const t = text ?? defaultHintText(id, s);
     const fresh = !h.shown;
     h.el.textContent = t;
+    h.el.classList.toggle('is-bare', id === 'draw' && !s.hasInk);
     h.shown = true;
     position(id, h, at);
     h.el.classList.add('is-on');

@@ -84,6 +84,7 @@ export class Player {
   private gen = 0;
   private seedShown = false;
   private seedTimer = 0;
+  private onDone: (() => void) | null = null;
 
   constructor(private readonly rt: Runtime, private readonly view: View) {}
 
@@ -96,9 +97,11 @@ export class Player {
 
   // ---------------------------------------------------------------- replay
 
-  async start(): Promise<void> {
+  /** Start a replay; `onDone` runs if it plays to its end (not when input stops it). */
+  async start(onDone?: () => void): Promise<void> {
     const rt = this.rt;
     if (this.playing) return;
+    this.onDone = onDone ?? null;
     const rs = rt.doc.ordered();
     if (!rs.length) return;
     const gen = ++this.gen;
@@ -111,7 +114,7 @@ export class Player {
     const tl = timeline(items.map(it => it.r));
     this.items = items; this.starts = tl.starts; this.total = tl.total; this.k = tl.k;
     this.next = 0; this.t0 = -1;
-    if (!this.view.contentVisible()) this.view.fit();
+    if (!this.view.contentVisible()) this.view.fit(false);
     rt.renderer.reset(rt.reduced() ? 'none' : 'fade');
     rt.renderer.hold(items.map(it => it.r.id));
     this.remove = rt.loop.add(now => this.frame(now), 7);
@@ -132,7 +135,12 @@ export class Player {
     }
     const progress = this.total > 0 ? Math.min(1, elapsed / this.total) : 1;
     rt.store.set({ replayProgress: progress });
-    if (this.next >= n && elapsed >= this.total && rt.renderer.live.animating === 0) { this.finish(); return false; }
+    if (this.next >= n && elapsed >= this.total && rt.renderer.live.animating === 0) {
+      const done = this.onDone;
+      this.finish();
+      done?.();
+      return false;
+    }
     return true;
   }
 
@@ -152,6 +160,7 @@ export class Player {
     if (this.remove) { this.remove(); this.remove = null; }
     this.items = [];
     this.next = 0;
+    this.onDone = null;
     this.rt.store.set({ replaying: false, replayProgress: 0 });
   }
 

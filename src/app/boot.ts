@@ -97,7 +97,8 @@ export async function boot(o: BootOptions): Promise<App> {
   const doneHints = prefs.get<string[]>('hints', []);
   const hints = {} as Record<HintId, 'pending' | 'showing' | 'done'>;
   for (const h of HINT_IDS) hints[h] = doneHints.includes(h) ? 'done' : 'pending';
-  if (hints.draw === 'pending') hints.draw = firstRun ? 'showing' : 'done';
+  // first run: the hint shows with the seed; arriving on a remix link it waits for the replay to end
+  if (hints.draw === 'pending') hints.draw = !firstRun ? 'done' : remixPayload(location.hash) ? 'pending' : 'showing';
   const ordered = doc.ordered();
   const initial: AppState = {
     tool: loadTool(),
