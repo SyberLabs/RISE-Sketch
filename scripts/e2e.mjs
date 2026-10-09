@@ -38,17 +38,17 @@ const COST = {
   hints: 24000, 'lasso-restyle-bend': 24000, 'erase-sweep': 23000, symmetry: 23000, 'rise-hold-mouse': 22000,
   'first-run-seed': 21000, 'prod-file': 20000, documents: 20000, 'rise-file-roundtrip': 20000, 'reload-persist': 19000,
   'select-restyle-delete': 18000, 'touch-pinch': 16000, closure: 14000, 'boot-budget': 14000, navigate: 13000,
-  'export-png': 13000, 'png-project': 35000, 'rise-hold-pen': 12000, 'sample-alt-click': 11000, 'radial-seeds': 11000, 'phone-layout': 4000,
+  'export-png': 13000, 'png-project': 35000, 'rise-hold-pen': 12000, 'sample-alt-click': 11000, 'radial-seeds': 11000, 'phone-layout': 4000, counters: 15000,
 };
 const UNTIMED = 10000;
 /** The scenario names of shard `spec` ("i/n", 1-based): every `scenario('name'` in this file plus
- * prod-file, dealt longest first to the least-loaded shard, so the split is deterministic and
+ * prod-file and counters (which run outside `scenario`), dealt longest first to the least-loaded shard, so the split is deterministic and
  * covers each scenario exactly once. */
 function shardOf(spec) {
   const [i, n] = spec.split('/').map(Number);
   if (!(n >= 1 && i >= 1 && i <= n)) { console.error(`--shard ${spec}: want i/n with 1 <= i <= n`); process.exit(2); }
   const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-  const names = ['prod-file', ...[...src.matchAll(/^await scenario\('([^']+)'/gm)].map(m => m[1])];
+  const names = ['prod-file', 'counters', ...[...src.matchAll(/^await scenario\('([^']+)'/gm)].map(m => m[1])];
   const cost = name => COST[name] ?? UNTIMED;
   names.sort((a, b) => cost(b) - cost(a) || (a < b ? -1 : 1));
   const load = Array(n).fill(0), out = Array.from({ length: n }, () => []);
