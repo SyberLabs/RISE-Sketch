@@ -37,6 +37,13 @@ try {
   assert.equal(posts, 0, 'boot never uploads');
   const box = await page.$eval('.sketch-account-entry', e => { const r = e.getBoundingClientRect(); return { right: r.right, left: r.left, top: r.top, height: r.height }; });
   assert(box.left > 250 && box.right <= 375 && box.top < 30 && box.height >= 44, 'phone upper-right control');
+  for (const sheet of ['menu', 'help', 'color']) {
+    await page.evaluate(sheet => window.__rise.dispatch({ k: 'openSheet', sheet }), sheet);
+    await page.waitForFunction(() => document.querySelector('.sketch-account-entry').hidden);
+    assert.equal(await page.$eval('.sketch-account-entry', e => getComputedStyle(e).display), 'none', 'modal sheet owns account control hit testing');
+    await page.evaluate(() => window.__rise.dispatch({ k: 'openSheet', sheet: null }));
+    await page.waitForFunction(() => !document.querySelector('.sketch-account-entry').hidden);
+  }
   await penStroke(cdp, line(75, 250, 270, 320, 8));
   await page.click('.sketch-account-entry');
   await page.waitForFunction(() => document.querySelector('[data-save]')?.disabled === false);
@@ -58,5 +65,5 @@ try {
   assert.equal(posts, 1, 'stale panel cannot upload to a different account');
   mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-phone.png' });
   assert.deepEqual(env.errors, []);
-  console.log('PASS account phone placement, explicit save, validated restore, unchanged malformed restore, switched-account refusal');
+  console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account refusal');
 } finally { await env?.browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -15,3 +15,5 @@
 .sketch-account-panel a { color:#93e6ee; }
 .sketch-account-confirm { display:flex!important; align-items:center; gap:8px; }
 .sketch-account-panel [data-status] { color:#b9f1e7; }
+
+.sketch-account-entry[hidden] { display: none; }

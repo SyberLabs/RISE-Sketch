@@ -12,6 +12,11 @@ export function mountAccountPortal(app: App): void {
   entrance.className = 'sketch-account-entry'; entrance.href = SIGN_IN_URL; entrance.textContent = 'Sign in';
   entrance.setAttribute('aria-label', 'Sign in to SyberLabs');
   document.body.append(entrance);
+  // Existing modal sheets own focus and hit testing while open.
+  const backdrop = app.chrome.querySelector<HTMLElement>('.r-backdrop');
+  const syncModal = () => { entrance.hidden = Boolean(backdrop && !backdrop.hidden && backdrop.dataset.modal === 'true'); entrance.inert = entrance.hidden; };
+  if (backdrop) new MutationObserver(syncModal).observe(backdrop, { attributes: true, attributeFilter: ['hidden', 'data-modal'] });
+  syncModal();
   let account: Account | null = null, generation = 0;
   const refresh = async () => {
     const current = ++generation;
