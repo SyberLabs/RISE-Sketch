@@ -8,7 +8,7 @@ import { fnv1a } from '../src/core/det';
 import { nibWidth } from '../src/ink/nibs';
 import { cook } from '../src/ink/cook';
 import {
-  SMUDGE_LEVELS, TOOTH_LEVELS, TOOTH_N, ToothPass, toothCell, toothFor, toothLevel, toothLut, toothMaps, toothSmudge, toothSolid,
+  SMUDGE_LEVELS, TOOTH_LEVELS, TOOTH_N, toothCell, toothDensity, toothFor, toothInk, toothLevel, toothMaps, toothProfile, toothSmudge, toothSolid,
 } from '../src/ink/tooth';
 import { Hand, recipe } from './ink-instrument.fixtures';
 
@@ -43,7 +43,7 @@ describe('tooth heightmap', () => {
 });
 
 describe('coverage', () => {
-  it('heavier pressure fills more of the tooth, in both passes and at every smudge', () => {
+  it('heavier pressure fills more of the tooth, at every smudge', () => {
     for (let s = 0; s < SMUDGE_LEVELS; s++) {
       let prev = -1;
       for (let l = 0; l < TOOTH_LEVELS; l++) {
@@ -52,17 +52,25 @@ describe('coverage', () => {
         prev = v;
       }
     }
-    // the lightest touch catches only the peaks, the heaviest nearly fills the paper
+    // the lightest touch leaves most of the paper showing, the heaviest covers more than half
     expect(toothSolid(0, 0)).toBeLessThan(0.3);
-    expect(toothSolid(5, 0)).toBeGreaterThan(0.75);
+    expect(toothSolid(5, 0)).toBeGreaterThan(0.5);
+    for (let l = 1; l < TOOTH_LEVELS; l++) expect(toothDensity(l)).toBeGreaterThan(toothDensity(l - 1));
+    expect(toothDensity(TOOTH_LEVELS - 1)).toBeLessThanOrEqual(1);
   });
 
-  it('the fringe is sparser than the core, and both rise with tooth height', () => {
-    for (let l = 0; l < TOOTH_LEVELS; l++) {
-      const f = toothLut(l, 0, ToothPass.Fringe), c = toothLut(l, 0, ToothPass.Core);
-      for (let v = 1; v < 256; v++) { expect(f[v]).toBeGreaterThanOrEqual(f[v - 1]); expect(c[v]).toBeGreaterThanOrEqual(c[v - 1]); }
-      for (let v = 0; v < 256; v++) expect(f[v]).toBeLessThanOrEqual(c[v]);
-    }
+  it('the stick lays down most in the middle of the ribbon and least at its edge, with drag lanes between', () => {
+    expect(toothProfile(0)).toBeCloseTo(1, 3);
+    expect(toothProfile(0.95)).toBeLessThan(0.25);
+    expect(toothProfile(1)).toBe(0);
+    // a lane takes density away from the band it crosses: less than just outside it on both sides
+    expect(toothProfile(0.6)).toBeLessThan(toothProfile(0.75));
+    expect(toothProfile(0.6)).toBeLessThan(toothProfile(0.5));
+  });
+
+  it('one pigment at any pressure: the heaviest pressure bucket of the same depth (and hue) bucket', () => {
+    expect([0, 7, 14, 23, 29].map(toothInk)).toEqual([25, 27, 29, 28, 29]);
+    expect(toothInk(7 * 30 + 12)).toBe(7 * 30 + 27);
   });
 
   it('pressure level comes from the tone index (pBucket·5 + dBucket), Spectral hue buckets included', () => {

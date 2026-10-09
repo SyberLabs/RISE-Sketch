@@ -12,7 +12,7 @@ import { resolveInk, toneIndex } from '../ink/color';
 import { tracePoly, traceCentre, type TraceOpts } from './tessellate';
 import { Batcher, MODE_FILL, MODE_HAIR, alphaBucket, exactKey, ALPHA_LEVELS } from './batch';
 import { toothFor, toothLevel, toothSolid } from '../ink/tooth';
-import { drawToothBatch, growDevBox, type TraceBatch } from './tooth';
+import { drawTooth, growDevBox } from './tooth';
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -373,8 +373,9 @@ export function drawCooked(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, o?
     if (h === 1 || !(h >= 0)) batcher.add(i, css, kb, mode);
     else {
       const ah = ALPHA_LEVELS[kb] * h;          // relative to aMul
-      if (lighter && ah * aMul > 1) {
+      if (lighter && ah * aMul > 1 && !table.tooth) {
         // one full additive pass plus the remainder: the trail really is brighter than alpha 1
+        // (not charcoal: its coverage takes density from every batch, so a poly is in one only)
         batcher.add(i, css, aMul === 1 ? 7 : exactKey(1 / aMul), mode);
         batcher.add(i, css, exactKey(Math.min(1, ah * aMul - 1) / aMul), mode);
       } else if (ah * aMul >= MIN_ALPHA) batcher.add(i, css, exactKey(Math.min(ah, relCap)), mode);
@@ -389,22 +390,20 @@ export function drawCooked(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, o?
   ctx.globalCompositeOperation = table.op;
   const topts = TOPTS;
   topts.morphFrom = morph ? morph.from : null;
-  // charcoal batches go through the tooth (render/tooth.ts), which traces the batch itself
-  let cur = 0;
-  const traceTooth: TraceBatch | null = table.tooth
-    ? (cx, mm, ws) => { topts.widthScale = ws; return tracePlan(cx, src, cur, plan, mm, nP, false, reveal, morph, lod); }
-    : null;
+  // charcoal fills go through the tooth together (render/tooth.ts); its hairlines stay plain strokes
+  if (table.tooth) {
+    drawStats.fills += drawTooth(ctx, table, m, clip, {
+      plan, aMul, aCap,
+      box: (b, out) => batchBox(out, c, b, plan, m, morph),
+      trace: (cx, b, mm, ws) => tracePlan(cx, src, b, plan, mm, nP, false, reveal, morph, lod, ws),
+    });
+  }
   for (let b = 0; b < plan.n; b++) {
     const css = plan.css[b], hair = plan.mode[b] === MODE_HAIR;
+    if (table.tooth && !hair) continue;
     // never above 1 (Canvas2D ignores out-of-range alpha and would keep the previous batch's)
     const ga = Math.min(plan.alpha[b] * aMul, aCap);
-    if (traceTooth && !hair) {
-      batchBox(c, b, plan, m, morph);
-      cur = b;
-      drawToothBatch(ctx, table, css, m, ga, BOX, clip, traceTooth);
-      drawStats.fills++;
-      continue;
-    }
+    ctx.beginPath();
     if (!tracePlan(ctx, src, b, plan, m, nP, hair, reveal, morph, lod)) continue;
     if (hair) {
       ctx.strokeStyle = table.css[css]; ctx.lineWidth = 1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -421,14 +420,13 @@ export function drawCooked(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, o?
   topts.widthScale = undefined;
 }
 
-/** Device box of batch b's polys (into BOX). */
-const BOX: AABB = { x0: 0, y0: 0, x1: 0, y1: 0 };
 const MORPH_BOX = new Float32Array(4);
-function batchBox(c: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3, morph: DrawOpts['morph'] | null): void {
-  BOX.x0 = Infinity; BOX.y0 = Infinity; BOX.x1 = -Infinity; BOX.y1 = -Infinity;
+/** Device box of batch b's polys, including where a morphing poly starts (into out). */
+function batchBox(out: AABB, c: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3, morph: DrawOpts['morph'] | null): void {
+  out.x0 = Infinity; out.y0 = Infinity; out.x1 = -Infinity; out.y1 = -Infinity;
   for (let e = plan.first[b], end = e + plan.count[b]; e < end; e++) {
     const i = batcher.poly[plan.order[e]];
-    growDevBox(BOX, c.box, i, m);
+    growDevBox(out, c.box, i, m);
     if (!morph || !(morph.t(i) < 1)) continue;
     // The path may still be at its starting positions, outside the cooked target box.
     const st = c.start[i], endPt = st + c.count[i];
@@ -440,15 +438,18 @@ function batchBox(c: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3, morph:
       x1 = Math.max(x1, x + half); y1 = Math.max(y1, y + half);
     }
     MORPH_BOX[0] = x0; MORPH_BOX[1] = y0; MORPH_BOX[2] = x1; MORPH_BOX[3] = y1;
-    growDevBox(BOX, MORPH_BOX, 0, m);
+    growDevBox(out, MORPH_BOX, 0, m);
   }
 }
 
-/** Build batch b's path (its polys, or their centrelines for a hairline batch); false when nothing was traced. */
+/**
+ * Add batch b's polys (or their centrelines for a hairline batch) to ctx's current path, at a
+ * width scale; false when nothing was traced.
+ */
 function tracePlan(ctx: Ctx2D, src: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3, nP: number, hair: boolean,
-  reveal: ((i: number) => number) | null, morph: DrawOpts['morph'] | null, lod: boolean): boolean {
+  reveal: ((i: number) => number) | null, morph: DrawOpts['morph'] | null, lod: boolean, widthScale = 1): boolean {
   const topts = TOPTS;
-  ctx.beginPath();
+  topts.widthScale = widthScale;
   let any = false;
   for (let e = plan.first[b], end = e + plan.count[b]; e < end; e++) {
     const i = batcher.poly[plan.order[e]];

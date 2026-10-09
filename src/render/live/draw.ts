@@ -8,7 +8,7 @@ import { echoPaperExposure, paperAlphaScale } from '../../ink/operators/registry
 import { ALPHA_LEVELS, Batcher, MODE_FILL, MODE_HAIR, alphaBucket, exactKey } from '../batch';
 import { drawCooked, type DrawOpts } from '../raster';
 import { toothLevel, toothSolid } from '../../ink/tooth';
-import { drawToothBatch, growDevBox, type TraceBatch } from '../tooth';
+import { drawTooth, growDevBox } from '../tooth';
 import { traceCentre, tracePoly, type TraceOpts } from '../tessellate';
 import { HOT_CHUNK, hotEta, windowEdge, type ArcClock } from './timing';
 import { IntList, type PolyState, gf64, gi32 } from './polys';
@@ -141,7 +141,8 @@ export function drawHot(ctx: Ctx2D, c: Cooked, list: Int32Array, nList: number, 
   const sc = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
   const aMul = table.alphaMax;
   if (!(sc > 0) || !(aMul > 0) || nList === 0) return;
-  const lighter = table.op === 'lighter';
+  // the over-bright split puts a poly in two batches; charcoal takes density from every batch
+  const lighter = table.op === 'lighter' && !table.tooth;
   const { clock, now, tip, H, tau, beyond, sVis } = hv;
   hotBatcher.reset();
   rgN = 0;
@@ -192,24 +193,24 @@ export function drawHot(ctx: Ctx2D, c: Cooked, list: Int32Array, nList: number, 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = table.op;
-  // charcoal batches go through the tooth (render/tooth.ts), exactly as drawCooked draws them
-  let cur = 0;
-  const traceTooth: TraceBatch | null = table.tooth
-    ? (cx, mm, ws) => { o.widthScale = ws; return traceRanges(cx, c, plan, cur, mm, false, S, from); }
-    : null;
+  // charcoal fills go through the tooth together (render/tooth.ts), exactly as drawCooked draws them
+  if (table.tooth) {
+    drawTooth(ctx, table, m, clip, {
+      plan, aMul, aCap: 1,
+      box: (k, out) => {
+        for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) {
+          const i = rgPoly[hotBatcher.poly[plan.order[e]]];
+          growDevBox(out, from && S.mv[i] < 1 ? S.mbox : c.box, i, m);
+        }
+      },
+      trace: (cx, k, mm, ws) => traceRanges(cx, c, plan, k, mm, false, S, from, ws),
+    });
+  }
   for (let k = 0; k < plan.n; k++) {
     const ga = plan.alpha[k] * aMul, css = plan.css[k], hair = plan.mode[k] === MODE_HAIR;
-    if (traceTooth && !hair) {
-      HOT_BOX.x0 = Infinity; HOT_BOX.y0 = Infinity; HOT_BOX.x1 = -Infinity; HOT_BOX.y1 = -Infinity;
-      for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) {
-        const i = rgPoly[hotBatcher.poly[plan.order[e]]];
-        growDevBox(HOT_BOX, from && S.mv[i] < 1 ? S.mbox : c.box, i, m);
-      }
-      cur = k;
-      drawToothBatch(ctx, table, css, m, ga < 1 ? ga : 1, HOT_BOX, clip, traceTooth);
-      continue;
-    }
+    if (table.tooth && !hair) continue;
     ctx.globalAlpha = ga < 1 ? ga : 1;
+    ctx.beginPath();
     if (!traceRanges(ctx, c, plan, k, m, hair, S, from)) continue;
     if (hair) {
       ctx.strokeStyle = table.css[css];
@@ -225,12 +226,14 @@ export function drawHot(ctx: Ctx2D, c: Cooked, list: Int32Array, nList: number, 
   o.arcFrom = undefined; o.arcTo = undefined; o.reveal = undefined; o.morphFrom = null; o.morphT = undefined; o.widthScale = undefined;
 }
 
-const HOT_BOX: AABB = { x0: 0, y0: 0, x1: 0, y1: 0 };
-
-/** Build hot batch k's path: its ranges, cut and revealed as recorded (centrelines for a hairline batch). */
-function traceRanges(ctx: Ctx2D, c: Cooked, plan: Batcher['plan'], k: number, m: Mat2x3, hair: boolean, S: PolyState, from: Float32Array | null): boolean {
+/**
+ * Add hot batch k's ranges to ctx's current path, cut and revealed as recorded, at a width scale
+ * (centrelines for a hairline batch).
+ */
+function traceRanges(ctx: Ctx2D, c: Cooked, plan: Batcher['plan'], k: number, m: Mat2x3, hair: boolean, S: PolyState,
+  from: Float32Array | null, widthScale = 1): boolean {
   const o = HOPTS;
-  ctx.beginPath();
+  o.widthScale = widthScale;
   let any = false;
   for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) {
     const r = hotBatcher.poly[plan.order[e]];

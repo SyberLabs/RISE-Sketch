@@ -255,6 +255,8 @@ export interface ToothSpec {
   ox: number; oy: number;
   /** Smudge bucket 0..SMUDGE_LEVELS − 1 (ink/tooth.ts): the lean at pen-down. */
   smudge: number;
+  /** Nominal ribbon width (doc): sets how far the density field is smoothed. */
+  w: number;
 }
 
 // ============================================================================ document
