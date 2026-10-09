@@ -1365,6 +1365,7 @@ src/
     tessellate.ts             (pure) ribbon / chisel / bristle / hairline outlines; prefix + morph; Bézier edges; any PathSink
     ledger.ts  camera.ts  ground.ts  batch.ts  raster.ts  tiles.ts  compositor.ts
     bloom.ts  live.ts  overlay.ts  glyphs.ts  renderer.ts
+    live/                     the live layer behind live.ts: timing, polys, draw, items (WakeItem), stroke, play, anim, layer
     stats.ts                  render work counters (debug and bench-zoom only, §9)
   input/
     types.ts (InputSink contract)  index.ts (binds DOM events; feeds the arbiter)
