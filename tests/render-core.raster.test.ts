@@ -204,10 +204,11 @@ describe('drawCooked', () => {
 });
 
 describe('inkTableFor', () => {
-  const recipe = (color: ColorStyle, colorRev = 0): RecipeCore & { id: string; colorRev: number } => ({
+  const recipe = (color: ColorStyle, colorRev = 0): RecipeCore & { id: string; colorRev: number; samples: Float32Array } => ({
     id: 'x', colorRev, origin: [0, 0], z: 1, rot: 0, seed: 1, device: 'pen',
     calib: { lo: 0, hi: 1, gamma: 1, flat: 1, vMed: 1, jitter: 0.3, fcMin: 2 },
     stroke: { nib: 'brush', size: 9 }, color, form: { form: 'line', v: 1, base: 0 }, s0: 0, cut: 0, resume: null,
+    samples: new Float32Array(0),
   });
 
   it('caches per recipe object and ground; equal colours share a table', () => {

@@ -7,13 +7,14 @@ import { state } from './ui.helpers';
 const custom = (h: number): ColorStyle => ({ ink: 'custom', k: 0, dh: 0, dL: 0, lch: { night: [0.8, 0.12, h], paper: [0.45, 0.12, h] } });
 
 describe('tile specs', () => {
-  it('Stroke: Pen · Brush · Chisel · Erase; only the active nib tile drags', () => {
+  it('Stroke: Pen · Brush · Chisel · Charcoal · Erase; only the active nib tile drags', () => {
     const t = tileSpecs('stroke', state());
-    expect(t.map(x => x.label)).toEqual(['Pen', 'Brush', 'Chisel', 'Erase']);
+    expect(t.map(x => x.label)).toEqual(['Pen', 'Brush', 'Chisel', 'Charcoal', 'Erase']);
+    expect(t.length).toBeLessThanOrEqual(9);
     expect(t.filter(x => x.checked).map(x => x.key)).toEqual(['brush']);
     expect(t.filter(x => x.drag).map(x => x.key)).toEqual(['brush']);
     expect(t[1].aria).toBe('Brush, size 9. Drag up or down to resize.');
-    expect(t[3].intent).toEqual({ k: 'pickErase' });
+    expect(t[4].intent).toEqual({ k: 'pickErase' });
   });
   it('Stroke in erase mode: Erase is the checked tile and no nib drags', () => {
     const t = tileSpecs('stroke', state({ tool: { ...state().tool, mode: 'erase' } }));

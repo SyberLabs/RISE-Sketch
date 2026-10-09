@@ -23,6 +23,9 @@ function fixtures(): Record<string, StrokeRecipe> {
   const out: Record<string, StrokeRecipe> = {};
   const chisel = new Hand(0, 0, { jitter: 0.2, seed: 11, alt: 0.6, az: 0.4, p: 0.3, c: 0.3, cs: -0.2 });
   chisel.moveTo(80, 40, 0.5).moveTo(10, 120, 2.0, 0.1).moveTo(200, 90, 0.7, 0.9);
+  // charcoal laid on its side (alt 0.45 rad, so its width leans), light then heavy
+  const charcoal = new Hand(0, 0, { jitter: 0.2, seed: 13, alt: 0.45, az: 1.1, p: 0.2, c: 0.1, cs: 0.1 });
+  charcoal.moveTo(120, 30, 0.6, 0.3).moveTo(240, 110, 0.9, 0.95);
   // every Form at v1, plus the later versions (keyed form@v): Sprout v2, Drift v2, Ripple v2
   const variants: [FormId, number][] = [
     ...(['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit'] as FormId[]).map((f): [FormId, number] => [f, 1]),
@@ -38,6 +41,7 @@ function fixtures(): Record<string, StrokeRecipe> {
     out[`${key}/mouse-pen-nib`] = formRecipe(scribble(5, 0.3, 125).rows(1, true), { v, form, base, device: 'mouse', nib: 'pen', size: 2.5 });
     out[`${key}/touch`] = formRecipe(scribble(9, 0.8, 60).rows(1, true), { v, form, base, device: 'touch' });
     out[`${key}/chisel-z2.5`] = formRecipe(chisel.rows(2.5), { v, form, base, nib: 'chisel', size: 12, z: 2.5 });
+    out[`${key}/charcoal-tilt`] = formRecipe(charcoal.rows(), { v, form, base, nib: 'charcoal', size: 7 });
     out[`${key}/closed-loop`] = formRecipe(loopStroke(70).rows(), { v, form, base, closed: true });
     out[`${key}/tap`] = formRecipe(tapStroke(60).rows(), { v, form, base, radial: true });
     out[`${key}/bloom`] = formRecipe(tapStroke(800).rows(), { v, form, base, radial: true, pools: [0, 1.75] });

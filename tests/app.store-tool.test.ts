@@ -65,8 +65,9 @@ describe('tool', () => {
   });
 
   it('cycles nibs without Erase and inks through the sheet order', () => {
-    expect(cycleNib('chisel', 1)).toBe('pen');
-    expect(cycleNib('pen', -1)).toBe('chisel');
+    expect(cycleNib('chisel', 1)).toBe('charcoal');
+    expect(cycleNib('charcoal', 1)).toBe('pen');
+    expect(cycleNib('pen', -1)).toBe('charcoal');
     expect(cycleInk('spectral', 1)).toBe('graphite');
     expect(cycleInk('custom', 1)).toBe('graphite');
   });
@@ -78,7 +79,7 @@ describe('tool', () => {
     saveTool(t);
     const back = loadTool();
     expect([back.nib, back.form, back.sizes.chisel, back.base.drift, back.mode]).toEqual(['chisel', 'drift', 20, 4.5, 'draw']);
-    prefs.set('tool', { nib: 'charcoal', ink: 'custom', custom: null, form: 'mirage', sizes: { pen: 'x' } });
+    prefs.set('tool', { nib: 'crayon', ink: 'custom', custom: null, form: 'mirage', sizes: { pen: 'x' } });
     const bad = loadTool();
     expect([bad.nib, bad.ink, bad.form, bad.sizes.pen]).toEqual(['brush', 'moss', 'sprout', 2.5]);
     prefs.remove('tool');

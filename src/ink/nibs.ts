@@ -11,7 +11,7 @@ import { PI } from '../core/det';
 /** A nib material: default size S and its range (sp), and the taper scale. */
 export interface NibDef { id: NibId; name: string; S: number; min: number; max: number; taper: number }
 
-/** The four nib materials (charcoal is P1). */
+/** The four nib materials. */
 export const NIBS: Record<NibId, NibDef> = {
   pen: { id: 'pen', name: 'Pen', S: 2.5, min: 0.75, max: 12, taper: 0.5 },
   brush: { id: 'brush', name: 'Brush', S: 9, min: 2, max: 48, taper: 1 },
@@ -19,17 +19,23 @@ export const NIBS: Record<NibId, NibDef> = {
   charcoal: { id: 'charcoal', name: 'Charcoal', S: 7, min: 2, max: 40, taper: 0.8 },
 };
 
+const DEG = PI / 180;
+
 /** Fingertips are blunt: every nib is this much wider under a finger. */
 export const FINGER_WIDTH = 1.35;
 
 /** Chisel minimum stroke thickness as a fraction of S (the core ribbon, §6.4). */
 export const CHISEL_CORE = 0.12;
 
+/** Charcoal laid on its side: width × (1 + CHARCOAL_LEAN·tK), tK = smoothstep(60°, 25°, alt). */
+export const CHARCOAL_LEAN = 1.2;
+
 /**
  * Untapered nib width in sp (Pen/Brush/Charcoal: full width; Chisel: edge length E).
  * Unknown (NaN) pressure reads as 0.6 and unknown speed as 0, so a width is always finite.
+ * `alt` (pen altitude, radians; unknown = upright) only widens Charcoal: the side of the stick.
  */
-export function nibWidth(nib: NibId, S: number, p: number, vn: number, device: Device): number {
+export function nibWidth(nib: NibId, S: number, p: number, vn: number, device: Device, alt = PI / 2): number {
   const q = p === p ? clamp01(p) : 0.6;
   let w: number;
   switch (nib) {
@@ -39,12 +45,11 @@ export function nibWidth(nib: NibId, S: number, p: number, vn: number, device: D
       w = S * (0.14 + q * Math.sqrt(q)) * (device === 'pen' && vn === vn ? 1 - 0.25 * smoothstep(1, 3, vn) : 1);
       break;
     case 'chisel': w = S * (0.6 + 0.4 * q); break;
-    default: w = S * (0.7 + 0.5 * q); break;
+    default: w = S * (0.7 + 0.5 * q) * (alt === alt ? 1 + CHARCOAL_LEAN * smoothstep(60 * DEG, 25 * DEG, alt) : 1); break;
   }
   return device === 'touch' ? w * FINGER_WIDTH : w;
 }
 
-const DEG = PI / 180;
 const CHISEL_DEFAULT = 40 * DEG;
 
 /**

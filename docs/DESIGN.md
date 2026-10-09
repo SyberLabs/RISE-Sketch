@@ -128,7 +128,7 @@ Rise is a drawing instrument in which every mark is alive.
 | Depth model | **Base depth per Form** (tool state, bent by dragging the Form chip) **plus local pools where the user holds** | Pools are a new expressive freedom, and they keep rising local and cheap. |
 | Stationary contact | **Tap** gives a radial seed at base depth. **Hold** gives a radial seed that rises. | Holding always means rise, everywhere. |
 | Selecting | **Never with the drawing contact.** Modifier-click on desktop, a finger tap in pen mode, a double-tap on touch-only devices. | Keeps hold = rise unambiguous. |
-| Nibs | **Pen, Brush, Chisel** in P0. Charcoal is P1, together with paper tooth. | A nib's material is a kind. Charcoal needs the tooth map. |
+| Nibs | **Pen, Brush, Chisel** in P0. **Charcoal**, with the paper tooth, *since shipped* (§2.2.1, §6.4, §13 After the build #18). | A nib's material is a kind. Charcoal needs the tooth map. |
 | Inks | **Graphite, Indigo, Oxide, Ochre, Moss, Rose, Spectral**, plus custom | Designed as Night/Paper pairs that glaze correctly. Rose closes the red/magenta gap. |
 | First-run defaults | **Night, Brush, Moss, Sprout (base 2)** | The first image is glowing botany growing from the user's own stroke. |
 | Paper ground | **P0** | A drawing tool needs a light ground. It costs one ramp table and one blend mode. |
@@ -148,7 +148,7 @@ Rise is a drawing instrument in which every mark is alive.
 
 | Primitive | Definition | User chooses (tap) | User bends (drag the chip) | Ink infers |
 |---|---|---|---|---|
-| **STROKE** | How the hand becomes a mark: the nib's material and the spine it lays down. | Nib: Pen, Brush, Chisel (Charcoal in P1); Erase | Size, remembered per nib | Pressure curve, smoothing, corners, width, tapers and endings, closure, chisel angle, dry-split |
+| **STROKE** | How the hand becomes a mark: the nib's material and the spine it lays down. | Nib: Pen, Brush, Chisel, Charcoal; Erase | Size, remembered per nib | Pressure curve, smoothing, corners, width, tapers and endings, closure, chisel angle, dry-split |
 | **COLOR** | The light (Night) or pigment (Paper) the mark carries, and the ground beneath it. | Ink: 7, plus 2 recents. Ground: Night or Paper. | Hue (x) and tone (y), which creates a custom ink | Variant, lineage, pressure and depth tone, glow budget, hot ink |
 | **FORM** | What the seed grows into, and how far. | Form: Line, Echo, Sprout, Drift, Craze, Plume, Caustic, Burin, Plait, Orbit, Ripple | Base depth, remembered per Form | Roughness, asymmetry, generator, branch template, angle, side, spacing, field, filament length, plate size, barb sweep, lamp direction, hatch side, braid period, orbit radius, response to crowding and to closed loops. Pools come from holding. |
 
@@ -161,10 +161,15 @@ Rise is a drawing instrument in which every mark is alive.
 | **Pen** | Technical liner, near-constant width | 2.5 (0.75–12) | `w = S·(0.72 + 0.38p)` | 0.5 | Ribbon | P0 |
 | **Brush** (default) | Expressive; responds to pressure and speed | 9 (2–48) | `w = S·(0.14 + p^1.5)·(pen ? 1 − 0.25·smoothstep(1, 3, v_n) : 1)` | 1.0 | Ribbon, plus dry-split | P0 |
 | **Chisel** | Broad-edge calligraphy | 12 (3–48) | Edge `E = S·(0.6 + 0.4p)` at angle `θ_nib`; minimum thickness `0.12S` | 0.4 | Quads and core in one path | P0 |
-| **Charcoal** | Grain registered to the paper tooth | 7 (2–40) | `w = S·(0.7 + 0.5p)`; tooth level `k = floor(4p)` | 0.8 | Tooth-pattern ribbon | P1 |
+| **Charcoal** | Grain registered to the paper tooth | 7 (2–40) | `w = S·(0.7 + 0.5p)·(1 + 1.2·tK)`, `tK = smoothstep(60°, 25°, alt)`; tooth level = the pressure bucket of the tone (0–5) | 0.8 | Tooth-pattern ribbon (§6.4) | Shipped |
 | **Erase** | Removes whole strokes | 16 sp radius | — | — | Sweep plus doom mask | P0 |
 
 - **Fingers:** width ×1.35 automatically, because a fingertip is blunt.
+- **Charcoal** (shipped, §6.4, §13 After the build #18):
+  - **Pressure** fills more of the tooth: the lightest touch catches the top third of the grain, the heaviest about 85 %.
+  - **Lean** is the side of the stick: the mark widens up to ×2.2 (geometry, charcoal only), and the lean at pen-down (first sample's altitude, 4 buckets) smudges the grain: softer, fuller, pigment dragged into the valleys.
+  - **Edges break**: the full-width ribbon catches only the peaks (the fringe), the middle 62 % fills to the pressure's level (the core).
+  - Every Form grows from a charcoal trunk, and its growth draws through the same tooth.
 - **Speed term:** Brush's speed term applies only to pens. Mouse and finger pressure is already derived from speed.
 - **Brush dry-split** (P0):
   - Applies where `v_n > 1.3` and `p < 0.5`, crossfaded over `smoothstep(1.1, 1.5, v_n)`.
@@ -947,7 +952,7 @@ The recipes are the same on both grounds. Each ink has designed ramps for each, 
 | **Redo** | beside Undo | after an undo, until the next new command | hidden | — | |
 | **View chip** | bottom-right; on phones, the leading end of the dock | when zoom ≠ 100%, or ink exists but none is in view | hidden | — | Shows "140%", or an arrow pointing to the ink, or both. **Tap:** fits the content if no ink is in view, otherwise resets to 100%. **Long-press:** fits the content. |
 | **Delete** | just above the selection's bounds; on phones, the leading dock slot | selection only | hidden | — | Deletes the selection (un-grow). |
-| Stroke sheet | grows out of its chip | — | — | ✓ | Pen · Brush · Chisel (· Charcoal P1) · Erase, as labelled live tiles. Drag the active tile vertically to set size. |
+| Stroke sheet | grows out of its chip | — | — | ✓ | Pen · Brush · Chisel · Charcoal · Erase (5 of the 9-tile cap), as labelled live tiles. Drag the active tile vertically to set size. `B` cycles the four nibs. |
 | Color sheet | grows out of its chip | — | — | ✓ | 7 inks and 2 recents as labelled tiles, plus the Night \| Paper switch |
 | Form sheet | grows out of its chip | — | — | ✓ | Line · Echo · Sprout · Drift · Craze · Plume · Caustic · Burin · Plait · Orbit · Ripple as labelled live tiles: eleven, in two rows (6 + 5) on desktop and tablet, a 3-column grid on phones (the one sheet over the 9-tile cap, §13). Tooltips name the key (1–9, 0). Re-tapping the selection's Form tile reseeds it. Below the tiles, the **Free \| Symmetry** switch: tap toggles, drag sideways steps the folds (§2.3.1). |
 | Menu sheet | top-left | — | — | ✓ | Items listed above. Recent: the last 12 documents with date, a 96 px thumbnail, open, and delete. |
@@ -1141,11 +1146,9 @@ Grounds are painted in **CSS** on `#ground`, not on a canvas. A canvas copy is p
 
 **Paper**
 - `oklch(.955 .012 85)`, warm cotton, with a corner vignette at −0.02 L.
-- **P1** adds a world-anchored tooth heightmap:
-  - 512², 3-octave value noise plus about 300 fibre curves.
-  - Drawn as a canvas pattern at α 0.06.
-  - It is the **same** map Charcoal thresholds, so grain registers with the paper.
-  - P1 drying rim: at commit, Brush strokes on Paper are re-stroked along the outline at 0.9 px, α ×0.5, L −0.12.
+- **Paper tooth** (shipped with Charcoal, §6.4): a world-anchored 512² heightmap, 3-octave value noise plus 140 faint fibres, equalised. Charcoal thresholds it, so grain registers with the paper.
+  - **Not drawn on the ground.** The plan drew it as a canvas pattern at α 0.06 under all ink. Not built: a world-anchored ground layer has to be re-placed on every pan and zoom frame (against the 3 ms gesture budget, §9) and would change how every existing Paper drawing looks. The tooth shows where charcoal catches it, which is where it matters.
+- **P1 drying rim** (not built): at commit, Brush strokes on Paper are re-stroked along the outline at 0.9 px, α ×0.5, L −0.12. It is a wet-media effect of the Brush, not of Charcoal, which is dry; applied at raster it would change every existing Paper drawing, so it needs its own per-stroke version and stays in P1 (§11).
 
 ### 6.2 Layer stack and compositing
 
@@ -1221,10 +1224,14 @@ Edge cases:
 
 **Brush dry-split:** see §2.2.1. The bristles are subpaths in the ribbon's batch.
 
-**Charcoal** (P1):
-- Ribbon chunks of about 24 sp, filled with `createPattern(tooth_k)`.
-- 4 pre-thresholded tooth tiles, with `t = {.70, .55, .40, .22}` and `α = smoothstep(t − .08, t + .08, H)`.
-- `pattern.setTransform(view)` keeps the grain from swimming on pan or zoom.
+**Charcoal** (shipped; `ink/tooth.ts`, `render/tooth.ts`):
+- **Geometry is an ordinary ribbon.** The tooth is presentation, like colour: it never feeds the cook, ids or `sceneHash`, so no operator, golden hash or file format changed (`charcoal` was already a nib id in `.rise` v1). Only the width reads the lean (§2.2.1).
+- **The tooth.** One periodic 512² heightmap built once from `det.ts` (value noise at 2, 8 and 32 texel cells plus 140 fibres), histogram-equalised so a threshold `t` covers a fraction `1 − t` of the paper, and a blurred copy for smudge. Its bytes are a golden hash (`tests/ink-instrument.tooth.test.ts`).
+- **World-anchored.** A texel is the power of two nearest to 1 sp at the stroke's commit zoom, and the grid is anchored at the document origin (the stroke origin modulo the period, in Float64). Strokes drawn within one zoom octave share the grain, so a second pass catches the same peaks; symmetry copies, being placed geometry, catch the paper where they lie.
+- **Pressure from the tone.** Trunks are already chunked where the tone changes (§6.3), and tone = pressure bucket·5 + depth bucket, so each chunk and each growth poly carries its pressure level: `t = 0.72 − 0.62·(level + .5)/6`, `α = smoothstep(t − e, t + e, H)`, `e = 0.07` (to 0.2 smudged).
+- **One ground composite per batch.** Fill the full-width ribbon with the Fringe coverage mask (`t + 0.2`: peaks only), then its `widthScale 0.62` core into a scratch canvas. Core mask alpha `(c − f)/(1 − f)` combines with fringe to cover `max(core, fringe)`. Tint that coverage with `source-in`, then composite once with the ground’s `lighter` or `multiply` operation and the batch alpha. Scratch sides are capped at 1024 device px; larger batches use chunks.
+- **Patterns.** Each carries coverage only, shared across colours and grounds, cached in an LRU of 32 MB (1 MB at 1×, 4 MB at 2×). `pattern.setTransform(m · translate(−origin) · scale(cell))` keeps the grain from swimming on pan or zoom. Where a texel spans ≥ 2.5 device px, a 2× pattern thresholded *after* bilinear interpolation keeps the grain's contours smooth; below 0.45 px, and for hairlines and the stroke-cull dot, the solid colour at the ribbon's mean coverage (no sparkle).
+- **One code path.** `drawCooked` and the live hot window (`drawHot`) style every pass through `setInkStyle`, and tiles, live layers, sheets, export and the timelapse all reach it through `inkTableFor`, so screen, PNG and video agree.
 
 ### 6.5 Operator aesthetics
 
@@ -1280,6 +1287,7 @@ There are two reveal kinds, both applied at tessellation. **Neither calls an ope
 | Tiles, 512² device px | `(level, ix, iy)` | Progressively | Through the CanvasLedger (§6.9). Freed by setting `width = height = 0`. |
 | Sheet tiles | `(last recipe id:geomRev, option, ground)` | When a sheet opens | On a new last stroke |
 | Chip glyphs | Tool state | On tool change | — |
+| Charcoal tooth patterns (§6.4) | pressure level, smudge, pass, 1× / 2× | On first fill | LRU at 32 MB, outside the ledger (a fixed cap) |
 | Viewport snapshot | doc id | On `pagehide` / `visibilitychange: hidden`, and at most every 10 s while idle | Replaced |
 
 ### 6.9 Tiles, camera, resolution, memory
@@ -1740,7 +1748,7 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 
 ### 7.6 Tests
 
-**Status (2026-10-08):** 1195 vitest tests in 77 files under `tests/`, all passing (symmetry: `tests/ink-symmetry.test.ts`, the v2 format fixture; Share timelapse: `tests/export.timelapse.test.ts`, schedule, framing, encoder choice and the MP4 box layout; remix links: `tests/doc-persist.remix.test.ts`, version 1 links still open exactly, lossless packing, rounding grids, the same link when a remix is shared again, the size limit, damaged payloads); 28 e2e scenarios. The forms lab has its own suite (`npx vitest run --config lab/vitest.config.ts`).
+**Status (2026-10-08):** 1230 vitest tests in 81 files under `tests/`, all passing (charcoal: `tests/ink-instrument.tooth.test.ts`, the tooth's golden bytes, equalisation, coverage by pressure and smudge, the world grid and the lean widening; `tests/render-core.tooth.test.ts`, two fills per batch, world anchoring under any view, the 2× and solid tiers and the exact core blend; golden cooks `<form>/charcoal-tilt` for every Form; symmetry: `tests/ink-symmetry.test.ts`, the v2 format fixture; Share timelapse: `tests/export.timelapse.test.ts`, schedule, framing, encoder choice and the MP4 box layout; remix links: `tests/doc-persist.remix.test.ts`, version 1 links still open exactly, lossless packing, rounding grids, the same link when a remix is shared again, the size limit, damaged payloads); 33 e2e scenarios. The forms lab has its own suite (`npx vitest run --config lab/vitest.config.ts`).
 
 **vitest (Node):**
 - **`det`:** bit-exact golden vectors, plus relative error ≤ 1e-12 against `Math.*` over Rise's ranges.
@@ -1759,10 +1767,10 @@ app/* may import everything; ui imports only app/store, app/types and render/gly
 **e2e (`scripts/e2e.mjs` on `harness.mjs`):**
 - **Target:** the single-file build opened via `file://` in Chromium. Pen input uses pressure and tilt at 240 Hz timestamps. The suite drives the **debug variant** (`vite build --mode debug` → `dist-debug/index.html`, which it builds itself): the same app with `window.__rise` compiled in. The production file (`build:single`) has no debug hooks (`__DEBUG__` is a build-time constant), so the `prod-file` scenario only checks that it boots, draws, logs no errors and exposes nothing.
 - **Golden fixtures in other engines:** Firefox via puppeteer-core BiDi; the step reports SKIPPED when `FIREFOX_PATH` is absent. WebKit (Playwright) is P1. **Not built yet.**
-- **Scenarios** (28; `--only name,name` runs a subset; `--budget` runs `boot-budget`, `phone-layout` and `symmetry`):
+- **Scenarios** (33; `--only name,name` runs a subset; `--budget` runs `boot-budget`, `phone-layout` and `symmetry`):
   - `prod-file`: the production file boots, draws, logs no errors and has no `window.__rise`
   - `boot-budget`, `phone-layout`: control-budget DOM counts at rest, with ink and after an undo, on desktop and phone (the selection counts are checked in the selection scenarios)
-  - `draw-each-form` (the first four), `draw-new-forms` (the six lab Forms, their taps, and a `.rise` round trip of their ids), `radial-seeds`
+  - `draw-each-form` (the first four), `draw-charcoal` (the Stroke sheet reads Pen, Brush, Chisel, Charcoal, Erase; `B` cycles into and out of Charcoal; charcoal with Line, Sprout, Drift, Craze and Plume, with pressure and tilt, a tap, and 4-fold symmetry copies; a `.rise` round trip keeps the nib and the `sceneHash`; on Night and Paper a broad Charcoal band shows the paper through it where a Brush band of the same size is solid), `draw-new-forms` (the six lab Forms, their taps, and a `.rise` round trip of their ids), `radial-seeds`
   - `rise-hold-pen`, `rise-hold-mouse`: rise by hold, and peel undo
   - `closure`: preview equals committed
   - `erase-sweep`
@@ -2050,7 +2058,8 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - **Shipped after the build:** symmetry drawing: Mirror (P1) and radial symmetry (P2) as one feature (§2.3.1, §13 After the build #6), with `.rise` format v2.
 - **Shipped after the build:** Share timelapse, the P2 WebM timelapse as a shareable MP4 (§8, §13 After the build #8).
 - **Shipped after the build:** remixable images, the P2 PNG with the project embedded (§8 Export, §13 After the build #18).
-- **Still P1 and P2:** everything listed under those headings below. Charcoal and paper tooth, tilt shading, view rotation, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
+- **Shipped after the build:** Charcoal and the paper tooth (§2.2.1, §6.4, §13 After the build #19).
+- **Still P1 and P2:** everything listed under those headings below. Tilt shading, view rotation, selection move/scale/rotate, partial erase, SVG export and the Worker are not started. Opening a gzipped `.rise` already works; saving one does not.
 
 ### P0: one focused build, in six milestones (built)
 
@@ -2117,11 +2126,13 @@ Terser with 3 passes and unsafe options does no better than oxc (±0.5 %). What 
 - **Cheaper pan and zoom:** transform-only gesture frames, one settle per gesture, blank layers skipped (§6.2, §6.7, §6.9).
 - **A debug build:** `__DEBUG__`, `build:debug` and the `prod-file` check (§7.6, §9).
 - **Share timelapse:** the replay as a 6–12 s MP4, shared or downloaded (§8).
+- **Charcoal with the paper tooth** (P1): the fourth nib (§2.2.1, §6.4).
 
 ### P1
 
 **Forms, nibs and materials:**
-- Charcoal, with paper tooth and the drying rim.
+- ~~Charcoal, with paper tooth~~ **Shipped** (§6.4). The tooth is not drawn on the ground (§6.1).
+- Brush drying rim on Paper (§6.1): needs a per-stroke version so existing drawings keep their look.
 - Tilt shading.
 - Bud dots on Sprout tips.
 - P3 colour across all canvases at once.
@@ -2361,3 +2372,4 @@ Decisions taken once P0 was running. Same verdict scale.
 | 16 | The first ten seconds: remix links on phones, and what to do after the replay | A | Audited on 2026-10-08 against production and a local production build, desktop 1280 × 820 and phone 390 × 844, empty storage, real GPU (SwiftShader adds about 3 s to the first paint, so its timings are not the user's). **Fresh visitor:** chrome at 0.46–0.52 s on production (0.09–0.11 s locally), the seed starts drawing at about 1.1 s and has risen into botany by 3.4 s; nothing is blank or confusing. **Remix link** (the three on the syberlabs.io gallery): on desktop the drawing fades in and replays for 12–14 s, then rests with the first-run text "Draw anything. It grows." at 35 % in the middle of the drawing, where it cannot be read. **On a phone the canvas stayed empty, for good** (production, all three links): the drawing is wider than the phone, so Replay fitted it first, and `fit()` reported a navigation, which stops a replay. The stop ran before the replay had begun, so `start()` went on to hold every stroke out of the tiles with nothing left to play them back. Since the gallery and every shared video lead to remix links, phone visitors arriving that way saw a blank page with a 43 % zoom readout. **Fixed:** `View.fit(byUser)`: the app's own fit glide is not a navigation. **And:** a first-run visitor who arrives on a remix link gets hint 1 after the replay has played out, as "Draw on it. It grows." in a pill at the top (§3.0 step 8), not the empty-canvas text under the replay. Still at most five hints (it is hint 1, reworded), so no control is added. Sharing needs nothing new: a remix drawing usually has 6 or more strokes, so the share hint (#13) arrives at the first pause after the visitor's first stroke. **Considered and not changed:** a more spectacular first run, such as Spectral ink or 6-fold symmetry by default, or a symmetry seed. A 6-fold Spectral first stroke looks far richer (it matches the og:image), but symmetry by default turns every first mark into six, the opposite of "what you see is what you get" for someone who came to draw one thing, and a symmetry seed would show something the person's first stroke does not do. Spectral alone is a smaller gain than either. §1.4's first-run defaults stand until there is data on what visitors do; at about 15 visits a day, screenshots show what is prettier, not what converts. Also considered: adopting the shared drawing's symmetry for the visitor's tool (it would infer a mode the person never chose, §1.1 rule 3). |
 | 17 | Privacy-first usage counters | A | About 15 visits a day, and no way to tell whether the share loop works (#16 deferred first-run changes "until there is data"). Daily totals of a dozen events answer it: visits, visits from remix links, first strokes, timelapses made and shared or saved, links copied or too big, installs. **Shape:** the body is the event name and nothing else; the server keeps `(day, event) → n`, so there is nothing per person to leak, and DNT / GPC send nothing. **Storage: D1**, not Analytics Engine: one table anyone can read with SQL in the dashboard console, and an atomic upsert. The binding names the database and has no `database_id`, so `wrangler deploy` creates `rise-sketch-counts` on first deploy and connects to it afterwards (automatic provisioning); the table is created on first write, so there is no migration step. **No stats endpoint:** the console query (§8 Privacy) needs no code and exposes nothing publicly. Rejected: Cloudflare Web Analytics alone (page views only, no events), a third-party analytics script (identifiers, cookies, a new account), counting per document (an identifier). Cost: under 1 kB on the app, a 1.7 kB Worker. |
 | 18 | Remixable images: every exported PNG carries its project | A | A second share path beside remix links, with no size cap: the PNG looks like the drawing everywhere, and opened or dropped back into RISE Sketch it is the full drawing, exact (the same `.rise`, so the same `sceneHash`), as a new document with the current one kept in Recent. **No new control:** Export image always embeds, and Open… and drop accept a PNG, so the budget and the menu are unchanged. An option to leave the drawing out was rejected: the image is already the drawing made public, and a switch is a setting (§1.2). **Format:** one `iTXt` chunk (UTF-8, so any title survives; `tEXt` and `zTXt` are Latin-1), keyword `rise-sketch`, zlib through `CompressionStream('deflate')`, just before `IEND`; written and read by `persist/pngproject.ts` (about 100 lines, CRC-32 by table, no dependency). The reader walks every chunk and checks every CRC, so a damaged file fails loudly instead of opening half a drawing. **Measured** on e2e-style pen strokes (110–140 samples, mixed Forms): 10 strokes, `.rise` 62 kB → chunk **22 kB**; 100 strokes, 659 kB → **244 kB**, against PNGs of 11.6–12.8 MB at 3000 px, so 0.2–2 %. Rejected: the remix link's binary packing for the chunk (about half the size, but bytes nobody misses next to a multi-megabyte image, and the plain `.rise` text is what any tool can read back); a share-sheet path for it (out of scope; Share timelapse stays the social path). Social sites strip metadata, which is fine: there it is just the picture. Cost: +2.4 kB minified, +0.9 kB gzipped on the single file. |
+| 19 | Ship Charcoal (P1) with the paper tooth | A* | The most-wanted material after the Forms, and a kind, not a control: the Stroke sheet's fourth tile (5 of 9) and a stop on `B`, no switch, no setting. **The tooth is presentation, not geometry.** The cook draws an ordinary ribbon (only its width reads the lean), and the grain is a fill style chosen at raster from the tone the cook already stores (its pressure bucket), so no operator, golden hash, recipe field or file format changed: `charcoal` was a nib id in `.rise` v1 from the start, and every existing document cooks and renders exactly as before. Determinism: the heightmap is built from `det.ts` and integer hashing only, and its bytes are a golden hash; the smudge reads the first sample's altitude, which a draft and its committed recipe share, so live and committed ink agree. **Judged on screenshots** at 1× and 2× DPR, 100 % and 535 %, both grounds, fine and broad, light to heavy, upright and on its side, beside Pen and Brush. What changed on the way: a 256² tooth repeated visibly along a straight stroke (now 512², with finer octaves); the coarse 4-texel octave read as camouflage (now 2, 8 and 32); the core double-darkened the peaks the fringe had already caught, a hard tonal band (the core coverage is now combined in a scratch mask before a single ground composite); a pigment floor in the valleys drew the ribbon's straight outline (dropped); magnified texels went square (the 2× tier). **Changed from the plan:** the spec's 4 tooth tiles at `k = floor(4p)` became the 6 pressure buckets the tone already carries (no new per-poly data, and finer steps); 24 sp pattern chunks became the existing tone chunks; the ground does not show the tooth and Brush has no drying rim yet (§6.1). Cost: one 512² map built once (about 30 ms, on the first charcoal fill), coverage masks built on first use and shared across inks, two scratch fills plus one ground composite per charcoal batch, nothing per idle frame; +7.5 kB minified, +3.0 kB gzipped (production bundle compared with main 86a466b, including morph bounds). |

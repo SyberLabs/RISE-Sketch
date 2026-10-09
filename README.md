@@ -18,7 +18,7 @@ kind's one amount.**
 
 | Chip | Tap to choose | Drag to bend |
 |---|---|---|
-| **Stroke** | the nib: Pen, Brush, Chisel — or Erase | size |
+| **Stroke** | the nib: Pen, Brush, Chisel, Charcoal — or Erase | size |
 | **Color** | the ink: Graphite, Indigo, Oxide, Ochre, Moss, Rose, Spectral, plus two recent custom inks; and the ground, Night or Paper | hue (sideways) and tone (up/down) |
 | **Form** | what the stroke grows into (below); and symmetry, Free or Mirror / Kaleido | base depth |
 
@@ -66,6 +66,10 @@ else, and switch it on again.
 - **Close a loop** and the ends weld seamlessly.
 - **Zoom in** for finer marks — nib size is in screen pixels.
 - Rise learns your lightest and heaviest touch, your speed and your hand's tremor, then holds still.
+
+**Charcoal** catches on the paper's tooth: press harder and it fills the grain, lay the pen over
+and it goes broad and smudgy, and its edges break up. The grain belongs to the page, so it stays put
+when you pan or zoom, and a second pass catches the same peaks.
 
 **Night** composites ink as light (overlaps glow); **Paper** composites it as pigment (overlaps
 glaze). The same drawing works on both; press `G` to switch.
