@@ -21,6 +21,7 @@ try {
   await cdp.send('Page.setDownloadBehavior', { behavior: 'deny' });
   let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false, race = false;
   const attemptedPosts = [];
+  let holdDetail = false; const heldDetails = [];
   await page.setRequestInterception(true);
   page.on('request', req => {
     if (!req.url().startsWith('https://syberlabs.io/admin/api/v1/')) { void req.continue(); return; }
@@ -39,7 +40,9 @@ try {
     if (req.method() === 'POST') { posts++; const input = JSON.parse(req.postData()); payload = input.payload; assert.equal(input.app, 'sketch'); assert.match(input.requestId, /^[a-f0-9-]{36}$/); body = { save }; }
     else if (req.url().includes('/saves?')) body = { saves: payload ? [save] : [] };
     else if (req.url().endsWith('/saves/saved-one')) body = { save: { ...save, payload: malformed ? { schema: 'sketch.account-document.v1', document: {} } : payload } };
-    void req.respond({ status: 200, headers, contentType: 'application/json', body: JSON.stringify({ version: 1, ...body }) });
+    const respond = () => req.respond({ status: 200, headers, contentType: 'application/json', body: JSON.stringify({ version: 1, ...body }) });
+    if (holdDetail && req.url().endsWith('/saves/saved-one')) { heldDetails.push(respond); return; }
+    void respond();
   });
   await page.goto(origin + '/?debug', { waitUntil: 'load' });
   await page.waitForFunction(() => window.__rise && document.querySelector('.sketch-account-entry')?.textContent === 'Account');
@@ -83,9 +86,27 @@ try {
   user = { id: 'other-user', label: 'Changed account' }; await page.click('[data-save]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('account changed'));
   assert.equal(posts, 1, 'stale panel cannot upload to a different account');
+  await page.click('[data-close]');
+  race = false; malformed = false; holdDetail = true;
+  for (const [from, to] of [['owner-a', 'owner-b'], ['owner-b', 'owner-a']]) {
+    user = { id: from, label: from };
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForFunction(label => document.querySelector('.sketch-account-entry').title === `SyberLabs account: ${label}`, {}, from);
+    await page.click('.sketch-account-entry');
+    await page.waitForFunction(() => document.querySelector('[data-save]')?.disabled === false);
+    const unchanged = await page.evaluate(() => window.__rise.serialize());
+    await page.click('[data-confirm]'); await page.click('[data-restore]');
+    while (!heldDetails.length) await new Promise(resolve => setTimeout(resolve, 20));
+    user = { id: to, label: to };
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForFunction(() => !document.querySelector('.sketch-account-panel'));
+    await heldDetails.shift()();
+    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
+    assert.equal(await page.evaluate(() => window.__rise.serialize()), unchanged, 'successful stale detail cannot mutate browser art after account switch');
+  }
   mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-phone.png' });
   const expectedConflicts = env.errors.filter(error => error === 'console: Failed to load resource: the server responded with a status of 409 (Conflict)');
   assert.equal(expectedConflicts.length, 2, 'only the two deliberately refused account-race retries log HTTP conflicts');
   assert.deepEqual(env.errors.filter(error => !expectedConflicts.includes(error)), []);
-  console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account and server-race refusal');
+  console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account/server-race refusal and both-direction delayed-detail cancellation');
 } finally { await env?.browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }

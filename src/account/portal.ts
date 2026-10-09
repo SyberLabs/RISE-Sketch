@@ -3,7 +3,8 @@ import { adoptDocument } from '../app/docs';
 import { downloadBlob, riseFilename } from '../persist/files';
 import { serializeDoc } from '../doc/serialize';
 import { VERSION } from '../app/version';
-import { ACCOUNT_ORIGIN, SIGN_IN_URL, AccountError, getAccount, listDrawings, drawingPayload, saveDrawing, loadDrawing, type Account, type DrawingPayload } from './service';
+import { ACCOUNT_ORIGIN, SIGN_IN_URL, AccountError, getAccount, listDrawings, drawingPayload, saveDrawing, type Account, type DrawingPayload } from './service';
+import { restoreAccountDrawing } from './restore';
 import './portal.css';
 
 /** Always reachable independently of the drawing chrome's hide/show modes. */
@@ -17,13 +18,18 @@ export function mountAccountPortal(app: App): void {
   const syncModal = () => { entrance.hidden = Boolean(backdrop && !backdrop.hidden && backdrop.dataset.modal === 'true'); entrance.inert = entrance.hidden; };
   if (backdrop) new MutationObserver(syncModal).observe(backdrop, { attributes: true, attributeFilter: ['hidden', 'data-modal'] });
   syncModal();
-  let account: Account | null = null, generation = 0;
+  let account: Account | null = null, generation = 0, identityGeneration = 0;
   const refresh = async () => {
     const current = ++generation;
     let value: Account | null = null;
     try { if (/^https?:$/.test(location.protocol)) value = await getAccount(); } catch { /* drawing remains usable offline */ }
     if (current !== generation) return;
-    account = value; entrance.textContent = value ? 'Account' : 'Sign in';
+    const changed = (account?.id ?? null) !== (value?.id ?? null);
+    if (changed) identityGeneration++;
+    account = value;
+    if (changed) document.querySelector<HTMLDialogElement>('.sketch-account-panel')?.close();
+    entrance.textContent = value ? 'Account' : 'Sign in';
+    entrance.title = value ? `SyberLabs account: ${value.label}` : 'Sign in to SyberLabs';
     entrance.setAttribute('aria-label', value ? 'Open SyberLabs account' : 'Sign in to SyberLabs');
   };
   window.addEventListener('focus', refresh); void refresh();
@@ -31,10 +37,11 @@ export function mountAccountPortal(app: App): void {
     if (!account || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (document.querySelector('.sketch-account-panel')) return;
-    openPanel(app, account, entrance, refresh);
+    const owner = account, capturedGeneration = identityGeneration;
+    openPanel(app, owner, entrance, refresh, () => account?.id === owner.id && identityGeneration === capturedGeneration);
   });
 }
-function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: () => Promise<void>): void {
+function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: () => Promise<void>, isCurrent: () => boolean): void {
   const dialog = document.createElement('dialog'); dialog.className = 'sketch-account-panel';
   dialog.setAttribute('aria-labelledby', 'sketch-account-title');
   dialog.innerHTML = `<header><small>SYBERLABS / SKETCH</small><button type="button" data-close aria-label="Close account">×</button></header>
@@ -84,13 +91,13 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
   download.addEventListener('click', () => downloadCurrent());
   restore.addEventListener('click', () => void run(async () => {
     await sameAccount(); if (closed) return;
-    const parsed = await loadDrawing(list.value, account.id);
-    if (closed) return;
-    // Validate first, persist the existing drawing, then use the app's ordinary file-open boundary.
-    await app.rt.autosave.flush();
-    if (!app.rt.autosave.ok) throw new AccountError('Browser autosave is unavailable. Download your drawing before restoring.');
-    if (closed) return;
-    downloadCurrent(); adoptDocument(app.rt, app.ctl, parsed.meta, parsed.strokes, 'fade');
+    const parsed = await restoreAccountDrawing(list.value, account.id, {
+      isCurrent: () => !closed && isCurrent(),
+      flush: () => app.rt.autosave.flush(),
+      autosaveOk: () => app.rt.autosave.ok,
+      backup: downloadCurrent,
+      adopt: drawing => adoptDocument(app.rt, app.ctl, drawing.meta, drawing.strokes, 'fade'),
+    });
     pending = null; confirm.checked = false; name.value = (parsed.meta.title || 'My drawing').slice(0, 100);
     void app.ctl.library.refreshRecent(); status.textContent = 'Drawing restored. Your previous drawing is in Recent and the downloaded backup.';
   }));
