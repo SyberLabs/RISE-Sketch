@@ -6,11 +6,13 @@
  * context transform, so widths, caps and hairline decisions are true device sizes. Everything a
  * draw needs per poly lives in reused scratch arrays; colour strings come from cached tables.
  */
-import type { AABB, Camera, Cooked, Ground, InkTable, Mat2x3, RecipeCore, Vec2 } from '../core/types';
+import type { AABB, Camera, Cooked, Ground, InkTable, Mat2x3, RecipeCore, SampleBuf, Vec2 } from '../core/types';
 import { PolyKind } from '../core/types';
 import { resolveInk, toneIndex } from '../ink/color';
 import { tracePoly, traceCentre, type TraceOpts } from './tessellate';
 import { Batcher, MODE_FILL, MODE_HAIR, alphaBucket, exactKey, ALPHA_LEVELS } from './batch';
+import { toothFor, toothLevel, toothSolid } from '../ink/tooth';
+import { drawToothBatch, growDevBox, type TraceBatch } from './tooth';
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -102,11 +104,14 @@ const tableByObject = new WeakMap<object, [InkTable | null, InkTable | null]>();
  * id:colorRev:ground key and costs no key string per frame; resolveInk's own content cache shares
  * one table between objects with equal colours (and serves objects without an id).
  */
-export function inkTableFor(r: RecipeCore & { id?: string; colorRev?: number }, g: Ground): InkTable {
+export function inkTableFor(r: RecipeCore & { id?: string; colorRev?: number; samples: Float32Array | SampleBuf }, g: Ground): InkTable {
   let e = tableByObject.get(r);
   if (!e) { e = [null, null]; tableByObject.set(r, e); }
   const k = g === 'night' ? 0 : 1;
-  return e[k] ?? (e[k] = resolveInk(r.color, g));
+  if (e[k]) return e[k];
+  // charcoal draws its colours through the paper tooth (DESIGN §6.4): the shared table plus its tooth
+  const t = resolveInk(r.color, g), tooth = toothFor(r);
+  return (e[k] = tooth ? { ...t, tooth } : t);
 }
 
 // ---------------------------------------------------------------------------- decimated LODs
@@ -384,37 +389,64 @@ export function drawCooked(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, o?
   ctx.globalCompositeOperation = table.op;
   const topts = TOPTS;
   topts.morphFrom = morph ? morph.from : null;
+  // charcoal batches go through the tooth (render/tooth.ts), which traces the batch itself
+  let cur = 0;
+  const traceTooth: TraceBatch | null = table.tooth
+    ? (cx, mm, ws) => { topts.widthScale = ws; return tracePlan(cx, src, cur, plan, mm, nP, false, reveal, morph, lod); }
+    : null;
   for (let b = 0; b < plan.n; b++) {
-    const style = table.css[plan.css[b]];
+    const css = plan.css[b], hair = plan.mode[b] === MODE_HAIR;
     // never above 1 (Canvas2D ignores out-of-range alpha and would keep the previous batch's)
-    const ga = plan.alpha[b] * aMul;
-    ctx.globalAlpha = ga < aCap ? ga : aCap;
-    ctx.beginPath();
-    const hair = plan.mode[b] === MODE_HAIR;
-    let any = false;
-    for (let e = plan.first[b], end = e + plan.count[b]; e < end; e++) {
-      const i = batcher.poly[plan.order[e]];
-      topts.reveal = reveal ? reveal(i) : undefined;
-      // weld a chunk to its neighbour only while that neighbour is drawn up to the shared point,
-      // and (under a morph) only while both sit at the same morph t, so the shared edge agrees
-      const mt = morph ? morph.t(i) : 1;
-      topts.joinStart = (!reveal || i === 0 || reveal(i - 1) >= 1) && (!morph || i === 0 || morph.t(i - 1) === mt);
-      topts.joinEnd = (!reveal || i + 1 >= nP || reveal(i + 1) > 0) && (!morph || i + 1 >= nP || morph.t(i + 1) === mt);
-      topts.morphT = morph ? mt : undefined;
-      topts.minDevWidth = lod && (src.kind[i] === DOT || src.count[i] === 1) ? 1 : 0;
-      if (hair ? traceCentre(ctx, src, i, m, topts) : tracePoly(ctx, src, i, m, topts)) { any = true; drawStats.polys++; }
+    const ga = Math.min(plan.alpha[b] * aMul, aCap);
+    if (traceTooth && !hair) {
+      batchBox(c, b, plan, m);
+      cur = b;
+      drawToothBatch(ctx, table, css, m, ga, BOX, clip, traceTooth);
+      drawStats.fills++;
+      continue;
     }
-    if (!any) continue;
+    if (!tracePlan(ctx, src, b, plan, m, nP, hair, reveal, morph, lod)) continue;
     if (hair) {
-      ctx.strokeStyle = style; ctx.lineWidth = 1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = table.css[css]; ctx.lineWidth = 1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.globalAlpha = table.tooth ? ga * toothSolid(toothLevel(css), table.tooth.smudge) : ga;
       ctx.stroke(); drawStats.strokes++;
     } else {
-      ctx.fillStyle = style;
+      ctx.fillStyle = table.css[css];
+      ctx.globalAlpha = ga;
       ctx.fill('nonzero'); drawStats.fills++;
     }
   }
   ctx.restore();
   topts.morphFrom = null; topts.reveal = undefined; topts.morphT = undefined; topts.joinStart = true; topts.joinEnd = true;
+  topts.widthScale = undefined;
+}
+
+/** Device box of batch b's polys (into BOX). */
+const BOX: AABB = { x0: 0, y0: 0, x1: 0, y1: 0 };
+function batchBox(c: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3): void {
+  BOX.x0 = Infinity; BOX.y0 = Infinity; BOX.x1 = -Infinity; BOX.y1 = -Infinity;
+  for (let e = plan.first[b], end = e + plan.count[b]; e < end; e++) growDevBox(BOX, c.box, batcher.poly[plan.order[e]], m);
+}
+
+/** Build batch b's path (its polys, or their centrelines for a hairline batch); false when nothing was traced. */
+function tracePlan(ctx: Ctx2D, src: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3, nP: number, hair: boolean,
+  reveal: ((i: number) => number) | null, morph: DrawOpts['morph'] | null, lod: boolean): boolean {
+  const topts = TOPTS;
+  ctx.beginPath();
+  let any = false;
+  for (let e = plan.first[b], end = e + plan.count[b]; e < end; e++) {
+    const i = batcher.poly[plan.order[e]];
+    topts.reveal = reveal ? reveal(i) : undefined;
+    // weld a chunk to its neighbour only while that neighbour is drawn up to the shared point,
+    // and (under a morph) only while both sit at the same morph t, so the shared edge agrees
+    const mt = morph ? morph.t(i) : 1;
+    topts.joinStart = (!reveal || i === 0 || reveal(i - 1) >= 1) && (!morph || i === 0 || morph.t(i - 1) === mt);
+    topts.joinEnd = (!reveal || i + 1 >= nP || reveal(i + 1) > 0) && (!morph || i + 1 >= nP || morph.t(i + 1) === mt);
+    topts.morphT = morph ? mt : undefined;
+    topts.minDevWidth = lod && (src.kind[i] === DOT || src.count[i] === 1) ? 1 : 0;
+    if (hair ? traceCentre(ctx, src, i, m, topts) : tracePoly(ctx, src, i, m, topts)) { any = true; drawStats.polys++; }
+  }
+  return any;
 }
 
 /**
@@ -488,6 +520,7 @@ function cullDot(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, sc: number, 
   const areaDev = area * sc * sc;
   const r = Math.max(0.5, Math.min(diag * 0.5, Math.sqrt(areaDev / Math.PI)));
   let a = Math.min(1, areaDev / (Math.PI * r * r)) * (wa / area) * aMul;
+  if (table.tooth && best >= 0) a *= toothSolid(toothLevel(best), table.tooth.smudge);
   if (!(a >= MIN_ALPHA)) return;
   if (a > aCap) a = aCap;
   ctx.save();

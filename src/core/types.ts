@@ -26,10 +26,10 @@ export type Mat2x3 = Float64Array; // [a b c d e f], Canvas2D setTransform order
 export interface AABB { x0: number; y0: number; x1: number; y1: number }
 
 /**
- * Nibs / Forms offered in the UI, in sheet and number-key order (charcoal is P1). Digit1–Digit0 pick
- * the first ten Forms; Ripple, the eleventh, has no key.
+ * Nibs / Forms offered in the UI, in sheet and number-key order. Digit1–Digit0 pick the first ten
+ * Forms; Ripple, the eleventh, has no key.
  */
-export const P0_NIBS: readonly NibId[] = ['pen', 'brush', 'chisel'];
+export const P0_NIBS: readonly NibId[] = ['pen', 'brush', 'chisel', 'charcoal'];
 export const P0_FORMS: readonly FormId[] = ['line', 'echo', 'sprout', 'drift', 'craze', 'plume', 'caustic', 'burin', 'plait', 'orbit', 'ripple'];
 export const INK_ORDER: readonly InkId[] = ['graphite', 'indigo', 'oxide', 'ochre', 'moss', 'rose', 'spectral'];
 
@@ -243,6 +243,18 @@ export interface InkTable {
   spectral: boolean;
   hs: number;            // spectral base hue (deg) for this stroke; 0 otherwise
   rgb: Uint8Array;       // 3 bytes per css entry (for sampling, bloom tint, SVG)
+  /** Charcoal only: the paper tooth its fills catch on (ink/tooth.ts, render/tooth.ts). */
+  tooth?: ToothSpec;
+}
+
+/** How a charcoal stroke meets the paper tooth: texel size and the world offset of its texel grid. */
+export interface ToothSpec {
+  /** Doc units per texel. */
+  cell: number;
+  /** Stroke origin modulo the tooth period (doc), so the grid stays exact far from the document origin. */
+  ox: number; oy: number;
+  /** Smudge bucket 0..SMUDGE_LEVELS − 1 (ink/tooth.ts): the lean at pen-down. */
+  smudge: number;
 }
 
 // ============================================================================ document

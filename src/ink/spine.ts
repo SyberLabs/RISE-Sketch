@@ -59,7 +59,7 @@
  *  p      pens (first stored P finite): calibratePressure(raw P at the station, calib);
  *         mouse/touch (stored P = NaN): synthPressure stepped station to station with
  *         dt from the stored t, starting at 0.35 (deterministic, cook-time).
- *  w      UNTAPERED nib width in doc units: nibWidth(nib, S, p, vn, device) / z.
+ *  w      UNTAPERED nib width in doc units: nibWidth(nib, S, p, vn, device, alt) / z.
  *  vn     v / calib.vMed, v = (s[i+k] − s[i−k]) / (t[i+k] − t[i−k]) with the smallest
  *         k ≤ 4 spanning ≥ 8 ms (indices clamped at the ends).
  *  k      signed curvature, rad/sp: the polyline's turning inside [s−3, s+3] per sp
@@ -605,7 +605,7 @@ class Builder implements SpineBuilder {
     sp.s[i] = this.s0 + this.SS[i];
     sp.t[i] = this.ST[i];
     sp.p[i] = p;
-    sp.w[i] = nibWidth(this.nib, this.size, p, vn, this.device) / z;
+    sp.w[i] = nibWidth(this.nib, this.size, p, vn, this.device, alt) / z;
     sp.vn[i] = vn;
     sp.k[i] = fr.k; sp.nx[i] = fr.nx; sp.ny[i] = fr.ny;
     sp.c[i] = c === c ? c : 0; sp.cs[i] = cs === cs ? cs : 0;

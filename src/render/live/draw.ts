@@ -7,6 +7,8 @@ import { toneIndex } from '../../ink/color';
 import { echoPaperExposure, paperAlphaScale } from '../../ink/operators/registry';
 import { ALPHA_LEVELS, Batcher, MODE_FILL, MODE_HAIR, alphaBucket, exactKey } from '../batch';
 import { drawCooked, type DrawOpts } from '../raster';
+import { toothLevel, toothSolid } from '../../ink/tooth';
+import { drawToothBatch, growDevBox, type TraceBatch } from '../tooth';
 import { traceCentre, tracePoly, type TraceOpts } from '../tessellate';
 import { HOT_CHUNK, hotEta, windowEdge, type ArcClock } from './timing';
 import { IntList, type PolyState, gf64, gi32 } from './polys';
@@ -190,36 +192,56 @@ export function drawHot(ctx: Ctx2D, c: Cooked, list: Int32Array, nList: number, 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = table.op;
+  // charcoal batches go through the tooth (render/tooth.ts), exactly as drawCooked draws them
+  let cur = 0;
+  const traceTooth: TraceBatch | null = table.tooth
+    ? (cx, mm, ws) => { o.widthScale = ws; return traceRanges(cx, c, plan, cur, mm, false, S, from); }
+    : null;
   for (let k = 0; k < plan.n; k++) {
-    const ga = plan.alpha[k] * aMul;
-    ctx.globalAlpha = ga < 1 ? ga : 1;
-    ctx.beginPath();
-    const hair = plan.mode[k] === MODE_HAIR;
-    let any = false;
-    for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) {
-      const r = hotBatcher.poly[plan.order[e]];
-      const i = rgPoly[r];
-      const f = rgFrom[r], t = rgTo[r], rev = rgRev[r];
-      o.arcFrom = f === f ? f : undefined;
-      o.arcTo = t === t ? t : undefined;
-      o.reveal = rev === rev ? rev : undefined;
-      const mt = S.mv[i];
-      o.morphFrom = from && mt < 1 ? from : null;
-      o.morphT = from && mt < 1 ? mt : undefined;
-      if (hair ? traceCentre(ctx, c, i, m, o) : tracePoly(ctx, c, i, m, o)) any = true;
+    const ga = plan.alpha[k] * aMul, css = plan.css[k], hair = plan.mode[k] === MODE_HAIR;
+    if (traceTooth && !hair) {
+      HOT_BOX.x0 = Infinity; HOT_BOX.y0 = Infinity; HOT_BOX.x1 = -Infinity; HOT_BOX.y1 = -Infinity;
+      for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) growDevBox(HOT_BOX, c.box, rgPoly[hotBatcher.poly[plan.order[e]]], m);
+      cur = k;
+      drawToothBatch(ctx, table, css, m, ga < 1 ? ga : 1, HOT_BOX, clip, traceTooth);
+      continue;
     }
-    if (!any) continue;
+    ctx.globalAlpha = ga < 1 ? ga : 1;
+    if (!traceRanges(ctx, c, plan, k, m, hair, S, from)) continue;
     if (hair) {
-      ctx.strokeStyle = table.css[plan.css[k]];
+      ctx.strokeStyle = table.css[css];
       ctx.lineWidth = 1; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (table.tooth) ctx.globalAlpha *= toothSolid(toothLevel(css), table.tooth.smudge);
       ctx.stroke();
     } else {
-      ctx.fillStyle = table.css[plan.css[k]];
+      ctx.fillStyle = table.css[css];
       ctx.fill('nonzero');
     }
   }
   ctx.restore();
-  o.arcFrom = undefined; o.arcTo = undefined; o.reveal = undefined; o.morphFrom = null; o.morphT = undefined;
+  o.arcFrom = undefined; o.arcTo = undefined; o.reveal = undefined; o.morphFrom = null; o.morphT = undefined; o.widthScale = undefined;
+}
+
+const HOT_BOX: AABB = { x0: 0, y0: 0, x1: 0, y1: 0 };
+
+/** Build hot batch k's path: its ranges, cut and revealed as recorded (centrelines for a hairline batch). */
+function traceRanges(ctx: Ctx2D, c: Cooked, plan: Batcher['plan'], k: number, m: Mat2x3, hair: boolean, S: PolyState, from: Float32Array | null): boolean {
+  const o = HOPTS;
+  ctx.beginPath();
+  let any = false;
+  for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) {
+    const r = hotBatcher.poly[plan.order[e]];
+    const i = rgPoly[r];
+    const f = rgFrom[r], t = rgTo[r], rev = rgRev[r];
+    o.arcFrom = f === f ? f : undefined;
+    o.arcTo = t === t ? t : undefined;
+    o.reveal = rev === rev ? rev : undefined;
+    const mt = S.mv[i];
+    o.morphFrom = from && mt < 1 ? from : null;
+    o.morphT = from && mt < 1 ? mt : undefined;
+    if (hair ? traceCentre(ctx, c, i, m, o) : tracePoly(ctx, c, i, m, o)) any = true;
+  }
+  return any;
 }
 
 // ---------------------------------------------------------------------------- halo

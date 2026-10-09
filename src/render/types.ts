@@ -157,7 +157,7 @@ export interface RendererDeps {
 // render/renderer.ts (render-world agent) implements LiveHost and drives LiveLayerInternal;
 // render/live.ts (render-live agent) implements LiveLayerInternal against LiveHost.
 
-import type { InkTable, Mat2x3, RecipeCore } from '../core/types';
+import type { InkTable, Mat2x3, RecipeCore, SampleBuf } from '../core/types';
 
 export interface LiveHost {
   /** Ink canvases (device-px backing store, CSS-sized to the viewport, blend mode set by the renderer). */
@@ -171,7 +171,7 @@ export interface LiveHost {
   /** Doc-relative-to-`origin` -> device px of dry/wet (Float64 offset math; rot = 0 in P0). */
   matrixFor(origin: Vec2): Mat2x3;
   /** Cached ink table for a stroke-like object (keyed by id:colorRev:ground when id is present). */
-  inkTable(r: RecipeCore & { id?: string; colorRev?: number }): InkTable;
+  inkTable(r: RecipeCore & { id?: string; colorRev?: number; samples: Float32Array | SampleBuf }): InkTable;
   /**
    * Two-phase bake (§6.2): draw a committed stroke into its tiles in time slices. `done` is called
    * from inside the renderer's frame() in the SAME rAF in which #base is re-composited; the live

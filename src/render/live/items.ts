@@ -2,7 +2,7 @@
  * What the live layer draws: the Item contract, the shared frame context, and WakeItem, the
  * poly-by-poly #dry / #wet base of the live stroke, its finish and a replay.
  */
-import type { AABB, Cooked, FormId, Ground, InkTable, Mat2x3, RecipeCore, StrokeRecipe, Vec2 } from '../../core/types';
+import type { AABB, Cooked, FormId, Ground, InkTable, Mat2x3, RecipeCore, SampleBuf, StrokeRecipe, Vec2 } from '../../core/types';
 import { PL, PolyKind } from '../../core/types';
 import { clamp01 } from '../../core/num';
 import { multiply } from '../../core/mat';
@@ -62,7 +62,7 @@ export interface Item {
 }
 
 /** A recipe or a draft: what an item draws. */
-export type Rec = RecipeCore & { id?: string; colorRev?: number };
+export type Rec = RecipeCore & { id?: string; colorRev?: number; samples: Float32Array | SampleBuf };
 
 /**
  * A stroke drawn poly by poly with a #dry / #wet split: the live stroke, its finish after lift,

@@ -35,7 +35,7 @@ import { launch, penStroke, mouseStroke, pinch, tap, wheel, key, wave, circle, l
 // only to balance --shard. A scenario missing here (a new one) counts as UNTIMED and still runs.
 const COST = {
   'stress-300': 268000, 'timelapse-vertical': 68000, 'draw-new-forms': 64000, timelapse: 58000, 'undo-redo-50': 48000,
-  'remix-link': 47000, 'share-hint': 42000, 'draw-each-form': 37000, replay: 34000, 'share-hint-shared': 30000,
+  'remix-link': 47000, 'share-hint': 42000, 'draw-each-form': 37000, 'draw-charcoal': 40000, replay: 34000, 'share-hint-shared': 30000,
   hints: 24000, 'lasso-restyle-bend': 24000, 'erase-sweep': 23000, symmetry: 23000, 'rise-hold-mouse': 22000,
   'first-run-seed': 21000, 'prod-file': 20000, documents: 20000, 'rise-file-roundtrip': 20000, 'reload-persist': 19000,
   'select-restyle-delete': 18000, 'touch-pinch': 16000, closure: 14000, 'boot-budget': 14000, navigate: 13000,
@@ -226,6 +226,82 @@ await scenario('draw-each-form', async ({ page, cdp }) => {
   await dispatch(page, { k: 'ground', g: 'paper' });
   await idle(page);
   await shot(page, 'forms-paper');
+});
+
+// Charcoal (DESIGN §2.2.1, §6.4): the fourth Stroke tile, B cycles through it, and it draws through
+// the paper tooth with several Forms, a tap and symmetry copies on both grounds. A broad straight
+// stroke must show the grain (paper through the mark) where a Brush stroke of the same size is solid.
+await scenario('draw-charcoal', async ({ page, cdp }) => {
+  await page.click('.r-chip[data-chip="stroke"]');
+  await sleep(300);
+  const tiles = await R(page, () => [...document.querySelectorAll('.r-sheet[data-sheet="stroke"] .r-tile')].map(t => t.textContent.trim()));
+  assert(tiles.join(',') === 'Pen,Brush,Chisel,Charcoal,Erase', `Stroke sheet: Pen, Brush, Chisel, Charcoal, Erase (got ${tiles})`);
+  await dispatch(page, { k: 'openSheet', sheet: null });
+  await dispatch(page, { k: 'pickNib', nib: 'chisel' });
+  await key(page, 'KeyB');
+  assert((await R(page, () => window.__rise.state().tool.nib)) === 'charcoal', 'B after Chisel picks Charcoal');
+  await key(page, 'KeyB');
+  assert((await R(page, () => window.__rise.state().tool.nib)) === 'pen', 'B after Charcoal wraps to Pen');
+  await dispatch(page, { k: 'pickNib', nib: 'charcoal' });
+  // several Forms, each in its own ink, with pressure and tilt
+  const forms = [['line', 'graphite', 0], ['sprout', 'moss', 0], ['drift', 'indigo', 40], ['craze', 'oxide', 0], ['plume', 'ochre', 55]];
+  for (let i = 0; i < forms.length; i++) {
+    const [form, ink, tilt] = forms[i];
+    await dispatch(page, { k: 'pickForm', form });
+    await dispatch(page, { k: 'pickInk', ink });
+    const x0 = 70 + i * 240;
+    await penStroke(cdp, wave(x0, 200, x0 + 190, 60, 60).map(([x, y], j) => [x, y, 0.35 + 0.5 * Math.sin(Math.PI * j / 60), tilt, 0]));
+    await idle(page);
+    const s = await last(page);
+    assert(s && s.nib === 'charcoal' && s.form === form, `stroke ${i}: charcoal ${form} (got ${s && s.nib} ${s && s.form})`);
+    assert(s.nPts > 10, `charcoal ${form} produced geometry (${s.nPts} pts)`);
+  }
+  await dispatch(page, { k: 'pickForm', form: 'sprout' });
+  await penStroke(cdp, [[1180, 210, 0.6], [1180.5, 210.3, 0.7], [1180.8, 210.4, 0.7]]);
+  await idle(page);
+  assert((await last(page)).radial, 'a charcoal tap is a radial seed');
+  // a broad straight Brush stroke and a broad straight Charcoal stroke, same size
+  await dispatch(page, { k: 'pickForm', form: 'line' });
+  await dispatch(page, { k: 'pickInk', ink: 'graphite' });
+  await dispatch(page, { k: 'bendDepth', delta: -5, done: true });
+  for (const [nib, y] of [['brush', 420], ['charcoal', 500]]) {
+    await dispatch(page, { k: 'pickNib', nib });
+    await dispatch(page, { k: 'bendSize', factor: 3, done: true });
+    await penStroke(cdp, line(120, y, 1160, y, 80).map(([x, yy]) => [x, yy, 0.8]));
+    await idle(page);
+    await dispatch(page, { k: 'bendSize', factor: 1 / 3, done: true });
+  }
+  // symmetry copies of a charcoal stroke
+  await dispatch(page, { k: 'pickInk', ink: 'rose' });
+  await dispatch(page, { k: 'symmetry', folds: 4 });
+  await penStroke(cdp, wave(560, 660, 760, 30, 40).map(([x, y]) => [x, y, 0.7]));
+  await idle(page);
+  await dispatch(page, { k: 'symmetry', on: false });
+  assert(await count(page) === forms.length + 3 + 4, `five Forms, a tap, two bands and four symmetry copies (got ${await count(page)})`);
+  // a .rise round trip keeps the nib
+  const h0 = await R(page, () => window.__rise.sceneHash());
+  const text = await R(page, () => window.__rise.serialize());
+  assert(/"nib":"charcoal"/.test(text), 'the file stores the charcoal nib');
+  await R(page, t => window.__rise.load(t), text);
+  await idle(page);
+  assert(await R(page, () => window.__rise.sceneHash()) === h0, 'round trip keeps the scene hash');
+  for (const g of ['night', 'paper']) {
+    await dispatch(page, { k: 'ground', g });
+    await idle(page);
+    await shot(page, `charcoal-${g}`);
+    // paper shows through charcoal (holes) but not through the brush band: lightness spread along the band centres
+    const img = UPNG.decode(await page.screenshot());
+    const d = new Uint8Array(UPNG.toRGBA8(img)[0]);
+    const spread = y => {
+      const L = [];
+      for (let x = 300; x < 1000; x++) { const i = (y * img.width + x) * 4; L.push(d[i] + d[i + 1] + d[i + 2]); }
+      L.sort((a, b) => a - b);
+      return L[Math.floor(L.length * 0.9)] - L[Math.floor(L.length * 0.1)];
+    };
+    const brush = spread(420), charcoal = spread(500);
+    assert(brush < 40, `${g}: the brush band is solid (P10..P90 spread ${brush})`);
+    assert(charcoal > 150, `${g}: the charcoal band shows the tooth (P10..P90 spread ${charcoal})`);
+  }
 });
 
 await scenario('draw-new-forms', async ({ page, cdp }) => {

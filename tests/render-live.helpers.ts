@@ -3,7 +3,7 @@
  * composite op, clears, clips), a fake canvas, and a fake LiveHost / OverlayHost with a manual
  * clock and manual bake completion.
  */
-import type { AABB, Camera, Cooked, Doc, Ground, InkTable, RecipeCore, Scene, StrokeId, StrokeRecipe, Vec2 } from '../src/core/types';
+import type { AABB, Camera, Cooked, Doc, Ground, InkTable, Scene, StrokeId, StrokeRecipe, Vec2 } from '../src/core/types';
 import type { LiveHost, OverlayHost } from '../src/render/types';
 import { inkTableFor, viewMatrix } from '../src/render/raster';
 
@@ -147,7 +147,7 @@ export class FakeHost implements LiveHost {
   camera(): Camera { return this.cam; }
   viewport(): { w: number; h: number } { return this.vp; }
   matrixFor(origin: Vec2): Float64Array { return viewMatrix(origin, this.cam, this.vp.w, this.vp.h, this.d); }
-  inkTable(r: RecipeCore & { id?: string; colorRev?: number }): InkTable { return inkTableFor(r, this.g); }
+  inkTable(r: Parameters<typeof inkTableFor>[0]): InkTable { return inkTableFor(r, this.g); }
   bake(r: StrokeRecipe, c: Cooked, done: () => void): void {
     const b: BakeCall = { r, c, done: () => { b.doneCalled = true; done(); }, doneCalled: false };
     this.bakes.push(b);
