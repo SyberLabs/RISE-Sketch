@@ -44,7 +44,9 @@ try {
     await page.evaluate(() => window.__rise.dispatch({ k: 'openSheet', sheet: null }));
     await page.waitForFunction(() => !document.querySelector('.sketch-account-entry').hidden);
   }
+  await page.evaluate(() => window.__rise.idle(15000));
   await penStroke(cdp, line(75, 250, 270, 320, 8));
+  await page.waitForFunction(() => window.__rise.strokeCount() > 0);
   await page.click('.sketch-account-entry');
   await page.waitForFunction(() => document.querySelector('[data-save]')?.disabled === false);
   const panelBox = await page.$eval('dialog', e => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
