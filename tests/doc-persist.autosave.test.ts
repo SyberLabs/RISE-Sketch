@@ -252,6 +252,24 @@ describe('autosave', () => {
     autosave.dispose();
   });
 
+  it('persists an explicitly adopted empty drawing as latest without changing default empty boot behavior', async () => {
+    const store = new FakeStore();
+    const prior = mkDoc('prior', [randomRecipe(seeded(14), 'prior-stroke')]);
+    await store.putStrokes(prior.meta.id, prior.ordered());
+    await store.putMeta(prior.meta, prior.size);
+    vi.setSystemTime(prior.meta.updated + 1000);
+    const empty = mkDoc('restored-empty');
+    const autosave = createAutosave(store);
+    autosave.attach(empty, { persistMeta: true });
+    await autosave.flush();
+    const latest = (await store.listDocs())[0];
+    expect(latest.id).toBe(empty.meta.id);
+    expect(latest.strokes).toBe(0);
+    expect((await store.loadDoc(empty.meta.id))!.strokes).toEqual([]);
+    expect((await store.loadDoc(prior.meta.id))!.strokes).toEqual(prior.ordered());
+    autosave.dispose();
+  });
+
   it('reports failures, keeps the data dirty, retries once, and recovers', async () => {
     const store = new FakeStore();
     const as = createAutosave(store);

@@ -94,6 +94,7 @@ export function createAutosave(store: DocStore | null, opts?: AutosaveOptions): 
   let metaDirty = false;
   /** The store holds a record for the attached document. */
   let known = false;
+  let persistEmpty = false;
   /**
    * Ids (and whether meta) written since attach while reconciliation is pending. The
    * reconciliation read precedes every later write (IndexedDB orders transactions), so
@@ -183,7 +184,7 @@ export function createAutosave(store: DocStore | null, opts?: AutosaveOptions): 
       if (r) put.push(r); else del.push(id);
     }
     // A never-stored empty document gets no record (deletes still go through).
-    const meta = d.size === 0 && !known ? null : cloneMeta(d.meta);
+    const meta = d.size === 0 && !known && !persistEmpty ? null : cloneMeta(d.meta);
     if (!put.length && !del.length && !meta) return settled();
     if (sinceAttach) {
       for (const id of ids) sinceAttach.add(id);
@@ -326,12 +327,13 @@ export function createAutosave(store: DocStore | null, opts?: AutosaveOptions): 
       dirty.clear();
       metaDirty = false;
       known = false;
+      persistEmpty = Boolean(options?.persistMeta);
       snapDirty = false;
       lastSnapAt = -Infinity;
       unsub = d.subscribe(onChange);
       reconciliation = reconcile(d, gen);
       // A deliberate document adoption must persist its new recency even if ink is unchanged.
-      if (options?.persistMeta && d.size > 0) { metaDirty = true; schedule(); }
+      if (options?.persistMeta) { metaDirty = true; schedule(); }
     },
     flush() {
       return reconciliation.then(flushNow);
