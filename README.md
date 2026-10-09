@@ -111,7 +111,7 @@ reseeds it.
 | `Shift+1` / `Shift+0` | fit the drawing / 100% |
 | `P` | replay the drawing |
 | `Shift+P` | share a timelapse video of the drawing |
-| `Ctrl/⌘+S` · `Ctrl/⌘+O` · `Ctrl/⌘+E` | save `.rise` · open · export PNG |
+| `Ctrl/⌘+S` · `Ctrl/⌘+O` · `Ctrl/⌘+E` | save `.rise` · open (`.rise` or exported PNG) · export PNG |
 | `?` | gestures and keys |
 
 ## Files
@@ -121,7 +121,11 @@ reseeds it.
 - **Save project** downloads a `.rise` file (the drawing as recipes, so it reopens exactly);
   open it from the menu or drop it on the canvas. Files are format version 2 (symmetry copies);
   version 1 files still open.
-- **Export image** saves a high-resolution PNG framed to your drawing.
+- **Export image** saves a high-resolution PNG framed to your drawing. The PNG also carries the
+  project: it looks like a picture everywhere, and opened (or dropped) back into RISE Sketch it
+  becomes the full, exact drawing again, as a new document. Send it directly (chat, email,
+  AirDrop, Drive); social sites strip the drawing out and keep only the picture. A PNG without a
+  drawing in it says so.
 - **Replay** redraws the whole drawing, stroke by stroke, as it was made.
 - **Share timelapse** turns that replay into a 6–12 second MP4 of the ink growing, on your ground,
   with a `sketch.syberlabs.io` mark. It opens on the finished piece, which dissolves into the
