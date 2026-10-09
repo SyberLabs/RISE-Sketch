@@ -25,6 +25,7 @@ import { exportFilename, renderPng } from '../export/png';
 import { pickCodec, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
 import { downloadBlob } from '../persist/files';
 import { remixLink } from './remix';
+import { count } from './counters';
 import { REMIX_BASE } from '../persist/remix';
 import type { Runtime } from './runtime';
 import { View } from './view';
@@ -376,6 +377,7 @@ export class Controller implements InputSink {
       saveTool(this.savedTool);
       this.setTool({ sym }, false);
     } else this.setTool({ sym });
+    if (recentre) count('symmetry_on', true);
     this.rt.store.emit({ k: 'announce', text: sym.on ? foldsName(sym.folds) : 'Symmetry off' });
   }
 
@@ -603,6 +605,8 @@ export class Controller implements InputSink {
     }
     this.rt.store.emit({ k: 'announce', text: `${formName(r)} stroke added` });
     this.hints.committed(r, r.pools.length > 0);
+    count('stroke_first', true);
+    count(`form_${r.form.form}`, true);
   }
 
   private onErased(gone: readonly StrokeRecipe[]): void {
@@ -722,6 +726,7 @@ export class Controller implements InputSink {
    * pastes nothing in Discord), while a downloaded file drags into any of them.
    */
   private deliverTimelapse(res: TimelapseResult): void {
+    count('timelapse_done');
     const file = this.timelapseFile = new File([res.blob], exportFilename(new Date(), 'mp4'), { type: res.blob.type });
     const nav = navigator as Navigator & { userActivation?: { isActive: boolean } };
     const sheet = typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare({ files: [file] });
@@ -736,6 +741,7 @@ export class Controller implements InputSink {
     try {
       await navigator.share({ files: [file], title: SHARE_TITLE, url: this.timelapseUrl });
       this.timelapseFile = null;
+      count('timelapse_shared');
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         // the person closed the sheet: keep the video, and offer it as a file instead
@@ -752,6 +758,7 @@ export class Controller implements InputSink {
     if (!file) return;
     this.timelapseFile = null;
     downloadBlob(file, file.name);
+    count('timelapse_saved');
     this.rt.store.emit({ k: 'toast', id: 'timelapse', text: 'Timelapse saved' });
   }
 

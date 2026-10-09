@@ -1,15 +1,21 @@
-// Cloudflare Workers static-assets deploy for sketch.syberlabs.io.
-// No Worker script: Cloudflare serves the Vite build in ./dist directly.
+// Cloudflare Workers deploy for sketch.syberlabs.io: the Vite build in ./dist served as static
+// assets, plus worker/index.ts for `/e` only (the usage counters, DESIGN §8 Privacy).
 // `name` must match the Cloudflare project name.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rise-sketch",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/e"]
   },
+  // No database_id: `wrangler deploy` creates the database by this name on first deploy, or
+  // connects to it when it exists (automatic resource provisioning).
+  "d1_databases": [{ "binding": "DB", "database_name": "rise-sketch-counts" }],
   // Branch and pull-request previews (Workers Builds runs `npx wrangler preview` on non-production
-  // branches, which refuses to run without this block).
+  // branches, which refuses to run without this block). Previews bind no database, so their
+  // counts are accepted and dropped.
   "previews": {}
 }
