@@ -103,5 +103,6 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
   }));
   dialog.querySelector('[data-close]')!.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => { closed = true; dialog.remove(); entrance.focus(); void refresh(); }, { once: true });
-  document.body.append(dialog); dialog.showModal(); controls(); void run(loadList);
+  document.body.append(dialog); dialog.showModal(); controls();
+  void run(async () => { await loadList(); if (!closed) status.textContent = 'Your account backups are ready.'; });
 }
