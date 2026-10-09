@@ -108,7 +108,9 @@ try {
   const artBeforeKeys = await page.evaluate(() => window.__rise.serialize());
   await page.evaluate(() => document.activeElement.blur());
   const modifier = await page.evaluate(() => /Mac/.test(navigator.platform) ? 'Meta' : 'Control');
-  await page.keyboard.press(modifier + '+z');
+  await page.keyboard.down(modifier);
+  await page.keyboard.press('z');
+  await page.keyboard.up(modifier);
   assert.deepEqual(await page.evaluate(() => window.__rise.serialize()), artBeforeKeys, 'body focus after refresh cannot send Undo to background drawing');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.sketch-account-panel'));
