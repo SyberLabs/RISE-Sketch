@@ -68,4 +68,4 @@ try {
   mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-phone.png' });
   assert.deepEqual(env.errors, []);
   console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account refusal');
-} finally { await env?.browser.close(); await new Promise(resolve => server.close(resolve)); }
+} finally { await env?.browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
