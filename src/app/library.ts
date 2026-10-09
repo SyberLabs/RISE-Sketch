@@ -24,6 +24,7 @@ import type { RecentDoc } from './types';
 import type { Runtime } from './runtime';
 import type { Controller } from './controller';
 import { adoptDocument } from './docs';
+import { count } from './counters';
 import { VERSION } from './version';
 
 /** Recent lists at most this many documents (DESIGN §4). */
@@ -109,6 +110,7 @@ export class Library {
       rt.store.emit({ k: 'toast', id: 'open', text: 'That link is damaged or incomplete' });
       return;
     }
+    count('visit_remix');
     adoptDocument(rt, this.ctl, parsed.meta, parsed.strokes, 'none');
     const title = parsed.meta.title.trim();
     rt.store.emit({ k: 'toast', id: 'open', text: `Opened ${title && title !== DEFAULT_TITLE ? title : 'a shared drawing'}` });
@@ -131,9 +133,10 @@ export class Library {
       write = Promise.reject(err);
     }
     write.then(
-      () => store.emit({ k: 'toast', id: 'remix', text: 'Remix link copied' }),
+      () => { count('remix_copied'); store.emit({ k: 'toast', id: 'remix', text: 'Remix link copied' }); },
       async err => {
         if (await url.then(u => u === null, () => false)) {
+          count('remix_too_big');
           store.emit({ k: 'toast', id: 'remix', text: 'Too big for a link. Save the project to share it.', action: { label: 'Save', intent: { k: 'save' } } });
           return;
         }

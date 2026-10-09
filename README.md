@@ -136,6 +136,16 @@ reseeds it.
   Links made by earlier versions keep opening.
   A shared timelapse carries the remix link when it fits.
 
+## Privacy
+
+Your drawings stay on your device: autosave lives in your browser, and a remix link carries the
+drawing in the part after `#`, which is never sent to a server. To learn whether sharing works, the
+app counts a few moments as **daily totals**: visits, visits from a remix link, a first stroke (and
+its Form), symmetry switched on, a timelapse made, shared or saved, a remix link copied or too big,
+and an install. Each is one request whose whole content is the event's name; the server keeps only
+`(day, event) → count`. No cookies, no identifiers, no IP address, no URL, no drawing. With Do Not
+Track or Global Privacy Control on, offline, or in the single file, nothing is sent.
+
 ## Building and running
 
 Requires Node 20.19+ or 22.12+.
@@ -152,7 +162,8 @@ Checks: `npm run typecheck` · `npx vitest run` (unit tests) ·
 if Chrome isn't in the default location; `--budget` runs only the control-budget scenarios).
 
 The link-preview image (`public/og.png`) and the app icons are drawn by the real engine:
-`node scripts/og-image.mjs` redraws them. Served over http(s), the app is installable and
+`node scripts/og-image.mjs` redraws them. `worker/index.ts` is the only server code: it stores
+the daily counts (see Privacy) and runs for `/e` alone. Served over http(s), the app is installable and
 `public/sw.js` keeps the last good build for offline use.
 
 ## For contributors

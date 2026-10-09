@@ -5,6 +5,7 @@
 //
 //   node scripts/e2e.mjs [--only name,name] [--budget] [--keep] [--out dir] [--url URL] [--no-build]
 //   --budget runs the control-budget scenarios only (DESIGN §1.2): boot-budget, phone-layout, symmetry.
+//   `counters` serves dist-debug over http itself (counters send nothing from file://).
 //
 // The production single file (`npm run build:single`, dist-single/) carries no debug hooks:
 // window.__rise is compiled in only when __DEBUG__ is set (vite.config.ts). So the suite first runs
@@ -20,7 +21,8 @@
 // then shows the not-autosaving dot and toast, DESIGN §8), run the suite over http instead:
 //   npx vite build --mode debug && npx vite preview --outDir dist-debug --port 5191 --strictPort
 //   (in the background), then node scripts/e2e.mjs --url http://localhost:5191/
-import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, rmSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -1019,6 +1021,65 @@ await scenario('remix-phone', async ({ page, cdp }) => {
     await v.browser.close();
   }
 });
+
+// Usage counters (DESIGN §8 Privacy): over http the app POSTs bare event names to /e, and no request
+// carries a fragment, the drawing, a cookie or anything but an allow-listed name. Drawing and remix
+// links work as before. Served here because counters send nothing from file://.
+if (wants('counters') && !URL_ARG) {
+  const t0 = Date.now();
+  let env, server;
+  try {
+    const hits = [];
+    const html = readFileSync(resolve('dist-debug/index.html'));
+    server = createServer((req, res) => {
+      if (req.url.startsWith('/e')) {
+        let body = '';
+        req.on('data', c => { body += c; });
+        req.on('end', () => { hits.push({ method: req.method, url: req.url, body, cookie: req.headers.cookie, referer: req.headers.referer }); res.writeHead(204).end(); });
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/html' }).end(html);
+    });
+    await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+    const base = `http://127.0.0.1:${server.address().port}/?debug`;
+    env = await launch({ width: W, height: H, url: base });
+    const { page, cdp } = env;
+    await page.waitForFunction(() => window.__rise && window.__rise.version, { timeout: 15000 });
+    await page.evaluate(() => { localStorage.setItem('rise:firstRunDone', 'true'); });
+    await idle(page);
+    await penStroke(cdp, wave(300, 400, 900, 90, 60));
+    await idle(page);
+    assert(await count(page) === 1, 'drawing works over http');
+    await dispatch(page, { k: 'copyRemix' });
+    await toastSays(page, /Remix link copied|Couldn’t copy/);
+    const link = await R(page, () => window.__rise.remixUrl());
+    await page.goto('about:blank');
+    await page.goto(base + link.slice(link.indexOf('#')), { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__rise && window.__rise.state().replaying, { polling: 'raf', timeout: 15000 });
+    await idle(page, 30000);
+    assert(await count(page) === 1, 'the remix opens over http');
+    await sleep(500);
+    const names = hits.map(h => h.body);
+    for (const e of ['visit', 'stroke_first', 'form_sprout', 'visit_remix']) assert(names.includes(e), `${e} was counted (${names})`);
+    assert(names.filter(n => n === 'visit').length === 2, `one visit per page load (${names})`);
+    for (const h of hits) {
+      assert(h.method === 'POST' && h.url === '/e', `only POST /e (${h.method} ${h.url})`);
+      assert(/^[a-z_]{1,32}$/.test(h.body), `a bare event name (${h.body.slice(0, 40)})`);
+      assert(!h.cookie, 'no cookie');
+      assert(!h.referer || !h.referer.includes('#'), 'no fragment in the referer');
+    }
+    const errs = env.errors.filter(e => !/favicon/.test(e));
+    assert(errs.length === 0, 'console/page errors:\n  ' + errs.join('\n  '));
+    results.push({ name: 'counters', ok: true, ms: Date.now() - t0 });
+    console.log(`  PASS counters (${Date.now() - t0} ms): ${names.join(' ')}`);
+  } catch (e) {
+    results.push({ name: 'counters', ok: false, ms: Date.now() - t0, err: String(e && e.stack || e) });
+    console.log(`  FAIL counters: ${e && e.message}`);
+  } finally {
+    if (env) await env.browser.close();
+    server?.close();
+  }
+}
 
 // ---------------------------------------------------------------------------------------------
 const failed = results.filter(r => !r.ok);

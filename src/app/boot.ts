@@ -37,6 +37,7 @@ import { createStore } from './store';
 import { createPerf } from './perf';
 import { loadTool } from './tool';
 import { Controller } from './controller';
+import { count } from './counters';
 import { showStoredSnapshot } from './docs';
 import type { Runtime } from './runtime';
 
@@ -223,6 +224,8 @@ export async function boot(o: BootOptions): Promise<App> {
   };
   openLink();
   window.addEventListener('hashchange', openLink);
+  count('visit');
+  window.addEventListener('appinstalled', () => count('install'));
 
   const app: App = {
     rt, ctl, stage: o.stage, chrome: o.chrome,
