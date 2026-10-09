@@ -6,6 +6,8 @@
 //   node scripts/e2e.mjs [--only name,name] [--budget] [--keep] [--out dir] [--url URL] [--no-build]
 //   --budget runs the control-budget scenarios only (DESIGN §1.2): boot-budget, phone-layout, symmetry.
 //   `counters` serves dist-debug over http itself (counters send nothing from file://).
+//   --skip name,name drops scenarios from a --shard (CI runs those in their own job).
+//   --shard i/n runs the i-th of n deterministic slices of every scenario (CI runs them in parallel).
 //
 // The production single file (`npm run build:single`, dist-single/) carries no debug hooks:
 // window.__rise is compiled in only when __DEBUG__ is set (vite.config.ts). So the suite first runs
@@ -24,20 +26,54 @@
 import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, rmSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import UPNG from 'upng-js';
 import { launch, penStroke, mouseStroke, pinch, tap, wheel, key, wave, circle, line, sleep, measureFrames } from './harness.mjs';
 
+// Typical scenario times in ms on a GitHub ubuntu-latest runner (the PASS lines; SwiftShader), used
+// only to balance --shard. A scenario missing here (a new one) counts as UNTIMED and still runs.
+const COST = {
+  'stress-300': 268000, 'timelapse-vertical': 68000, 'draw-new-forms': 64000, timelapse: 58000, 'undo-redo-50': 48000,
+  'remix-link': 47000, 'share-hint': 42000, 'draw-each-form': 37000, replay: 34000, 'share-hint-shared': 30000,
+  hints: 24000, 'lasso-restyle-bend': 24000, 'erase-sweep': 23000, symmetry: 23000, 'rise-hold-mouse': 22000,
+  'first-run-seed': 21000, 'prod-file': 20000, documents: 20000, 'rise-file-roundtrip': 20000, 'reload-persist': 19000,
+  'select-restyle-delete': 18000, 'touch-pinch': 16000, closure: 14000, 'boot-budget': 14000, navigate: 13000,
+  'export-png': 13000, 'rise-hold-pen': 12000, 'sample-alt-click': 11000, 'radial-seeds': 11000, 'phone-layout': 4000,
+};
+const UNTIMED = 10000;
+/** The scenario names of shard `spec` ("i/n", 1-based): every `scenario('name'` in this file plus
+ * prod-file, dealt longest first to the least-loaded shard, so the split is deterministic and
+ * covers each scenario exactly once. */
+function shardOf(spec) {
+  const [i, n] = spec.split('/').map(Number);
+  if (!(n >= 1 && i >= 1 && i <= n)) { console.error(`--shard ${spec}: want i/n with 1 <= i <= n`); process.exit(2); }
+  const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const names = ['prod-file', ...[...src.matchAll(/^await scenario\('([^']+)'/gm)].map(m => m[1])];
+  const cost = name => COST[name] ?? UNTIMED;
+  names.sort((a, b) => cost(b) - cost(a) || (a < b ? -1 : 1));
+  const load = Array(n).fill(0), out = Array.from({ length: n }, () => []);
+  for (const name of names) {
+    const k = load.indexOf(Math.min(...load));
+    load[k] += cost(name);
+    out[k].push(name);
+  }
+  console.log(`shard ${i}/${n} (~${Math.round(load[i - 1] / 1000)} s): ${out[i - 1].join(', ')}`);
+  return out[i - 1];
+}
+
 const argv = process.argv.slice(2);
 const arg = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
+const SHARD = arg('--shard', '');
 const ONLY = argv.includes('--budget') ? ['boot-budget', 'phone-layout', 'symmetry']
+  : SHARD ? shardOf(SHARD).filter(n => !(arg('--skip', '') || '').split(',').includes(n))
   : (arg('--only', '') || '').split(',').filter(Boolean);
 const OUT = resolve(arg('--out', 'e2e-out'));
 const URL_ARG = arg('--url', '');
 const URL = (URL_ARG || pathToFileURL(resolve('dist-debug/index.html')).href) + '?debug';
 const PROD = resolve('dist-single/index.html');
 const wants = name => !ONLY.length || ONLY.includes(name);
+if (SHARD && !ONLY.length) { console.log('empty shard: nothing to run'); process.exit(0); }
 mkdirSync(OUT, { recursive: true });
 
 /** `vite build --mode <mode>` with the local vite; exits on failure. */
