@@ -96,8 +96,13 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
       flush: () => app.rt.autosave.flush(),
       autosaveOk: () => app.rt.autosave.ok,
       backup: downloadCurrent,
-      adopt: drawing => adoptDocument(app.rt, app.ctl, drawing.meta, drawing.strokes, 'fade'),
+      adopt: async drawing => {
+        adoptDocument(app.rt, app.ctl, drawing.meta, drawing.strokes, 'fade');
+        await app.rt.autosave.flush();
+        if (!app.rt.autosave.ok) throw new AccountError('Drawing opened, but browser autosave is unavailable. Keep the downloaded backup.');
+      },
     });
+    if (closed) return;
     pending = null; confirm.checked = false; name.value = (parsed.meta.title || 'My drawing').slice(0, 100);
     void app.ctl.library.refreshRecent(); status.textContent = 'Drawing restored. Your previous drawing is in Recent and the downloaded backup.';
   }));

@@ -68,8 +68,24 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('saved to your account'));
   assert.equal(posts, 1); assert(payload.document.strokes.length > 0, 'live art captured');
   assert.equal(payload.schema, 'sketch.account-document.v1');
+  await page.click('[data-close]');
+  await penStroke(cdp, line(90, 390, 280, 460, 8));
+  await page.evaluate(() => window.__rise.idle(15000));
+  const priorCount = await page.evaluate(() => window.__rise.strokeCount());
+  assert(priorCount > payload.document.strokes.length, 'newer browser drawing differs from older backup');
+  await page.click('.sketch-account-entry');
+  await page.waitForFunction(() => document.querySelector('[data-save]')?.disabled === false);
   await page.click('[data-confirm]'); await page.click('[data-restore]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.startsWith('Drawing restored'));
+  // Success must mean imported ink is durable; reload immediately, without an autosave delay.
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.__rise && document.querySelector('.sketch-account-entry')?.textContent === 'Account');
+  assert.equal(await page.evaluate(() => window.__rise.strokeCount()), payload.document.strokes.length, 'reload selects restored older backup');
+  await page.evaluate(() => window.__rise.dispatch({ k: 'openSheet', sheet: 'menu' }));
+  await page.waitForFunction(count => window.__rise.state().recentDocs.some(doc => doc.strokes === count), {}, priorCount);
+  await page.evaluate(() => window.__rise.dispatch({ k: 'openSheet', sheet: null }));
+  await page.click('.sketch-account-entry');
+  await page.waitForFunction(() => document.querySelector('[data-save]')?.disabled === false);
   const before = await page.evaluate(() => window.__rise.serialize());
   malformed = true; await page.click('[data-confirm]'); await page.click('[data-restore]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('failed validation'));
