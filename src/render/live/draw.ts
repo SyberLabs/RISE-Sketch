@@ -148,7 +148,7 @@ export function drawHot(ctx: Ctx2D, c: Cooked, list: Int32Array, nList: number, 
   const p = c.pts;
   for (let q = 0; q < nList; q++) {
     const i = list[q];
-    if (clip && !boxHitsDev(c.box, i, m, clip)) continue;
+    if (clip && !boxHitsDev(from && S.mv[i] < 1 ? S.mbox : c.box, i, m, clip)) continue;
     const st = c.start[i], cnt = c.count[i];
     if (cnt < 2) continue;
     widthStats(c, i);
@@ -201,7 +201,10 @@ export function drawHot(ctx: Ctx2D, c: Cooked, list: Int32Array, nList: number, 
     const ga = plan.alpha[k] * aMul, css = plan.css[k], hair = plan.mode[k] === MODE_HAIR;
     if (traceTooth && !hair) {
       HOT_BOX.x0 = Infinity; HOT_BOX.y0 = Infinity; HOT_BOX.x1 = -Infinity; HOT_BOX.y1 = -Infinity;
-      for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) growDevBox(HOT_BOX, c.box, rgPoly[hotBatcher.poly[plan.order[e]]], m);
+      for (let e = plan.first[k], end = e + plan.count[k]; e < end; e++) {
+        const i = rgPoly[hotBatcher.poly[plan.order[e]]];
+        growDevBox(HOT_BOX, from && S.mv[i] < 1 ? S.mbox : c.box, i, m);
+      }
       cur = k;
       drawToothBatch(ctx, table, css, m, ga < 1 ? ga : 1, HOT_BOX, clip, traceTooth);
       continue;

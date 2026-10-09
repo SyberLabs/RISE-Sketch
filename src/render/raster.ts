@@ -344,7 +344,7 @@ export function drawCooked(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, o?
     const i = subset ? subset[q] : q;
     if (i < 0 || i >= nP) continue;
     if (src.count[i] === 0) { maxW[i] = -1; continue; }
-    if (clip && !boxHits(c.box, i, m, clip)) { maxW[i] = -1; continue; }
+    if (clip && !(table.tooth && morph && morph.t(i) < 1) && !boxHits(c.box, i, m, clip)) { maxW[i] = -1; continue; }
     widthStats(src, i);
   }
 
@@ -399,7 +399,7 @@ export function drawCooked(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, o?
     // never above 1 (Canvas2D ignores out-of-range alpha and would keep the previous batch's)
     const ga = Math.min(plan.alpha[b] * aMul, aCap);
     if (traceTooth && !hair) {
-      batchBox(c, b, plan, m);
+      batchBox(c, b, plan, m, morph);
       cur = b;
       drawToothBatch(ctx, table, css, m, ga, BOX, clip, traceTooth);
       drawStats.fills++;
@@ -423,9 +423,25 @@ export function drawCooked(ctx: Ctx2D, c: Cooked, table: InkTable, m: Mat2x3, o?
 
 /** Device box of batch b's polys (into BOX). */
 const BOX: AABB = { x0: 0, y0: 0, x1: 0, y1: 0 };
-function batchBox(c: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3): void {
+const MORPH_BOX = new Float32Array(4);
+function batchBox(c: Cooked, b: number, plan: Batcher['plan'], m: Mat2x3, morph: DrawOpts['morph'] | null): void {
   BOX.x0 = Infinity; BOX.y0 = Infinity; BOX.x1 = -Infinity; BOX.y1 = -Infinity;
-  for (let e = plan.first[b], end = e + plan.count[b]; e < end; e++) growDevBox(BOX, c.box, batcher.poly[plan.order[e]], m);
+  for (let e = plan.first[b], end = e + plan.count[b]; e < end; e++) {
+    const i = batcher.poly[plan.order[e]];
+    growDevBox(BOX, c.box, i, m);
+    if (!morph || !(morph.t(i) < 1)) continue;
+    // The path may still be at its starting positions, outside the cooked target box.
+    const st = c.start[i], endPt = st + c.count[i];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, half = 0;
+    for (let j = st; j < endPt; j++) half = Math.max(half, c.pts[4 * j + 2] * 0.5);
+    for (let j = st; j < endPt; j++) {
+      const x = morph.from[2 * j], y = morph.from[2 * j + 1];
+      x0 = Math.min(x0, x - half); y0 = Math.min(y0, y - half);
+      x1 = Math.max(x1, x + half); y1 = Math.max(y1, y + half);
+    }
+    MORPH_BOX[0] = x0; MORPH_BOX[1] = y0; MORPH_BOX[2] = x1; MORPH_BOX[3] = y1;
+    growDevBox(BOX, MORPH_BOX, 0, m);
+  }
 }
 
 /** Build batch b's path (its polys, or their centrelines for a hairline batch); false when nothing was traced. */

@@ -9,6 +9,9 @@ import type { InkTable, Mat2x3 } from '../src/core/types';
 import { S } from '../src/core/types';
 import { drawCooked, inkTableFor } from '../src/render/raster';
 import { maskLut } from '../src/render/tooth';
+import { drawHot } from '../src/render/live/draw';
+import { PolyState, setMorphBox } from '../src/render/live/polys';
+import { ArcClock } from '../src/render/live/timing';
 import { assignVariant } from '../src/ink/color';
 import { SMUDGE_LEVELS, TOOTH_LEVELS, ToothPass, toothLevel, toothLut, toothSolid } from '../src/ink/tooth';
 import { synthCooked, along } from './render-core.fixtures';
@@ -127,6 +130,34 @@ describe('charcoal fills', () => {
     expect(log.length).toBe(2);
     const [a, b] = log.map(l => l.at!);
     expect(b[4]).toBe(a[4] + a[2]);   // the second chunk starts where the first ends
+  });
+
+  it('the scratch includes the starting geometry while a charcoal stroke morphs', () => {
+    const c = ribbon(20), from = new Float32Array(c.nPts * 2);
+    for (let j = 0; j < c.nPts; j++) { from[2 * j] = c.pts[4 * j]; from[2 * j + 1] = 450; }
+    const { ctx, log } = recCtx(1024, 1024);
+    drawCooked(ctx, c, table('charcoal', 'night'), M(1), { morph: { from, t: () => 0 } });
+    const a = log[0].at!;
+    expect(a[5] + a[7]).toBeGreaterThan(460);
+    const clipped = recCtx(1024, 1024);
+    drawCooked(clipped.ctx, c, table('charcoal', 'night'), M(1), {
+      morph: { from, t: () => 0 }, clipDev: { x0: 0, y0: 430, x1: 220, y1: 480 },
+    });
+    expect(clipped.log[0].at![5]).toBe(430);
+    expect(clipped.log[0].at![5] + clipped.log[0].at![7]).toBeGreaterThan(460);
+  });
+
+  it('live charcoal draws a morph whose starting geometry is inside the clip and target outside', () => {
+    const c = ribbon(20), from = new Float32Array(c.nPts * 2), state = new PolyState();
+    for (let j = 0; j < c.nPts; j++) { from[2 * j] = c.pts[4 * j]; from[2 * j + 1] = 450; }
+    state.ensure(1); state.keyFrom(c, 0, 0); state.hv[0] = 1; state.mv[0] = 0;
+    setMorphBox(state, 0, c, from);
+    const { ctx, log } = recCtx(1024, 1024);
+    drawHot(ctx, c, Int32Array.of(0), 1, table('charcoal', 'night'), M(1),
+      { x0: 0, y0: 430, x1: 220, y1: 480 },
+      { clock: new ArcClock(), now: 0, tip: 200, H: 0, tau: 220, beyond: 0, sVis: Infinity }, state, from);
+    expect(log[0].at![5]).toBe(430);
+    expect(log[0].at![5] + log[0].at![7]).toBeGreaterThan(460);
   });
 
   it('far out, sub-half-pixel texels: one plain fill at the mean coverage', () => {
