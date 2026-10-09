@@ -10,13 +10,14 @@
  * error for a manifest link there.
  */
 import { boot } from './app/boot';
+import { mountAccountPortal } from './account/portal';
 import { installDebug } from './app/debug';
 
 const stage = document.getElementById('stage') as HTMLElement;
 const chrome = document.getElementById('chrome') as HTMLElement;
 
 boot({ stage, chrome }).then(
-  app => { if (__DEBUG__ && new URLSearchParams(location.search).has('debug')) installDebug(app); },
+  app => { mountAccountPortal(app); if (__DEBUG__ && new URLSearchParams(location.search).has('debug')) installDebug(app); },
   err => console.error('[rise] boot failed', err),
 );
 

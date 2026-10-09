@@ -308,7 +308,10 @@ export async function decodeRemix(payload: string): Promise<string> {
 /** The remix link for a document, or null when it would be longer than MAX_LINK. */
 export async function remixUrl(doc: Doc, app: string, looksSame: LooksSame): Promise<string | null> {
   const strokes = doc.ordered().map(r => carried(r, looksSame));
-  const url = REMIX_BASE + '#r=' + await encodeRemix(serializeDoc(doc.meta, strokes, app));
+  // Local opening/edit timestamps must not change the link for identical carried art.
+  // Creation time remains stable; existing version 1/2 links still decode unchanged.
+  const meta = { ...doc.meta, updated: doc.meta.created };
+  const url = REMIX_BASE + '#r=' + await encodeRemix(serializeDoc(meta, strokes, app));
   return url.length <= MAX_LINK ? url : null;
 }
 

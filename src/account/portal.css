@@ -1,0 +1,26 @@
+.sketch-account-entry { position: fixed; top: max(12px,env(safe-area-inset-top)); right: max(12px,env(safe-area-inset-right)); z-index: 30; display: grid; place-items: center; min-width: 78px; min-height: 44px; padding: 0 14px; border: 1px solid #c4a2ff; border-radius: 999px; background: linear-gradient(120deg,#283e63,#44246a,#641e57); box-shadow: 0 0 24px #b480ff35; color: #fff; text-decoration: none; font: 600 13px/1.2 system-ui,sans-serif; }
+.sketch-account-entry:focus-visible,.sketch-account-panel :focus-visible { outline: 2px solid #88eedf; outline-offset: 3px; }
+.sketch-account-panel { box-sizing: border-box; width: min(440px,calc(100vw - 28px)); max-height: calc(100dvh - 30px); overflow: auto; border: 1px solid #bd93ff; border-radius: 24px; padding: 24px; background: radial-gradient(ellipse at top right,#63307455,transparent 65%),#0e1127; box-shadow: 0 0 65px #9d60fa25; color: #f6f0ff; font: 14px/1.6 system-ui,sans-serif; }
+.sketch-account-panel::backdrop { background: #060418b8; backdrop-filter: blur(6px); }
+.sketch-account-panel header { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.sketch-account-panel small { color:#b9abef; letter-spacing:.16em; font-size:10px; }
+.sketch-account-panel h1 { font-size:36px; margin:8px 0; font-weight:500; }
+.sketch-account-panel h2 { font-size:20px; margin:24px 0 8px; }
+.sketch-account-panel p { color:#d3cce5; overflow-wrap:anywhere; }
+.sketch-account-panel label { display:block; margin:10px 0 5px; }
+.sketch-account-panel input:not([type=checkbox]),.sketch-account-panel select { width:100%; box-sizing:border-box; border:1px solid #635877; border-radius:10px; padding:10px; color:#fff; background:#171b30; font:inherit; }
+.sketch-account-panel button { min-height:44px; border:1px solid #9577b8; border-radius:12px; padding:8px 12px; background:#4c377333; color:#fff; font:inherit; cursor:pointer; }
+.sketch-account-panel button:disabled { opacity:.5; cursor:default; }
+.sketch-account-actions,.sketch-account-links { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+.sketch-account-panel a { color:#93e6ee; }
+.sketch-account-confirm { display:flex!important; align-items:center; gap:8px; }
+.sketch-account-panel [data-status] { color:#b9f1e7; }
+
+.sketch-account-entry[hidden] { display: none; }
+.sketch-account-list-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:24px; }
+.sketch-account-list-heading h2 { margin:0; }
+.sketch-account-panel [data-detail] { padding:10px 12px; border:1px solid #635877; border-radius:12px; background:linear-gradient(120deg,#283e632e,#641e572e); font-size:13px; }
+.sketch-account-confirm { min-height:44px; cursor:pointer; }
+.sketch-account-confirm input { flex-shrink:0; }
+.sketch-account-panel [data-close] { min-width:44px; }
+@media (max-width:600px) { .sketch-account-panel input:not([type=checkbox]),.sketch-account-panel select { font-size:16px; } }

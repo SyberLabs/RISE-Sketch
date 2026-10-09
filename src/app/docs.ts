@@ -22,7 +22,8 @@ export function adoptDocument(rt: Runtime, ctl: Controller, meta: DocMeta, strok
   ctl.leaveDocument();
   rt.renderer.live.fastForward();
   void rt.autosave.snapshotNow(false);
-  const doc = createDoc(meta, strokes);
+  // Opening/restoring selects this document for the next boot without changing its art.
+  const doc = createDoc({ ...meta, updated: Date.now() }, strokes);
   const old = rt.scene;
   const scene = rt.makeScene(doc);
   rt.doc = doc;
@@ -31,7 +32,7 @@ export function adoptDocument(rt: Runtime, ctl: Controller, meta: DocMeta, strok
   rt.renderer.rebind(doc, scene, anim);
   old.dispose();
   doc.subscribe(ch => ctl.docChanged(ch));
-  rt.autosave.attach(doc);
+  rt.autosave.attach(doc, { persistMeta: true });
   ctl.adoptView(meta.ground, meta.camera);
   ctl.refreshDoc();
   if (doc.size > 0) {
