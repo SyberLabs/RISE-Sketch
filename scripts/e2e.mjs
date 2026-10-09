@@ -605,13 +605,13 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   near(v.duration, r.durationMs / 1000, 0.1, 'the container duration matches the frames');
   console.log(`    mean |Δ|: fed seam ${v.fedSeam.toFixed(4)}, decoded seam ${v.seam.toFixed(2)}, codec error frame 0 ${v.err0.toFixed(2)}, last ${v.errN.toFixed(2)}, grow ${v.grow.toFixed(2)}`);
   // Frame 0 is the finished piece and the hold ends on it: the clip loops without a seam.
-  // The app's claim, on the frames it hands the encoder: the last is the first. Not bit-exact on a
-  // GPU canvas (≤ 0.001 measured: a few hundred pixels where strokes cross round differently); a
-  // seam anyone could see is orders of magnitude more (the growing piece is 20+ from the finished one).
+  // The app's claim, on the frames it hands the encoder: the last is the first. Not always
+  // bit-exact (0–0.001 measured on macOS and the Linux runner: at most a few hundred pixels where
+  // strokes cross, invisible); a seam anyone could see is far more (the growing piece is 20+ away).
   assert(v.fedSeam < 0.01, `the last frame fed to the encoder is the first (mean |Δ| ${v.fedSeam.toFixed(4)})`);
   // In the video, the two ends differ by codec noise only: no more than the codec's own error on
-  // frame 0 (decoded vs the frame it was fed). Measured: macOS VideoToolbox seam 3.0–3.2 vs error
-  // 5.7–6.1; software H.264 seam 3.5–4.9 vs error 6.4–7.2 (macOS) and Linux CI, see the PR.
+  // frame 0 (decoded vs the frame it was fed). Measured seam vs that error: macOS VideoToolbox
+  // 3.0–3.2 vs 5.7–6.1; macOS software H.264 3.5–4.1 vs 6.4–7.2; Linux runner (OpenH264) 4.6–4.8 vs 6.3–6.4.
   assert(v.seam <= v.err0, `the video's last frame is its first, up to codec noise (seam ${v.seam.toFixed(2)} vs frame 0 codec error ${v.err0.toFixed(2)})`);
   assert(v.grow > 2, `the ink grows: the middle differs from the finished piece (mean |Δ| ${v.grow.toFixed(2)})`);
 });
