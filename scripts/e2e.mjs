@@ -1246,8 +1246,18 @@ if (wants('counters') && !URL_ARG) {
     });
     await new Promise(ok => server.listen(0, '127.0.0.1', ok));
     const base = `http://127.0.0.1:${server.address().port}/?debug`;
-    env = await launch({ width: W, height: H, url: base });
+    // Keep this metrics fixture independent of production identity/CORS availability.
+    // Account save/restore authorization is exercised by account-e2e.mjs.
+    env = await launch({ width: W, height: H, url: 'about:blank' });
     const { page, cdp } = env;
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      if (req.url() !== 'https://syberlabs.io/admin/api/v1/account') { void req.continue(); return; }
+      void req.respond({ status: 200, contentType: 'application/json', headers: {
+        'Access-Control-Allow-Origin': new globalThis.URL(base).origin, 'Access-Control-Allow-Credentials': 'true',
+      }, body: JSON.stringify({ version: 1, user: { id: 'metrics-fixture', label: 'Metrics fixture' } }) });
+    });
+    await page.goto(base, { waitUntil: 'load' });
     await page.waitForFunction(() => window.__rise && window.__rise.version, { timeout: 15000 });
     await page.evaluate(() => { localStorage.setItem('rise:firstRunDone', 'true'); });
     await idle(page);
