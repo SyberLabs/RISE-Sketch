@@ -101,7 +101,20 @@ try {
     await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('up to date'));
   }
   const acceptedUploads = posts;
-  await page.click('[data-close]');
+  await page.focus('#sketch-backup-name');
+  const nameBeforeKeys = await page.$eval('#sketch-backup-name', e => e.value);
+  await page.keyboard.type('x'); await page.keyboard.press('Backspace');
+  assert.equal(await page.$eval('#sketch-backup-name', e => e.value), nameBeforeKeys, 'native text editing still works inside the keyboard boundary');
+  const artBeforeKeys = await page.evaluate(() => window.__rise.serialize());
+  await page.evaluate(() => document.activeElement.blur());
+  const modifier = await page.evaluate(() => /Mac/.test(navigator.platform) ? 'Meta' : 'Control');
+  await page.keyboard.down(modifier);
+  await page.keyboard.press('z');
+  await page.keyboard.up(modifier);
+  assert.deepEqual(await page.evaluate(() => window.__rise.serialize()), artBeforeKeys, 'body focus after refresh cannot send Undo to background drawing');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.sketch-account-panel'));
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.sketch-account-entry')), true, 'Escape closes the account modal and returns trigger focus after body focus');
   await penStroke(cdp, line(90, 390, 280, 460, 8));
   await page.evaluate(() => window.__rise.idle(15000));
   const priorCount = await page.evaluate(() => window.__rise.strokeCount());

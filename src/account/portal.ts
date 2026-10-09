@@ -134,8 +134,16 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
     pending = null; confirm.checked = false; name.value = (parsed.meta.title || 'My drawing').slice(0, 100);
     void app.ctl.library.refreshRecent(); status.textContent = 'Drawing restored. Your previous drawing is in Recent and the downloaded backup.';
   }));
+  // Disabled controls may return focus to body. The drawing's window shortcuts must
+  // stay outside this modal even then; native form/button keyboard defaults still work.
+  const accountKeys = (event: KeyboardEvent) => {
+    if (!dialog.open) return;
+    event.stopPropagation();
+    if (event.key === 'Escape') { event.preventDefault(); dialog.close(); }
+  };
+  window.addEventListener('keydown', accountKeys, true);
   dialog.querySelector('[data-close]')!.addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => { closed = true; dialog.remove(); entrance.focus(); void refresh(); }, { once: true });
+  dialog.addEventListener('close', () => { closed = true; window.removeEventListener('keydown', accountKeys, true); dialog.remove(); entrance.focus(); void refresh(); }, { once: true });
   document.body.append(dialog); dialog.showModal(); controls();
   void run('Loading your account backups…', async () => { await loadList(); if (!closed) status.textContent = rows.length ? 'Your account backups are ready.' : 'No account backups yet. Save your drawing above to keep a private copy.'; });
 }
