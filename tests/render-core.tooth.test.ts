@@ -1,39 +1,44 @@
 /**
- * Charcoal rendering (render/tooth.ts through drawCooked, DESIGN §6.4): per batch, the fringe and
- * the narrower core are laid as coverage masks in a scratch canvas, tinted, and composited once with
- * the ground's op; the masks are world-anchored and colour-free; far out the batch is a plain fill
- * at the mean coverage; non-charcoal strokes are untouched.
+ * Charcoal rendering (render/tooth.ts through drawCooked, DESIGN §6.4): one coverage per draw call
+ * (a smoothed density field from every batch's contact rings and drag lanes, plus the page's tooth
+ * and its finer octaves, thresholded in the alpha channel), then one tinted composite per pigment
+ * with the ground's op; far out a plain fill at the mean coverage; non-charcoal strokes untouched.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { InkTable, Mat2x3 } from '../src/core/types';
 import { S } from '../src/core/types';
 import { drawCooked, inkTableFor } from '../src/render/raster';
-import { maskLut } from '../src/render/tooth';
 import { drawHot } from '../src/render/live/draw';
 import { PolyState, setMorphBox } from '../src/render/live/polys';
 import { ArcClock } from '../src/render/live/timing';
 import { assignVariant } from '../src/ink/color';
-import { SMUDGE_LEVELS, TOOTH_LEVELS, ToothPass, toothLevel, toothLut, toothSolid } from '../src/ink/tooth';
+import { TOOTH_CONTACT, toothInk, toothLevel, toothSolid } from '../src/ink/tooth';
+import { nibWidth } from '../src/ink/nibs';
 import { synthCooked, along } from './render-core.fixtures';
 
 interface Pat { kind: 'mask'; size: number; m: DOMMatrix2DInit | null; setTransform(m: DOMMatrix2DInit): void }
-interface Op { op: string; style?: unknown; alpha: number; comp: string; halfW?: number; m?: DOMMatrix2DInit | null; at?: number[] }
+interface Op { op: string; style?: unknown; alpha: number; comp: string; halfW?: number; m?: DOMMatrix2DInit | null; at?: number[]; rule?: string }
 
 /** A recording 2D context (fills with the path's half height, drawImage, fillRect). */
 function recCtx(w: number, h: number) {
-  const log: Op[] = [];
+  const log: Op[] = [], stack: unknown[][] = [];
   let y0 = Infinity, y1 = -Infinity;
   const pt = (_x: number, y: number) => { y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
   const ctx = {
     canvas: { width: w, height: h },
-    fillStyle: '' as unknown, strokeStyle: '', globalAlpha: 1, globalCompositeOperation: 'source-over', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter',
-    save() {}, restore() {}, setTransform() {}, clearRect() {}, beginPath() { y0 = Infinity; y1 = -Infinity; },
+    fillStyle: '' as unknown, strokeStyle: '', globalAlpha: 1, globalCompositeOperation: 'source-over', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', imageSmoothingEnabled: true,
+    save() { stack.push([ctx.globalCompositeOperation, ctx.globalAlpha, ctx.fillStyle]); },
+    restore() { const st = stack.pop(); if (st) [ctx.globalCompositeOperation, ctx.globalAlpha, ctx.fillStyle] = st as [string, number, unknown]; },
+    setTransform() {}, clearRect() {}, rect() {}, clip() {}, beginPath() { y0 = Infinity; y1 = -Infinity; },
     moveTo: pt, lineTo: pt, quadraticCurveTo(_a: number, _b: number, x: number, y: number) { pt(x, y); }, closePath() {}, arc() {}, stroke() {},
-    fill() {
+    fill(rule?: string) {
       const s = ctx.fillStyle as Pat;
-      log.push({ op: 'fill', style: s, alpha: ctx.globalAlpha, comp: ctx.globalCompositeOperation, halfW: (y1 - y0) / 2, m: typeof s === 'object' ? { ...s.m } : null });
+      log.push({ op: 'fill', style: s, alpha: ctx.globalAlpha, comp: ctx.globalCompositeOperation, halfW: (y1 - y0) / 2, m: typeof s === 'object' ? { ...s.m } : null, rule });
     },
-    fillRect() { log.push({ op: 'fillRect', style: ctx.fillStyle, alpha: ctx.globalAlpha, comp: ctx.globalCompositeOperation }); },
+    fillRect() {
+      const s = ctx.fillStyle as Pat;
+      log.push({ op: 'fillRect', style: s, alpha: ctx.globalAlpha, comp: ctx.globalCompositeOperation, m: typeof s === 'object' ? { ...s.m } : null });
+    },
     drawImage(_c: unknown, ...a: number[]) { log.push({ op: 'drawImage', alpha: ctx.globalAlpha, comp: ctx.globalCompositeOperation, at: a }); },
     putImageData() {},
     createPattern(c: { width: number }): Pat { return { kind: 'mask', size: c.width, m: null, setTransform(m) { this.m = m; } }; },
@@ -41,7 +46,7 @@ function recCtx(w: number, h: number) {
   return { ctx: ctx as unknown as CanvasRenderingContext2D, log };
 }
 
-/** Every canvas the module makes (masks, the scratch), with its recording context. */
+/** Every canvas the module makes (grain maps, the scratches), with its recording context. */
 const made: { width: number; height: number; rec: ReturnType<typeof recCtx> }[] = [];
 const g = globalThis as Record<string, unknown>;
 beforeAll(() => {
@@ -55,8 +60,13 @@ beforeAll(() => {
   };
 });
 afterAll(() => { delete g.ImageData; delete g.document; });
-/** The scratch's log: the most recent canvas whose context filled something. */
-const scratchLog = () => made.filter(c => c.rec && c.rec.log.length).at(-1)!.rec.log;
+/** The log of the scratch that holds the coverage (the one that draws pattern fills). */
+const covLog = () => made.find(c => c.rec && c.rec.log.some(l => typeof l.style === 'object' && l.style !== null && (l.style as Pat).kind === 'mask'))!.rec.log;
+/** The log of the scratch that holds the density field (lighter fills of white). */
+const denLog = () => made.find(c => c.rec && c.rec.log.some(l => l.op === 'fill' && l.comp === 'lighter'))!.rec.log;
+/** The log of the scratch where a pigment is cut and tinted (its fills are opaque white). */
+const inkLog = () => made.find(c => c.rec && c.rec.log.some(l => l.op === 'fill' && l.comp === 'source-over' && l.style === '#fff'))!.rec.log;
+const clearLogs = () => { for (const c of made) if (c.rec) c.rec.log.length = 0; };
 
 const rows = () => { const r = new Float32Array(2 * S.STRIDE); r[S.ALT] = Math.PI / 2; return r; };
 function table(nib: 'charcoal' | 'brush', ground: 'night' | 'paper', origin: [number, number] = [0, 0]): InkTable {
@@ -67,27 +77,55 @@ function table(nib: 'charcoal' | 'brush', ground: 'night' | 'paper', origin: [nu
   }, ground);
 }
 const ribbon = (tone: number) => synthCooked([{ pts: along([[0, 50], [200, 50]], 2.4, () => 20), tone }]);
+/** One ribbon in two chunks whose pressure buckets differ (tone 10, then 25). */
+const twoTones = () => synthCooked([
+  { pts: along([[0, 50], [100, 50]], 2.4, () => 20), tone: 10 },
+  { pts: along([[100, 50], [200, 50]], 2.4, () => 20), tone: 25 },
+]);
 const M = (s: number, e = 0, f = 0): Mat2x3 => Float64Array.of(s, 0, 0, s, e, f);
 
 describe('charcoal fills', () => {
   it('only charcoal tables carry a tooth', () => {
     expect(table('brush', 'night').tooth).toBeUndefined();
-    expect(table('charcoal', 'night').tooth).toEqual({ cell: 1, ox: 0, oy: 0, smudge: 0 });
+    expect(table('charcoal', 'night').tooth).toEqual({ cell: 1, ox: 0, oy: 0, smudge: 0, w: nibWidth('charcoal', 9, 0.5, NaN, 'pen', Math.PI / 2) });
   });
 
-  it('a batch: fringe mask at full width, core mask at 0.62 of it, tinted, then one composite with the ground op', () => {
+  it('a draw call: density contact steps, grain, threshold, then one tinted composite with the ground op', () => {
     for (const ground of ['night', 'paper'] as const) {
       const t = table('charcoal', ground);
       const { ctx, log } = recCtx(1024, 1024);
+      clearLogs();
       drawCooked(ctx, ribbon(20), t, M(2));
-      expect(log.map(l => l.op)).toEqual(['drawImage']);
-      expect(log[0].comp).toBe(t.op);
-      expect(log[0].alpha).toBe(t.alphaMax);
-      const s = scratchLog().slice(-3);
-      expect(s.map(l => l.op)).toEqual(['fill', 'fill', 'fillRect']);
-      expect([(s[0].style as Pat).kind, (s[1].style as Pat).kind, s[2].style, s[2].comp]).toEqual(['mask', 'mask', t.css[20], 'source-in']);
-      expect(s[1].halfW! / s[0].halfW!).toBeCloseTo(0.62, 1);
+      expect(log.map(l => [l.op, l.comp, l.alpha])).toEqual([['drawImage', t.op, t.alphaMax]]);
+      // density: one nonzero fill per contact step, outside in: rings add, drag lanes cut
+      const d = denLog().filter(l => l.op === 'fill');
+      expect(d.map(l => [l.comp, l.rule])).toEqual(TOOTH_CONTACT.map(([, a]) => [a >= 0 ? 'lighter' : 'destination-out', 'nonzero']));
+      for (let i = 1; i < d.length; i++) expect(d[i].halfW! / d[0].halfW!).toBeCloseTo(TOOTH_CONTACT[i][0], 1);
+      // ... then inverted to 1 − D
+      expect(denLog().filter(l => l.op === 'fillRect').map(l => l.comp)).toEqual(['xor']);
+      // coverage: the tooth's depth 1 − H, plus 1 − D, xor to H + D − 1, then the gain 2^3 (upright)
+      const c = covLog().map(l => [l.op, l.comp]);
+      expect(c).toEqual([
+        ['fillRect', 'source-over'], ['drawImage', 'lighter'], ['fillRect', 'xor'],
+        ...new Array(3).fill(['drawImage', 'lighter']),
+      ]);
+      // one pigment: the ribbon cut from the coverage and tinted with the heaviest bucket of its depth
+      const k = inkLog().map(l => [l.op, l.comp, l.op === 'fillRect' ? l.style : null]);
+      expect(k).toEqual([['fill', 'source-over', null], ['drawImage', 'destination-in', null], ['fillRect', 'source-in', t.css[toothInk(20)]]]);
     }
+  });
+
+  it('a stroke whose pressure bucket changes is one coverage and one composite (no seam at the change)', () => {
+    const { ctx, log } = recCtx(1024, 1024);
+    clearLogs();
+    drawCooked(ctx, twoTones(), table('charcoal', 'paper'), M(2));
+    expect(log.map(l => l.op)).toEqual(['drawImage']);
+    const ink = inkLog().filter(l => l.op === 'fill');
+    expect(ink.length).toBe(1);
+    // ... while each chunk still lays down its own pressure's density
+    const d = denLog().filter(l => l.op === 'fill');
+    expect(d.length).toBe(2 * TOOTH_CONTACT.length);
+    expect(d[0].alpha).not.toBeCloseTo(d[TOOTH_CONTACT.length].alpha, 3);
   });
 
   it('a brush stroke still fills once with its colour', () => {
@@ -102,11 +140,12 @@ describe('charcoal fills', () => {
     const t = table('charcoal', 'paper', origin);
     const world = (m: Mat2x3, x: number, y: number) => {
       const { ctx, log } = recCtx(4096, 4096);
+      clearLogs();
       drawCooked(ctx, ribbon(20), t, m);
       const [, , , , dx0, dy0] = log[0].at!;                  // where the scratch lands on the target
-      const p = scratchLog().slice(-3)[0].m!;
+      const p = covLog().filter(l => l.op === 'fillRect' && l.m).at(-1)!.m!; // the base octave
       const sx = m[0] * x + m[4] - dx0, sy = m[3] * y + m[5] - dy0; // scratch px of the doc point
-      // mask px → doc units (a / m0 = cell / up), as world coordinates modulo the tooth period
+      // texel → doc units (a / m0 = cell), as world coordinates modulo the tooth period
       return [((sx - p.e!) / p.a!) * (p.a! / m[0]), ((sy - p.f!) / p.d!) * (p.d! / m[3])];
     };
     const wrap = (v: number) => ((v % 512) + 512) % 512;
@@ -116,15 +155,36 @@ describe('charcoal fills', () => {
     expect(wrap(a[1])).toBeCloseTo(wrap(origin[1] + 50), 4);
   });
 
-  it('zoomed in past 2.5 device px a texel, the masks are built at 2× (smooth grain contours)', () => {
-    const { ctx } = recCtx(1024, 1024);
-    drawCooked(ctx, ribbon(20), table('charcoal', 'night'), M(4));
-    const s = scratchLog().slice(-3);
-    expect((s[0].style as Pat).size).toBe(1024);
-    expect(s[0].m!.a).toBe(2);
+  it('zoomed in, finer octaves of the same tooth fade in (cell / 4, then cell / 16), still on the page', () => {
+    const grain = (s: number) => {
+      const { ctx } = recCtx(4096, 4096);
+      clearLogs();
+      drawCooked(ctx, ribbon(20), table('charcoal', 'night'), M(s));
+      return covLog().filter(l => l.op === 'fillRect' && l.m);
+    };
+    expect(grain(1).length).toBe(1);
+    const z = grain(40).slice(0, 3);  // the first chunk
+    expect(z.map(l => l.m!.a! / 40)).toEqual([1 / 16, 1 / 4, 1]);
+    expect(z.reduce((s, l) => s + l.alpha, 0)).toBeCloseTo(1, 9);  // the octaves share the grain's weight
+    for (const l of z) expect([l.m!.e, l.m!.f]).toEqual([z[2].m!.e, z[2].m!.f]);
   });
 
-  it('a batch wider than the scratch is drawn in chunks that tile its box', () => {
+  it('the density grid is anchored at the stroke origin, so two tiles of one view agree', () => {
+    const at = (clip: { x0: number; y0: number; x1: number; y1: number }) => {
+      const { ctx, log } = recCtx(4096, 4096);
+      clearLogs();
+      drawCooked(ctx, ribbon(20), table('charcoal', 'night'), M(8, 13.3, 7.1), { clipDev: clip });
+      const up = covLog().find(l => l.op === 'drawImage')!.at!;
+      return { x: up[4] + log[0].at![4], cell: up[6] / up[2] };  // grid origin on the target, device px per density texel
+    };
+    const a = at({ x0: 0, y0: 0, x1: 700, y1: 1024 }), b = at({ x0: 700, y0: 0, x1: 1700, y1: 1024 });
+    expect(a.cell).toBeCloseTo(b.cell, 12);
+    const k = (b.x - a.x) / a.cell;
+    expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-9);
+    expect(((a.x - 13.3) / a.cell) % 1).toBeCloseTo(0, 9);
+  });
+
+  it('a region wider than the scratch is drawn in chunks that tile it', () => {
     const { ctx, log } = recCtx(4096, 4096);
     drawCooked(ctx, ribbon(20), table('charcoal', 'night'), M(8));
     expect(log.length).toBe(2);
@@ -160,24 +220,11 @@ describe('charcoal fills', () => {
     expect(log[0].at![5] + log[0].at![7]).toBeGreaterThan(460);
   });
 
-  it('far out, sub-half-pixel texels: one plain fill at the mean coverage', () => {
+  it('far out, sub-half-pixel texels: one plain fill in the pigment at the mean coverage', () => {
     const { ctx, log } = recCtx(1024, 1024);
     const t = table('charcoal', 'night');
     drawCooked(ctx, ribbon(20), t, M(0.3));
-    expect(log.map(l => [l.op, l.style])).toEqual([['fill', t.css[20]]]);
+    expect(log.map(l => [l.op, l.style])).toEqual([['fill', t.css[toothInk(20)]]]);
     expect(log[0].alpha).toBeCloseTo(toothSolid(toothLevel(20), 0), 6);
-  });
-
-  it('fringe then core, alpha-composited, cover exactly max(core, fringe): no rim where both are partial', () => {
-    for (let l = 0; l < TOOTH_LEVELS; l++) {
-      for (let s = 0; s < SMUDGE_LEVELS; s++) {
-        const f = maskLut(l, s, ToothPass.Fringe), x = maskLut(l, s, ToothPass.Core);
-        const c = toothLut(l, s, ToothPass.Core), fo = toothLut(l, s, ToothPass.Fringe);
-        for (let v = 0; v < 256; v++) {
-          const got = f[v] / 255 + (x[v] / 255) * (1 - f[v] / 255);
-          expect(Math.abs(got - Math.max(c[v], fo[v]) / 255)).toBeLessThan(1.5 / 255);
-        }
-      }
-    }
   });
 });

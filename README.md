@@ -69,7 +69,7 @@ else, and switch it on again.
 
 **Charcoal** catches on the paper's tooth: press harder and it fills the grain, lay the pen over
 and it goes broad and smudgy, and its edges break up. The grain belongs to the page, so it stays put
-when you pan or zoom, and a second pass catches the same peaks.
+when you pan or zoom (zoom in and finer tooth appears), and a second pass catches the same peaks.
 
 **Night** composites ink as light (overlaps glow); **Paper** composites it as pigment (overlaps
 glaze). The same drawing works on both; press `G` to switch.

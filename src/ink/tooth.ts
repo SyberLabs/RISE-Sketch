@@ -9,9 +9,10 @@
  * The map is anchored to the world: a texel is `toothCell(z)` doc units, the nearest power of two
  * to one sp at the stroke's commit zoom, so strokes drawn at zooms within one octave share the
  * same grain (a second pass of charcoal catches the same peaks), and the grain scales with the ink
- * when you zoom. How much of the tooth a mark fills (`toothLut`) depends on pressure, through the
- * poly's tone (its pressure bucket), and on the pen's lean at pen-down (`toothSmudge`): the side of
- * the stick smears pigment into the valleys.
+ * when you zoom. How much of the tooth a mark fills depends on its density: pressure, through the
+ * poly's tone (its pressure bucket, `toothDensity`), times the stick's contact across the ribbon
+ * (`toothProfile`: full in the middle, thin at the edges, with drag lanes). The lean at pen-down
+ * (`toothSmudge`) softens the grain: the side of the stick smears pigment over the peaks.
  *
  * Presentation only: the tooth never feeds geometry, ids or sceneHash. It still uses only the
  * §7.5 allow-list and det.ts, so the bytes are identical on every engine.
@@ -21,6 +22,7 @@ import type { RecipeCore, SampleBuf, ToothSpec } from '../core/types';
 import { dcos, dsin, rnd, Ch, PI, TAU } from '../core/det';
 import { smoothstep } from '../core/num';
 import { TONES } from './color';
+import { nibWidth } from './nibs';
 
 /** Heightmap side, texels (a power of two: every octave tiles it exactly). */
 export const TOOTH_N = 512;
@@ -33,10 +35,24 @@ const PAPER_SEED = 0x7007;
 export const SMUDGE_LEVELS = 4;
 /** Pressure levels: the six pressure buckets of the tone index (tone = pBucket·5 + dBucket). */
 export const TOOTH_LEVELS = 6;
-/** The two passes of a charcoal fill: the full-width fringe catches only the peaks; the core is denser. */
-export const enum ToothPass { Fringe = 0, Core = 1 }
-/** Width of the core pass as a fraction of the ribbon (tessellation widthScale). */
-export const CORE_WIDTH = 0.62;
+/**
+ * The stick's contact across the ribbon, laid down outside in: each step either adds density inside
+ * a width scale or (negative) cuts that share of what is there, so the edges catch only the peaks,
+ * the middle is full, and the cuts leave drag lanes until the next ring adds density again.
+ */
+export const TOOTH_CONTACT: readonly (readonly [scale: number, amount: number])[] = [
+  [1, 0.2], [0.8, 0.3], [0.7, -0.45], [0.56, 0.5], [0.4, -0.35], [0.3, 0.496],
+];
+
+/** Density profile 0..1 at u = |offset| / half-width across the ribbon (0 = centreline). */
+export function toothProfile(u: number): number {
+  let p = 0;
+  for (const [scale, amount] of TOOTH_CONTACT) if (u < scale) p = amount >= 0 ? p + amount : p * (1 + amount);
+  return p;
+}
+
+/** Depth buckets per pressure bucket in a tone (tone = pBucket·DEPTHS + dBucket). */
+const DEPTHS = TONES / TOOTH_LEVELS;
 
 // ---------------------------------------------------------------------------- heightmap
 
@@ -136,39 +152,32 @@ export function toothMaps(): { crisp: Uint8Array; soft: Uint8Array } {
 
 /** Pressure level 0..5 of a colour-table index (tone = index mod TONES; tone = pBucket·5 + dBucket). */
 export function toothLevel(tableIndex: number): number {
-  return ((tableIndex % TONES) / 5) | 0;
+  return ((tableIndex % TONES) / DEPTHS) | 0;
 }
 
 /**
- * Threshold `t` of a pass: heavier pressure lowers the threshold so the
- * charcoal reaches further down into the valleys. Level 0 (lightest) catches the top third of the
- * tooth in the core; level 5 (heaviest) fills about 85 %. The fringe sits 0.2 higher.
+ * The colour-table index a charcoal mark is tinted with: its tone at the heaviest pressure bucket.
+ * Pigment is the same at any pressure (pressure shows as how much of the tooth it fills), so the
+ * stroke has one colour per depth bucket and never steps where its pressure bucket changes.
  */
-function threshold(level: number, pass: ToothPass): number {
-  const p = (level + 0.5) / TOOTH_LEVELS;
-  return 0.72 - 0.62 * p + (pass === ToothPass.Fringe ? 0.2 : 0);
+export function toothInk(tableIndex: number): number {
+  return tableIndex + DEPTHS * (TOOTH_LEVELS - 1 - toothLevel(tableIndex));
 }
 
 /**
- * Coverage (0..255) per tooth height of one pass on its own: smoothstep(t − e, t + e, H). Smudge
- * (the side of the stick dragging pigment into the valleys) lowers t by up to 0.06, widens the edge
- * e from 0.07 to 0.2 and reads H from a blend toward the blurred map (toothHeight), so the grain
- * goes soft and fuller. (A floor of pigment across the valleys was tried and dropped: it showed the
- * ribbon's straight outline.) The renderer lays the core over the fringe so that the two together
- * cover exactly max(core, fringe) (render/tooth.ts).
+ * Density a pressure level lays down in the middle of the ribbon: about the fraction of the tooth it
+ * fills there, from a third at the lightest touch to nearly all of it at the heaviest.
  */
-export function toothLut(level: number, smudge: number, pass: ToothPass): Uint8Array {
-  const out = new Uint8Array(256);
-  for (let v = 0; v < 256; v++) out[v] = Math.round(255 * coverage(level, smudge, pass, (v + 0.5) / 256));
-  return out;
+export function toothDensity(level: number): number {
+  return 0.48 + 0.56 * (level + 0.5) / TOOTH_LEVELS;
 }
 
-/** Coverage 0..1 of one pass on its own at tooth height H. */
-function coverage(level: number, smudge: number, pass: ToothPass, H: number): number {
-  const s = smudge / (SMUDGE_LEVELS - 1);
-  const t = threshold(level, pass) - 0.06 * s, e = 0.07 + 0.13 * s;
-  return smoothstep(t - e, t + e, H);
-}
+/**
+ * Sharpness k of the threshold: coverage = clamp((H + D − 1)·2^k) over tooth height H and density
+ * D, so it ramps over 1/8 of the height range above 1 − D and fills about a fraction D − 1/16 of
+ * the tooth. (Smudge softens the grain through the blurred map, not the ramp.)
+ */
+export const TOOTH_GAIN = 3;
 
 /** Tooth height byte at texel k for a smudge bucket: the crisp map blended toward the soft one. */
 export function toothHeight(k: number, smudge: number): number {
@@ -177,21 +186,22 @@ export function toothHeight(k: number, smudge: number): number {
 }
 
 /**
- * Solid-equivalent coverage of a whole charcoal ribbon at (level, smudge), for marks too small to
- * show grain (hairlines, far zoom, the stroke-cull dot): the fringe alone outside the core, the
- * larger of the two inside it (the core pass adds exactly the difference, render/tooth.ts).
+ * Mean coverage of a whole charcoal ribbon at (level, smudge), for marks too small to show grain
+ * (hairlines, far zoom, the stroke-cull dot): the threshold averaged over the equalised tooth and
+ * over the ring profile across the width.
  */
 const solids = new Float64Array(TOOTH_LEVELS * SMUDGE_LEVELS).fill(NaN);
 export function toothSolid(level: number, smudge: number): number {
   const key = level * SMUDGE_LEVELS + smudge, have = solids[key];
   if (have === have) return have;
-  let f = 0, c = 0;
-  for (let v = 0; v < 256; v++) {
-    const H = (v + 0.5) / 256;
-    f += coverage(level, smudge, ToothPass.Fringe, H);
-    c += Math.max(coverage(level, smudge, ToothPass.Core, H), coverage(level, smudge, ToothPass.Fringe, H));
+  const g = 1 << TOOTH_GAIN, d = toothDensity(level), U = 64;
+  let sum = 0;
+  for (let k = 0; k < U; k++) {
+    const D = d * toothProfile((k + 0.5) / U);
+    for (let v = 0; v < 256; v++) { const x = (v + 0.5) / 256 + D - 1; sum += Math.min(1, Math.max(0, x * g)); }
   }
-  return (solids[key] = ((1 - CORE_WIDTH) * f + CORE_WIDTH * c) / 256);
+  sum /= U * 256;
+  return (solids[key] = sum);
 }
 
 // ---------------------------------------------------------------------------- per stroke
@@ -205,12 +215,16 @@ export function toothCell(z: number): number {
   return cell;
 }
 
-/** Lean at pen-down → smudge bucket: tK = smoothstep(60°, 25°, alt) of the first sample, bucketed. */
-export function toothSmudge(samples: Float32Array | SampleBuf): number {
+/** Pen altitude of a stroke's first sample (NaN when it is unknown or there is no sample yet). */
+function firstAlt(samples: Float32Array | SampleBuf): number {
   const d = samples instanceof Float32Array ? samples : samples.data;
   const n = samples instanceof Float32Array ? Math.floor(d.length / S.STRIDE) : samples.n;
-  if (n < 1) return 0;
-  const alt = d[S.ALT];
+  return n < 1 ? NaN : d[S.ALT];
+}
+
+/** Lean at pen-down → smudge bucket: tK = smoothstep(60°, 25°, alt) of the first sample, bucketed. */
+export function toothSmudge(samples: Float32Array | SampleBuf): number {
+  const alt = firstAlt(samples);
   if (!(alt === alt)) return 0;
   const tK = smoothstep(60 * PI / 180, 25 * PI / 180, alt);
   return Math.round(tK * (SMUDGE_LEVELS - 1));
@@ -221,5 +235,7 @@ export function toothFor(r: RecipeCore & { samples: Float32Array | SampleBuf }):
   if (r.stroke.nib !== 'charcoal') return undefined;
   const cell = toothCell(r.z), period = cell * TOOTH_N;
   const mod = (v: number): number => { const q = v % period; return q < 0 ? q + period : q; };
-  return { cell, ox: mod(r.origin[0]), oy: mod(r.origin[1]), smudge: toothSmudge(r.samples) };
+  // the nominal width (mid pressure, the lean at pen-down), which a draft and its commit share
+  const w = nibWidth('charcoal', r.stroke.size, 0.5, NaN, r.device, firstAlt(r.samples)) / r.z;
+  return { cell, ox: mod(r.origin[0]), oy: mod(r.origin[1]), smudge: toothSmudge(r.samples), w };
 }
