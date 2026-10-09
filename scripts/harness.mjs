@@ -17,7 +17,7 @@ const CHROME_CANDIDATES = [
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-export async function launch({ width = 1280, height = 820, dpr = 1, url, touch = false } = {}) {
+export async function launch({ width = 1280, height = 820, dpr = 1, url, touch = false, signedOutAccount = true } = {}) {
   const executablePath = CHROME_CANDIDATES.find(p => existsSync(p));
   if (!executablePath) throw new Error('No Chrome/Edge found; set CHROME_PATH');
   const browser = await puppeteer.launch({
@@ -27,6 +27,27 @@ export async function launch({ width = 1280, height = 820, dpr = 1, url, touch =
   });
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: dpr, hasTouch: touch, isMobile: false });
+  const target = url || pathToFileURL(resolve('dist-single/index.html')).href;
+  const targetUrl = new URL(target);
+  const local = targetUrl.protocol === 'file:' || ['localhost', '127.0.0.1', '[::1]'].includes(targetUrl.hostname);
+  if (signedOutAccount && (local || target === 'about:blank')) {
+    // Local drawing checks must not depend on real account cookies, network or
+    // production CORS. Return the producer's signed-out response in the fetch
+    // fixture; keep all actual page/console errors observable below. Dedicated
+    // account conformance opts out and supplies its own producer fixture.
+    await page.evaluateOnNewDocument(() => {
+      const realFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        if (url.origin === 'https://syberlabs.io' && url.pathname.startsWith('/admin/api/v1/')) {
+          return Promise.resolve(new Response(JSON.stringify({ version: 1, error: 'signin_required' }), {
+            status: 401, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          }));
+        }
+        return realFetch(input, init);
+      };
+    });
+  }
   const errors = [];
   // why a target went away ("Target closed"): a renderer crash, or the browser process exiting
   const gone = [];
@@ -34,7 +55,6 @@ export async function launch({ width = 1280, height = 820, dpr = 1, url, touch =
   browser.process()?.on('exit', (code, signal) => gone.push(`browser process exited (code ${code}, signal ${signal})`));
   page.on('pageerror', e => errors.push('pageerror: ' + (e?.stack || e)));
   page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
-  const target = url || pathToFileURL(resolve('dist-single/index.html')).href;
   await page.goto(target, { waitUntil: 'load' });
   const cdp = await page.createCDPSession();
   return { browser, page, cdp, errors, gone };

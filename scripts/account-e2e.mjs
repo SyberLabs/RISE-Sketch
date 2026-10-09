@@ -16,7 +16,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 let env;
 try {
-  env = await launch({ url: 'about:blank', width: 375, height: 812, touch: true });
+  env = await launch({ url: 'about:blank', width: 375, height: 812, touch: true, signedOutAccount: false });
   const { page, cdp } = env;
   await cdp.send('Page.setDownloadBehavior', { behavior: 'deny' });
   let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false, race = false;
