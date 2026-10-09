@@ -606,7 +606,7 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   console.log(`    mean |Δ|: fed seam ${v.fedSeam.toFixed(4)}, decoded seam ${v.seam.toFixed(2)}, codec error frame 0 ${v.err0.toFixed(2)}, last ${v.errN.toFixed(2)}, grow ${v.grow.toFixed(2)}`);
   // Frame 0 is the finished piece and the hold ends on it: the clip loops without a seam.
   // The app's claim, on the frames it hands the encoder: the last is the first. Not always
-  // bit-exact (0–0.001 measured on macOS and the Linux runner: at most a few hundred pixels where
+  // bit-exact (0–0.002 measured on macOS and the Linux runner: at most a few hundred pixels where
   // strokes cross, invisible); a seam anyone could see is far more (the growing piece is 20+ away).
   assert(v.fedSeam < 0.01, `the last frame fed to the encoder is the first (mean |Δ| ${v.fedSeam.toFixed(4)})`);
   // In the video, the two ends differ by codec noise only: no more than the codec's own error on
