@@ -64,6 +64,9 @@ jobs:
       - name: build dist-debug and dist-single
         run: npx vite build --mode debug --logLevel warn && npx vite build --mode single --logLevel warn
       - run: node scripts/e2e.mjs --no-build ${{ matrix.args }}
+      - name: Account backup browser conformance
+        if: matrix.name == 'budget'
+        run: node scripts/account-e2e.mjs
       - if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
