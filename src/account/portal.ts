@@ -73,6 +73,11 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
   let listState: 'loading' | 'ready' | 'error' = 'loading';
   let rows: SavedDrawing[] = [];
   let pending: { name: string; payload: DrawingPayload; requestId: string; expectedUserId: string } | null = null;
+  const listFailure = (error: unknown) => {
+    const reason = error instanceof Error ? error.message : 'Account storage is unavailable.';
+    const retry = !(error instanceof AccountError) || error.status === 0 || error.status >= 500;
+    return reason + (retry ? ' Use Refresh backups to try again.' : '');
+  };
   const controls = () => { save.disabled = busy || !name.value.trim(); restore.disabled = busy || listState !== 'ready' || !list.value || !confirm.checked; download.disabled = busy; reload.disabled = busy; name.disabled = busy; list.disabled = busy || listState !== 'ready' || !rows.length; confirm.disabled = busy || listState !== 'ready' || !list.value; };
   const selection = () => {
     const row = rows.find(row => row.id === list.value);
@@ -85,7 +90,7 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
     listState = 'loading'; confirm.checked = false; detail.textContent = 'Loading your account backups…'; controls();
     let loaded: SavedDrawing[];
     try { loaded = await listDrawings(account.id); }
-    catch (error) { if (!closed) { listState = 'error'; detail.textContent = 'Backups could not be loaded. Refresh backups to try again; your drawing is unchanged.'; controls(); } throw error; }
+    catch (error) { if (!closed) { listState = 'error'; detail.textContent = 'Backups could not be loaded. ' + listFailure(error); controls(); } throw error; }
     if (closed) return;
     rows = loaded; listState = 'ready';
     list.replaceChildren();
@@ -109,7 +114,7 @@ function openPanel(app: App, account: Account, entrance: HTMLElement, refresh: (
     pending ??= { name: name.value.trim(), payload: drawingPayload(app.rt.doc.meta, app.rt.doc.ordered()), requestId: crypto.randomUUID(), expectedUserId: account.id };
     await saveDrawing(pending.name, pending.payload, pending.requestId, pending.expectedUserId); pending = null;
     try { await loadList(); if (!closed) status.textContent = 'Private drawing backup saved to your account.'; }
-    catch (error) { if (!closed) { status.textContent = 'Private drawing backup saved to your account. The backup list could not refresh; use Refresh backups to try again.'; dialog.querySelector<HTMLAnchorElement>('[data-signin]')!.hidden = !(error instanceof AccountError && error.status === 401); } }
+    catch (error) { if (!closed) { status.textContent = 'Private drawing backup saved to your account. The backup list could not refresh. ' + listFailure(error); dialog.querySelector<HTMLAnchorElement>('[data-signin]')!.hidden = !(error instanceof AccountError && error.status === 401); } }
   }));
   download.addEventListener('click', () => downloadCurrent());
   restore.addEventListener('click', () => void run('Restoring your drawing and preserving the current one…', async () => {
