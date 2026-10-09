@@ -328,7 +328,7 @@ code against the exported signature in §3.
 
 ## 6. render-live  (starts after render-core)
 
-**Files:** `src/render/{live,overlay}.ts`.
+**Files:** `src/render/{live,overlay}.ts`, `src/render/live/*.ts` (the live layer's modules; `live.ts` is their public entry).
 **Spec:** DESIGN §3.1 (halo), §3.2 (hot trail, wake reveal, un-grow, concurrency), §6.2 (dry/wet,
 hand-off), §6.6, §2.2.2 latency (prediction on the overlay), §4 feedback list.
 
