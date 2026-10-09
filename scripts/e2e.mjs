@@ -6,7 +6,6 @@
 //   node scripts/e2e.mjs [--only name,name] [--budget] [--keep] [--out dir] [--url URL] [--no-build]
 //   --budget runs the control-budget scenarios only (DESIGN §1.2): boot-budget, phone-layout, symmetry.
 //   `counters` serves dist-debug over http itself (counters send nothing from file://).
-//   --skip name,name drops scenarios from a --shard (CI runs those in their own job).
 //   --shard i/n runs the i-th of n deterministic slices of every scenario (CI runs them in parallel).
 //
 // The production single file (`npm run build:single`, dist-single/) carries no debug hooks:
@@ -35,7 +34,7 @@ import { launch, penStroke, mouseStroke, pinch, tap, wheel, key, wave, circle, l
 // only to balance --shard. A scenario missing here (a new one) counts as UNTIMED and still runs.
 const COST = {
   'stress-300': 268000, 'timelapse-vertical': 68000, 'draw-new-forms': 64000, timelapse: 58000, 'undo-redo-50': 48000,
-  'remix-link': 47000, 'share-hint': 42000, 'draw-each-form': 37000, replay: 34000, 'share-hint-shared': 30000,
+  'remix-link': 47000, 'share-hint': 42000, 'draw-each-form': 37000, replay: 34000, 'remix-phone': 34000, 'share-hint-shared': 30000,
   hints: 24000, 'lasso-restyle-bend': 24000, 'erase-sweep': 23000, symmetry: 23000, 'rise-hold-mouse': 22000,
   'first-run-seed': 21000, 'prod-file': 20000, documents: 20000, 'rise-file-roundtrip': 20000, 'reload-persist': 19000,
   'select-restyle-delete': 18000, 'touch-pinch': 16000, closure: 14000, 'boot-budget': 14000, navigate: 13000,
@@ -66,7 +65,7 @@ const argv = process.argv.slice(2);
 const arg = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
 const SHARD = arg('--shard', '');
 const ONLY = argv.includes('--budget') ? ['boot-budget', 'phone-layout', 'symmetry']
-  : SHARD ? shardOf(SHARD).filter(n => !(arg('--skip', '') || '').split(',').includes(n))
+  : SHARD ? shardOf(SHARD)
   : (arg('--only', '') || '').split(',').filter(Boolean);
 const OUT = resolve(arg('--out', 'e2e-out'));
 const URL_ARG = arg('--url', '');
@@ -554,8 +553,20 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
   await dispatch(page, { k: 'undo' });
   await idle(page);
   assert(await R(page, () => window.__rise.sceneHash()) === h, 'recording changed nothing');
-  // the recording itself, through the debug hook
+  // the recording itself, through the debug hook; the first and last frames the app hands the
+  // encoder are kept (clones) to compare with what comes out of the video
+  await R(page, () => {
+    const encode = VideoEncoder.prototype.encode;
+    window.__fed = { first: null, last: null, restore: () => { VideoEncoder.prototype.encode = encode; } };
+    VideoEncoder.prototype.encode = function (frame, opts) {
+      const f = window.__fed;
+      if (!f.first) f.first = frame.clone();
+      else { f.last?.close(); f.last = frame.clone(); }
+      return encode.call(this, frame, opts);
+    };
+  });
   const r = await R(page, () => window.__rise.timelapse());
+  await R(page, () => window.__fed.restore());
   assert(r && r.bytes > 50000 && r.width === 1080 && (r.height === 1080 || r.height === 1350), `timelapse ${JSON.stringify(r && { ...r, url: 0 })}`);
   const v = await R(page, async url => {
     const b = new Uint8Array(await (await fetch(url)).arrayBuffer());
@@ -573,21 +584,35 @@ await scenario('timelapse', async ({ browser, page, cdp }) => {
       ctx.drawImage(el, 0, 0);
       return { px: ctx.getImageData(0, 0, c.width, c.height).data, png: c.toDataURL('image/png') };
     };
-    const first = await grab(0), mid = await grab(el.duration * 0.4), last = await grab(Math.max(0, el.duration - 0.05));
+    // the middle of each frame: frame 0, 40 % in, and the very last frame
+    const first = await grab(0.5 / 30), mid = await grab(el.duration * 0.4), last = await grab(el.duration - 0.5 / 30);
+    const fed = f => { ctx.drawImage(f, 0, 0); f.close(); return ctx.getImageData(0, 0, c.width, c.height).data; };
+    const fed0 = fed(window.__fed.first), fedN = fed(window.__fed.last);
     const diff = (a, b) => {
       let d = 0;
       for (let i = 0; i < a.length; i += 4) d += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
       return d / (a.length / 4);
     };
-    return { duration: el.duration, w: el.videoWidth, h: el.videoHeight, seam: diff(first.px, last.px), grow: diff(first.px, mid.px), b64: btoa(bin), first: first.png, mid: mid.png, last: last.png };
+    return {
+      duration: el.duration, w: el.videoWidth, h: el.videoHeight, b64: btoa(bin), first: first.png, mid: mid.png, last: last.png,
+      fedSeam: diff(fed0, fedN), seam: diff(first.px, last.px), err0: diff(fed0, first.px), errN: diff(fedN, last.px), grow: diff(first.px, mid.px),
+    };
   }, r.url);
   writeFileSync(`${OUT}/timelapse.mp4`, Buffer.from(v.b64, 'base64'));
   for (const k of ['first', 'mid', 'last']) writeFileSync(`${OUT}/timelapse-${k}.png`, Buffer.from(v[k].split(',')[1], 'base64'));
   assert(v.w === r.width && v.h === r.height, `the video is ${v.w}×${v.h}`);
   assert(v.duration >= 3 && v.duration <= 12.5, `plausible duration (${v.duration} s)`);
   near(v.duration, r.durationMs / 1000, 0.1, 'the container duration matches the frames');
-  // frame 0 is the finished piece and the hold ends on it: the clip loops without a seam
-  assert(v.seam < 4, `the last frame is the first (mean |Δ| ${v.seam.toFixed(2)})`);
+  console.log(`    mean |Δ|: fed seam ${v.fedSeam.toFixed(4)}, decoded seam ${v.seam.toFixed(2)}, codec error frame 0 ${v.err0.toFixed(2)}, last ${v.errN.toFixed(2)}, grow ${v.grow.toFixed(2)}`);
+  // Frame 0 is the finished piece and the hold ends on it: the clip loops without a seam.
+  // The app's claim, on the frames it hands the encoder: the last is the first. Not bit-exact on a
+  // GPU canvas (≤ 0.001 measured: a few hundred pixels where strokes cross round differently); a
+  // seam anyone could see is orders of magnitude more (the growing piece is 20+ from the finished one).
+  assert(v.fedSeam < 0.01, `the last frame fed to the encoder is the first (mean |Δ| ${v.fedSeam.toFixed(4)})`);
+  // In the video, the two ends differ by codec noise only: no more than the codec's own error on
+  // frame 0 (decoded vs the frame it was fed). Measured: macOS VideoToolbox seam 3.0–3.2 vs error
+  // 5.7–6.1; software H.264 seam 3.5–4.9 vs error 6.4–7.2 (macOS) and Linux CI, see the PR.
+  assert(v.seam <= v.err0, `the video's last frame is its first, up to codec noise (seam ${v.seam.toFixed(2)} vs frame 0 codec error ${v.err0.toFixed(2)})`);
   assert(v.grow > 2, `the ink grows: the middle differs from the finished piece (mean |Δ| ${v.grow.toFixed(2)})`);
 });
 
@@ -1110,7 +1135,11 @@ await scenario('remix-phone', async ({ page, cdp }) => {
     let h = await hint();
     assert(h.on && !h.bare && h.text === 'Draw on it. It grows.', `after the replay: "Draw on it. It grows." (${JSON.stringify(h)})`);
     await shot(v.page, 'remix-phone');
-    await tap(v.cdp, 200, 700);
+    // a contact on the canvas, clear of the chrome: the "Opened a shared drawing" toast is still up
+    // above the dock, and on Linux it wraps to two lines and reaches y ≈ 700 (a tap there hits it)
+    const onStage = await R(v.page, () => !!document.elementFromPoint(200, 560)?.closest('#stage'));
+    assert(onStage, 'the tap point is on the canvas');
+    await tap(v.cdp, 200, 560);
     await idle(v.page);
     h = await hint();
     assert(!h.on && h.st === 'done', `the first contact retires it (${JSON.stringify(h)})`);
