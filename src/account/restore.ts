@@ -5,7 +5,7 @@ export interface RestoreBoundary {
   flush(): Promise<void>;
   autosaveOk(): boolean;
   backup(): void;
-  adopt(drawing: ReturnType<typeof parseDoc>): void;
+  adopt(drawing: ReturnType<typeof parseDoc>): void | Promise<void>;
 }
 /** Remote data and local persistence can both finish after the panel's identity has changed. */
 export async function restoreAccountDrawing(id: string, owner: string, boundary: RestoreBoundary, fetcher?: typeof fetch): Promise<ReturnType<typeof parseDoc>> {
@@ -20,6 +20,6 @@ export async function restoreAccountDrawing(id: string, owner: string, boundary:
   if (!boundary.autosaveOk()) throw new AccountError('Browser autosave is unavailable. Download your drawing before restoring.');
   boundary.backup();
   current();
-  boundary.adopt(parsed);
+  await boundary.adopt(parsed);
   return parsed;
 }

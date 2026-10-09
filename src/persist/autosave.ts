@@ -33,7 +33,7 @@ import { prefs } from './prefs';
 
 export interface Autosave {
   /** Track a document: subscribes to doc changes, batches writes every 250 ms, flushes on hide/pagehide. */
-  attach(doc: Doc): void;
+  attach(doc: Doc, options?: { persistMeta?: boolean }): void;
   /** Start writing everything pending now; resolves when all writes so far have settled (check `ok`). */
   flush(): Promise<void>;
   readonly ok: boolean;
@@ -111,6 +111,7 @@ export function createAutosave(store: DocStore | null, opts?: AutosaveOptions): 
   const statusFns: ((ok: boolean) => void)[] = [];
   let persistAsked = prefs.get<boolean>(PERSIST_KEY, false);
   let disposed = false;
+  let reconciliation: Promise<void> = Promise.resolve();
 
   let snapSrc: SnapshotSource | null = null;
   let snapBusy: (() => boolean) | null = null;
@@ -284,15 +285,15 @@ export function createAutosave(store: DocStore | null, opts?: AutosaveOptions): 
     if (doc) maybePersist(doc);
   }
 
-  function reconcile(d: Doc, myGen: number): void {
-    if (!store) return;
+  function reconcile(d: Doc, myGen: number): Promise<void> {
+    if (!store) return Promise.resolve();
     if (!store.syncInfo) {
       if (d.size > 0) { for (const r of d.ordered()) dirty.add(r.id); metaDirty = true; schedule(); }
-      return;
+      return Promise.resolve();
     }
     sinceAttach = new Set();
     metaSinceAttach = false;
-    store.syncInfo(d.meta.id).then(info => {
+    return store.syncInfo(d.meta.id).then(info => {
       if (myGen !== gen) return;
       const skip = sinceAttach ?? new Set<StrokeId>();
       sinceAttach = null;
@@ -313,7 +314,7 @@ export function createAutosave(store: DocStore | null, opts?: AutosaveOptions): 
   }
 
   const api: AutosaveInternal = {
-    attach(d) {
+    attach(d, options) {
       if (disposed || d === doc) return;
       if (doc) {
         void flushNow();
@@ -328,10 +329,12 @@ export function createAutosave(store: DocStore | null, opts?: AutosaveOptions): 
       snapDirty = false;
       lastSnapAt = -Infinity;
       unsub = d.subscribe(onChange);
-      reconcile(d, gen);
+      reconciliation = reconcile(d, gen);
+      // A deliberate document adoption must persist its new recency even if ink is unchanged.
+      if (options?.persistMeta && d.size > 0) { metaDirty = true; schedule(); }
     },
     flush() {
-      return flushNow();
+      return reconciliation.then(flushNow);
     },
     get ok() { return ok; },
     onStatus(fn) {

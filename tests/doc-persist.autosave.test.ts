@@ -7,6 +7,9 @@ import { createAutosave } from '../src/persist/autosave';
 import type { AutosaveInternal } from '../src/persist/autosave';
 import type { DocStore, DocSummary, StoreBatch, SyncInfo } from '../src/persist/idb';
 import { prefs } from '../src/persist/prefs';
+import { adoptDocument } from '../src/app/docs';
+import type { Runtime } from '../src/app/runtime';
+import type { Controller } from '../src/app/controller';
 import { pick, randomRecipe, seeded } from './doc-persist.helpers';
 
 /** In-memory DocStore that records every batch and can be told to fail. */
@@ -194,6 +197,59 @@ describe('autosave', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expectStoreMatches(store, fileDoc);
     as.dispose();
+  });
+
+  it('persists adoption recency for older backups and Recent without losing either drawing', async () => {
+    const store = new FakeStore();
+    const current = mkDoc('current', [randomRecipe(seeded(11), 'stroke-current')]);
+    await store.putStrokes(current.meta.id, current.ordered());
+    await store.putMeta(current.meta, current.size);
+    const older = mkDoc('restored', [randomRecipe(seeded(12), 'stroke-backup')]);
+    const sourceMeta = { ...older.meta, updated: current.meta.updated - 1000 };
+    const autosave = createAutosave(store) as AutosaveInternal;
+    autosave.attach(current);
+    const scene = () => ({ dispose() {}, ensure: async () => {} });
+    const rt = { doc: current, autosave, scene: scene(), makeScene: scene,
+      renderer: { live: { fastForward() {} }, rebind() {} }, docStore: store } as unknown as Runtime;
+    const ctl = { leaveDocument() {}, adoptView() {}, refreshDoc() {}, docChanged() {} } as unknown as Controller;
+    vi.setSystemTime(current.meta.updated + 1000);
+    adoptDocument(rt, ctl, sourceMeta, older.ordered(), 'none');
+    await vi.advanceTimersByTimeAsync(500);
+    await autosave.flush();
+    const restored = rt.doc;
+    expect(restored.meta.created).toBe(sourceMeta.created);
+    expect(restored.meta.camera).toEqual(sourceMeta.camera);
+    expect(restored.meta.ground).toBe(sourceMeta.ground);
+    expect(sourceMeta.updated).toBe(current.meta.updated - 1000);
+    expect((await store.listDocs())[0].id).toBe(restored.meta.id);
+    expect((await store.loadDoc(restored.meta.id))!.strokes).toEqual(older.ordered());
+    expect((await store.loadDoc(current.meta.id))!.strokes).toEqual(current.ordered());
+    // Opening an existing Recent document has no ink drift, so its metadata still must write.
+    vi.setSystemTime(restored.meta.updated + 1000);
+    adoptDocument(rt, ctl, current.meta, current.ordered(), 'none');
+    await vi.advanceTimersByTimeAsync(500);
+    await autosave.flush();
+    expect((await store.listDocs())[0].id).toBe(current.meta.id);
+    expect(store.docs.size).toBe(2);
+    autosave.dispose();
+  });
+
+  it('flush immediately after attach waits for delayed reconciliation and persists all imported ink', async () => {
+    const store = new FakeStore();
+    let release!: (info: SyncInfo) => void;
+    store.syncInfo = () => new Promise(resolve => { release = resolve; });
+    const doc = mkDoc('imported', [randomRecipe(seeded(13), 'imported-stroke')]);
+    const autosave = createAutosave(store);
+    autosave.attach(doc, { persistMeta: true });
+    let finished = false;
+    const flushing = autosave.flush().then(() => { finished = true; });
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    release({ exists: false, ids: [] });
+    await flushing;
+    expectStoreMatches(store, doc);
+    expect(finished).toBe(true);
+    autosave.dispose();
   });
 
   it('reports failures, keeps the data dirty, retries once, and recovers', async () => {
