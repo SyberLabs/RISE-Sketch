@@ -17,3 +17,10 @@
 .sketch-account-panel [data-status] { color:#b9f1e7; }
 
 .sketch-account-entry[hidden] { display: none; }
+.sketch-account-list-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:24px; }
+.sketch-account-list-heading h2 { margin:0; }
+.sketch-account-panel [data-detail] { padding:10px 12px; border:1px solid #635877; border-radius:12px; background:linear-gradient(120deg,#283e632e,#641e572e); font-size:13px; }
+.sketch-account-confirm { min-height:44px; cursor:pointer; }
+.sketch-account-confirm input { flex-shrink:0; }
+.sketch-account-panel [data-close] { min-width:44px; }
+@media (max-width:600px) { .sketch-account-panel input:not([type=checkbox]),.sketch-account-panel select { font-size:16px; } }

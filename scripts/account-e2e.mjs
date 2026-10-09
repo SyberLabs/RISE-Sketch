@@ -19,7 +19,7 @@ try {
   env = await launch({ url: 'about:blank', width: 375, height: 812, touch: true });
   const { page, cdp } = env;
   await cdp.send('Page.setDownloadBehavior', { behavior: 'deny' });
-  let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false, race = false;
+  let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false, race = false, failNextList = false;
   const attemptedPosts = [];
   let holdDetail = false; const heldDetails = [];
   await page.setRequestInterception(true);
@@ -34,6 +34,10 @@ try {
         void req.respond({ status: owner ? 409 : 400, headers, contentType: 'application/json', body: JSON.stringify({ version: 1, error: owner ? 'account_changed' : 'expected_user_required' }) });
         return;
       }
+    }
+    if (req.url().includes('/saves?') && failNextList) {
+      failNextList = false;
+      void req.respond({ status: 503, headers, contentType: 'application/json', body: JSON.stringify({ version: 1, error: 'unavailable' }) }); return;
     }
     const save = { id: 'saved-one', app: 'sketch', name: '<img src=x>', createdAt: 1234567, bytes: 1000 };
     let body = { user };
@@ -64,10 +68,26 @@ try {
   const panelBox = await page.$eval('dialog', e => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
   assert(panelBox.left >= 0 && panelBox.right <= 375 && panelBox.top >= 0 && panelBox.bottom <= 812, 'phone dialog fits the screen');
   assert.equal(await page.$eval('[data-user]', e => e.textContent), user.label, 'identity label rendered literally');
+  failNextList = true;
   await page.click('[data-save]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('saved to your account'));
   assert.equal(posts, 1); assert(payload.document.strokes.length > 0, 'live art captured');
   assert.equal(payload.schema, 'sketch.account-document.v1');
+  assert.match(await page.$eval('[data-status]', e => e.textContent), /saved to your account.*could not refresh/, 'committed save remains successful when only list refresh fails');
+  assert.equal(await page.$eval('[data-restore]', e => e.disabled), true, 'unavailable list cannot authorize a restore');
+  assert.match(await page.$eval('[data-detail]', e => e.textContent), /could not be loaded/, 'failure does not masquerade as an empty library');
+  await page.click('[data-reload]');
+  await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('up to date'));
+  assert.equal(posts, 1, 'refresh never reuploads a committed backup');
+  assert.match(await page.$eval('[data-detail]', e => e.textContent), /Saved .*1 KB/);
+  assert.equal(await page.$eval('[data-confirm-label]', e => e.textContent), 'Open “<img src=x>” in this browser', 'chosen backup named literally before consent');
+  assert.equal(await page.$$eval('dialog img', nodes => nodes.length), 0, 'backup name never becomes markup');
+  await page.click('[data-confirm]'); await page.click('[data-reload]');
+  await page.waitForFunction(() => document.querySelector('[data-reload]')?.disabled === false);
+  assert.equal(await page.$eval('[data-confirm]', e => e.checked), false, 'refresh requires renewed consent');
+  assert(await page.$eval('.sketch-account-confirm', e => e.getBoundingClientRect().height >= 44), 'named consent has a phone-sized hit target');
+  assert(await page.$eval('[data-close]', e => e.getBoundingClientRect().width >= 44), 'close control has a phone-sized hit target');
+  mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-ux-phone.png' });
   await page.click('[data-close]');
   await penStroke(cdp, line(90, 390, 280, 460, 8));
   await page.evaluate(() => window.__rise.idle(15000));
@@ -123,6 +143,8 @@ try {
   mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-phone.png' });
   const expectedConflicts = env.errors.filter(error => error === 'console: Failed to load resource: the server responded with a status of 409 (Conflict)');
   assert.equal(expectedConflicts.length, 2, 'only the two deliberately refused account-race retries log HTTP conflicts');
-  assert.deepEqual(env.errors.filter(error => !expectedConflicts.includes(error)), []);
+  const expectedUnavailable = env.errors.filter(error => error === 'console: Failed to load resource: the server responded with a status of 503 (Service Unavailable)');
+  assert.equal(expectedUnavailable.length, 1, 'only the deliberately failed list refresh logs service unavailable');
+  assert.deepEqual(env.errors.filter(error => !expectedConflicts.includes(error) && !expectedUnavailable.includes(error)), []);
   console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account/server-race refusal and both-direction delayed-detail cancellation');
 } finally { await env?.browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
