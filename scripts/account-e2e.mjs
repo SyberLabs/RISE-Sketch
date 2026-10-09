@@ -19,7 +19,7 @@ try {
   env = await launch({ url: 'about:blank', width: 375, height: 812, touch: true });
   const { page, cdp } = env;
   await cdp.send('Page.setDownloadBehavior', { behavior: 'deny' });
-  let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false, race = false, failNextList = false;
+  let user = { id: 'test-user-one', label: '<script>Fixture reader</script>' }, posts = 0, payload = null, malformed = false, race = false, failNextList = 0;
   const attemptedPosts = [];
   let holdDetail = false; const heldDetails = [];
   await page.setRequestInterception(true);
@@ -36,8 +36,8 @@ try {
       }
     }
     if (req.url().includes('/saves?') && failNextList) {
-      failNextList = false;
-      void req.respond({ status: 503, headers, contentType: 'application/json', body: JSON.stringify({ version: 1, error: 'unavailable' }) }); return;
+      const status = failNextList; failNextList = 0;
+      void req.respond({ status, headers, contentType: 'application/json', body: JSON.stringify({ version: 1, error: status === 409 ? 'account_changed' : 'unavailable' }) }); return;
     }
     const save = { id: 'saved-one', app: 'sketch', name: '<img src=x>', createdAt: 1234567, bytes: 1000 };
     let body = { user };
@@ -68,7 +68,7 @@ try {
   const panelBox = await page.$eval('dialog', e => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
   assert(panelBox.left >= 0 && panelBox.right <= 375 && panelBox.top >= 0 && panelBox.bottom <= 812, 'phone dialog fits the screen');
   assert.equal(await page.$eval('[data-user]', e => e.textContent), user.label, 'identity label rendered literally');
-  failNextList = true;
+  failNextList = 503;
   await page.click('[data-save]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('saved to your account'));
   assert.equal(posts, 1); assert(payload.document.strokes.length > 0, 'live art captured');
@@ -88,6 +88,19 @@ try {
   assert(await page.$eval('.sketch-account-confirm', e => e.getBoundingClientRect().height >= 44), 'named consent has a phone-sized hit target');
   assert(await page.$eval('[data-close]', e => e.getBoundingClientRect().width >= 44), 'close control has a phone-sized hit target');
   mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-ux-phone.png' });
+  for (const code of [401, 409]) {
+    failNextList = code;
+    await page.click('[data-save]');
+    await page.waitForFunction(() => document.querySelector('[data-save]')?.disabled === false);
+    const message = await page.$eval('[data-status]', e => e.textContent);
+    assert.match(message, /saved to your account.*could not refresh/, 'committed save stays successful across profile recovery errors');
+    assert.match(message, code === 401 ? /Sign in again/ : /account changed.*Close this panel/);
+    assert.doesNotMatch(message, /Use Refresh backups/, 'captured identity mismatch cannot be fixed by retrying the old owner');
+    assert.equal(await page.$eval('[data-signin]', e => e.hidden), code !== 401);
+    await page.click('[data-reload]');
+    await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('up to date'));
+  }
+  const acceptedUploads = posts;
   await page.click('[data-close]');
   await penStroke(cdp, line(90, 390, 280, 460, 8));
   await page.evaluate(() => window.__rise.idle(15000));
@@ -115,13 +128,13 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('account changed'));
   await page.click('[data-save]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('account changed'));
-  assert.equal(attemptedPosts.length, 3, 'one successful upload plus two explicit refused retries');
-  assert.equal(attemptedPosts[1].owner, 'test-user-one');
-  assert.deepEqual(attemptedPosts[1], attemptedPosts[2], 'race retries retain original captured owner, UUID and snapshot');
-  assert.equal(posts, 1, 'server account switch refuses upload even when profile pre-check still saw A');
+  assert.equal(attemptedPosts.length, acceptedUploads + 2, 'successful fixture uploads plus two explicit refused retries');
+  assert.equal(attemptedPosts[acceptedUploads].owner, 'test-user-one');
+  assert.deepEqual(attemptedPosts[acceptedUploads], attemptedPosts[acceptedUploads + 1], 'race retries retain original captured owner, UUID and snapshot');
+  assert.equal(posts, acceptedUploads, 'server account switch refuses upload even when profile pre-check still saw A');
   user = { id: 'other-user', label: 'Changed account' }; await page.click('[data-save]');
   await page.waitForFunction(() => document.querySelector('[data-status]')?.textContent.includes('account changed'));
-  assert.equal(posts, 1, 'stale panel cannot upload to a different account');
+  assert.equal(posts, acceptedUploads, 'stale panel cannot upload to a different account');
   await page.click('[data-close]');
   race = false; malformed = false; holdDetail = true;
   for (const [from, to] of [['owner-a', 'owner-b'], ['owner-b', 'owner-a']]) {
@@ -142,9 +155,11 @@ try {
   }
   mkdirSync('e2e-out', { recursive: true }); await page.screenshot({ path: 'e2e-out/account-phone.png' });
   const expectedConflicts = env.errors.filter(error => error === 'console: Failed to load resource: the server responded with a status of 409 (Conflict)');
-  assert.equal(expectedConflicts.length, 2, 'only the two deliberately refused account-race retries log HTTP conflicts');
+  assert.equal(expectedConflicts.length, 3, 'two refused account-race retries and one deliberately changed list owner log HTTP conflicts');
   const expectedUnavailable = env.errors.filter(error => error === 'console: Failed to load resource: the server responded with a status of 503 (Service Unavailable)');
   assert.equal(expectedUnavailable.length, 1, 'only the deliberately failed list refresh logs service unavailable');
-  assert.deepEqual(env.errors.filter(error => !expectedConflicts.includes(error) && !expectedUnavailable.includes(error)), []);
+  const expectedUnauthorized = env.errors.filter(error => error === 'console: Failed to load resource: the server responded with a status of 401 (Unauthorized)');
+  assert.equal(expectedUnauthorized.length, 1);
+  assert.deepEqual(env.errors.filter(error => !expectedConflicts.includes(error) && !expectedUnavailable.includes(error) && !expectedUnauthorized.includes(error)), []);
   console.log('PASS account phone placement, modal controls, explicit save, validated restore, unchanged malformed restore, switched-account/server-race refusal and both-direction delayed-detail cancellation');
 } finally { await env?.browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
