@@ -181,3 +181,11 @@ the daily counts (see Privacy) and runs for `/e` alone. Served over http(s), the
 - `lab/forms/` — the forms lab, where new Forms are prototyped against the real pipeline
   (see `lab/forms/README.md`).
 - `procedural-ink.html` — the original single-file demo Rise grew from.
+
+## Personal account backups
+
+The upper-right **Sign in** entrance connects to an existing SyberLabs account. Drawing remains local and works without an account. In **Account**, choose **Save to account** to upload a private snapshot of the current drawing; nothing uploads automatically. Each backup uses the existing `.rise` document format, excludes browser settings and credentials, and is limited to 1 MB. Account admission remains limited to accounts SyberLabs has provisioned.
+
+Choose a saved drawing, confirm **Open selected backup in this browser**, and select **Restore drawing** to open it as a new document. The `.rise` parser validates the backup before the canvas changes. The existing drawing is flushed to browser storage and downloaded first, then remains available in Recent. If account storage or browser autosave is unavailable, the current drawing stays in place. **Download drawing** also works as a manual backup, and the account portal lists private saved things.
+
+Producer contract: SyberLabs MasterMind `docs/contracts/account-saves-v1.md`. Browser conformance uses a fixture account service, real document serialization/parser and IndexedDB autosave: build debug mode, then run `node scripts/account-e2e.mjs`. This does not establish external-user validation.
