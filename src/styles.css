@@ -670,6 +670,8 @@ body {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  /* shrink-to-fit after left: 50% would cap the toast at half the screen; size it to its text instead */
+  width: max-content;
   max-width: calc(100vw - 2rem);
   min-height: var(--r-target);
   padding: 0.25rem 1.125rem;
