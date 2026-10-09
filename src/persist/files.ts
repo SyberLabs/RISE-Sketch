@@ -3,8 +3,9 @@
  * Saving downloads through `<a download>`; opening uses a transient
  * `<input type=file>`; dropping is bound to the canvas element. `readFileText`
  * transparently inflates gzip files (magic `1f 8b`, the P1 compressed format)
- * where DecompressionStream exists.
+ * where DecompressionStream exists, and reads the project out of an exported PNG.
  */
+import { isPng, projectOf } from './pngproject';
 
 /** Characters that are invalid in file names on at least one major OS. */
 const BAD_NAME = /[\\/:*?"<>|\u0000-\u001f\u007f]+/g;
@@ -69,9 +70,13 @@ export function pickFile(accept: string): Promise<File | null> {
 
 const GZIP0 = 0x1f, GZIP1 = 0x8b;
 
-/** Read a file as UTF-8 text (BOM stripped), inflating gzip content when the browser can. */
-export async function readFileText(f: File): Promise<string> {
+/**
+ * Read a file as UTF-8 text (BOM stripped), inflating gzip content when the browser can. A PNG
+ * yields the `.rise` it carries (persist/pngproject.ts), or null when it carries none.
+ */
+export async function readFileText(f: File): Promise<string | null> {
   const buf = new Uint8Array(await f.arrayBuffer());
+  if (isPng(buf)) return projectOf(buf);
   if (buf.length >= 2 && buf[0] === GZIP0 && buf[1] === GZIP1) {
     if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot open compressed .rise files');
     const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));

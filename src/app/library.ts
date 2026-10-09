@@ -3,8 +3,9 @@
  *
  *  - New switches to a fresh document; the old one stays in storage and so in Recent (never a
  *    Clear). Toast: "New canvas. The last one is in Recent." when the old one had ink.
- *  - Open (picker, Mod+O, a dropped .rise) parses the file into a NEW document (fresh id, fresh
- *    revs; parseDoc) and adopts it with the 200 ms base fade. Toast: "Opened ⟨title⟩".
+ *  - Open (picker, Mod+O, a dropped .rise or exported PNG) parses the file into a NEW document
+ *    (fresh id, fresh revs; parseDoc) and adopts it with the 200 ms base fade. Toast: "Opened
+ *    ⟨title⟩". A PNG without a drawing in it says so and changes nothing.
  *  - Save downloads `<title>.rise`.
  *  - A remix link (`#r=…`, persist/remix.ts) opens like a file, then replays once so the drawing
  *    is seen growing. Copy remix link puts the current document's link on the clipboard.
@@ -55,32 +56,36 @@ export class Library {
   /** Menu → Open… / Mod+O. Must be called from a user gesture (the picker needs one). */
   async openPicker(): Promise<void> {
     let f: File | null = null;
-    try { f = await pickFile('.rise,application/json,text/plain'); } catch { f = null; }
+    try { f = await pickFile('.rise,.png,application/json,text/plain,image/png'); } catch { f = null; }
     if (f) await this.openFile(f);
   }
 
-  /** Open a .rise file as a new document (picker or drop). */
+  /** Open a .rise file, or a PNG exported with its drawing, as a new document (picker or drop). */
   async openFile(f: File): Promise<void> {
     const rt = this.rt;
     let parsed: { meta: import('../core/types').DocMeta; strokes: StrokeRecipe[] };
     try {
       const text = await readFileText(f);
+      if (text === null) {
+        rt.store.emit({ k: 'toast', id: 'open', text: 'This image has no RISE Sketch drawing in it.' });
+        return;
+      }
       parsed = parseDoc(text);
     } catch (err) {
       console.error('[rise] could not open', f.name, err);
       rt.store.emit({ k: 'toast', id: 'open', text: `Couldn't open ${f.name}` });
       return;
     }
-    const title = parsed.meta.title.trim() || f.name.replace(/\.rise$/i, '') || 'Untitled';
+    const title = parsed.meta.title.trim() || f.name.replace(/\.(rise|png)$/i, '') || 'Untitled';
     if (!parsed.meta.title.trim()) parsed.meta.title = title;
     adoptDocument(rt, this.ctl, parsed.meta, parsed.strokes, 'fade');
     rt.store.emit({ k: 'toast', id: 'open', text: `Opened ${title}` });
     this.scheduleRefresh();
   }
 
-  /** Files dropped on the canvas: the first .rise (or JSON) file opens. */
+  /** Files dropped on the canvas: the first .rise, PNG or JSON file opens. */
   dropped(files: readonly File[]): void {
-    const f = files.find(x => /\.rise$/i.test(x.name)) ?? files.find(x => /json|text/.test(x.type)) ?? files[0];
+    const f = files.find(x => /\.(rise|png)$/i.test(x.name)) ?? files.find(x => /json|text|png/.test(x.type)) ?? files[0];
     if (f) void this.openFile(f);
   }
 

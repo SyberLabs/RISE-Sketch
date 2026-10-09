@@ -24,6 +24,9 @@ import { prefs } from '../persist/prefs';
 import { exportFilename, renderPng } from '../export/png';
 import { pickCodec, recordTimelapse, timelapseSpeed, type TimelapseItem, type TimelapseResult } from '../export/timelapse';
 import { downloadBlob } from '../persist/files';
+import { withProject } from '../persist/pngproject';
+import { serializeDoc } from '../doc/serialize';
+import { VERSION } from './version';
 import { remixLink } from './remix';
 import { count } from './counters';
 import { REMIX_BASE } from '../persist/remix';
@@ -616,7 +619,7 @@ export class Controller implements InputSink {
 
   // ================================================================ export
 
-  /** Mod+E / menu: render the PNG, with a progress toast (+ Cancel) once it takes > 300 ms. */
+  /** Mod+E / menu: render the PNG with the project embedded, with a progress toast (+ Cancel) once it takes > 300 ms. */
   async exportPng(deliver: boolean, savedText = 'Image saved'): Promise<{ width: number; height: number; bytes: number } | null> {
     const rt = this.rt;
     if (rt.store.get().exporting || !rt.doc.size) return null;
@@ -632,13 +635,16 @@ export class Controller implements InputSink {
     const timer = window.setTimeout(() => { if (gen === this.exportGen && rt.store.get().exporting) { toastOn = true; toast(); } }, EXPORT_TOAST_MS);
     let out: { width: number; height: number; bytes: number } | null = null;
     try {
+      // the drawing as the export starts, so the image and the project inside it agree
+      const project = serializeDoc(rt.doc.meta, rt.doc.ordered(), VERSION);
       const res = await renderPng({ doc: rt.doc, scene: rt.scene, renderer: rt.renderer, ground: rt.store.get().ground }, {
         onProgress: f => { progress = f; if (toastOn && performance.now() - lastToast > 100) toast(); },
         cancelled: () => this.exportCancel || gen !== this.exportGen,
       });
-      if (res && gen === this.exportGen) {
-        out = { width: res.width, height: res.height, bytes: res.blob.size };
-        if (deliver) downloadBlob(res.blob, exportFilename());
+      const blob = res && await withProject(res.blob, project);
+      if (res && blob && gen === this.exportGen) {
+        out = { width: res.width, height: res.height, bytes: blob.size };
+        if (deliver) downloadBlob(blob, exportFilename());
       }
     } catch (err) {
       console.error('[rise] export failed', err);

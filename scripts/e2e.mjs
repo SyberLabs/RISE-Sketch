@@ -39,7 +39,7 @@ const COST = {
   hints: 24000, 'lasso-restyle-bend': 24000, 'erase-sweep': 23000, symmetry: 23000, 'rise-hold-mouse': 22000,
   'first-run-seed': 21000, 'prod-file': 20000, documents: 20000, 'rise-file-roundtrip': 20000, 'reload-persist': 19000,
   'select-restyle-delete': 18000, 'touch-pinch': 16000, closure: 14000, 'boot-budget': 14000, navigate: 13000,
-  'export-png': 13000, 'rise-hold-pen': 12000, 'sample-alt-click': 11000, 'radial-seeds': 11000, 'phone-layout': 4000,
+  'export-png': 13000, 'png-project': 35000, 'rise-hold-pen': 12000, 'sample-alt-click': 11000, 'radial-seeds': 11000, 'phone-layout': 4000,
 };
 const UNTIMED = 10000;
 /** The scenario names of shard `spec` ("i/n", 1-based): every `scenario('name'` in this file plus
@@ -450,6 +450,69 @@ await scenario('export-png', async ({ page, cdp }) => {
   await idle(page);
   const r = await R(page, () => window.__rise.exportPng());
   assert(r.width >= 1000 && r.height > 100 && r.bytes > 5000, `export ${r.width}x${r.height} ${r.bytes}B`);
+});
+
+// Remixable images (DESIGN §8 Export): Mod+E downloads a PNG that carries the project. Opened in a
+// fresh browser with a drawing of its own (Mod+O), it is the exact drawing (same sceneHash, not a
+// rounded remix) as a new document, and the visitor's drawing stays in Recent. A plain PNG dropped
+// on the canvas says it has no drawing in it and changes nothing.
+await scenario('png-project', async ({ browser, page, cdp }) => {
+  await dispatch(page, { k: 'pickInk', ink: 'spectral' });
+  await dispatch(page, { k: 'pickForm', form: 'sprout' });
+  await dispatch(page, { k: 'symmetry', folds: 6 });
+  await penStroke(cdp, line(700, 300, 980, 330, 50), { hold: 600 });
+  await idle(page, 15000);
+  assert(await count(page) === 6, `six strokes to export (${await count(page)})`);
+  const h = await R(page, () => window.__rise.sceneHash());
+  const dl = await downloadsTo(browser, 'png-project-download');
+  const mod = (await R(page, () => window.__rise.state().isMac)) ? 'Meta' : 'Control';
+  await key(page, 'KeyE', [mod]);
+  assert(await toastSays(page, /Image saved/, 30000), 'Mod+E saves the image');
+  let file = '';
+  for (let t = 0; t < 50 && !file; t++) { file = readdirSync(dl).find(n => /^rise-\d{8}-\d{4}\.png$/.test(n)) || ''; if (!file) await sleep(100); }
+  assert(file, `the PNG was downloaded (${readdirSync(dl)})`);
+  const png = readFileSync(resolve(dl, file));
+  const img = UPNG.decode(png.buffer.slice(png.byteOffset, png.byteOffset + png.length));
+  assert(img.width >= 1000 && img.height > 100, `still an image (${img.width}×${img.height})`);
+  assert(png.includes(Buffer.from('iTXtrise-sketch\0')), 'the project rides in an iTXt chunk');
+
+  const v = await open();
+  try {
+    await dispatch(v.page, { k: 'pickForm', form: 'drift' });
+    await penStroke(v.cdp, wave(300, 400, 900, 90, 60));
+    await idle(v.page);
+    await sleep(700); // autosave batch
+    const own = await R(v.page, () => window.__rise.state().currentDocId);
+    const [chooser] = await Promise.all([v.page.waitForFileChooser(), key(v.page, 'KeyO', [mod])]);
+    await chooser.accept([resolve(dl, file)]);
+    assert(await toastSays(v.page, /Opened/, 10000), 'opening the PNG says so');
+    await idle(v.page, 15000);
+    assert(await count(v.page) === 6, `the drawing opens from the image (${await count(v.page)} strokes)`);
+    assert(await R(v.page, () => window.__rise.sceneHash()) === h, 'the exact drawing: the same scene hash');
+    assert(await R(v.page, () => window.__rise.state().currentDocId) !== own, 'it opens as a new document');
+    await sleep(700);
+    await dispatch(v.page, { k: 'openSheet', sheet: 'menu' });
+    await sleep(900);
+    const st = await R(v.page, () => window.__rise.state());
+    assert(st.recentDocs.some(d => d.id === own && d.strokes === 1), `the visitor's drawing is still in Recent (${st.recentDocs.map(d => d.id + ':' + d.strokes)})`);
+    await dispatch(v.page, { k: 'openSheet', sheet: null });
+    await shot(v.page, 'png-project-opened');
+    // a plain PNG (a screenshot), dropped on the canvas
+    const plain = Buffer.from(await v.page.screenshot()).toString('base64');
+    await R(v.page, b64 => {
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], 'screenshot.png', { type: 'image/png' }));
+      const stage = document.querySelector('#stage');
+      for (const type of ['dragenter', 'dragover', 'drop']) stage.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, plain);
+    assert(await toastSays(v.page, /This image has no RISE Sketch drawing in it/), 'a plain PNG says it has no drawing');
+    assert(await R(v.page, () => window.__rise.sceneHash()) === h, 'a plain PNG changes nothing');
+    const errs = v.errors.filter(e => !/favicon/.test(e));
+    assert(errs.length === 0, 'visitor console/page errors:\n  ' + errs.join('\n  '));
+  } finally {
+    await v.browser.close();
+  }
 });
 
 // Share timelapse (DESIGN §8): Shift+P records the replay as a video and, on a desktop, downloads
