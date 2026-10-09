@@ -8,6 +8,7 @@ import type { AutosaveInternal } from '../src/persist/autosave';
 import type { DocStore, DocSummary, StoreBatch, SyncInfo } from '../src/persist/idb';
 import { prefs } from '../src/persist/prefs';
 import { adoptDocument } from '../src/app/docs';
+import { remixUrl } from '../src/persist/remix';
 import type { Runtime } from '../src/app/runtime';
 import type { Controller } from '../src/app/controller';
 import { pick, randomRecipe, seeded } from './doc-persist.helpers';
@@ -201,11 +202,12 @@ describe('autosave', () => {
 
   it('persists adoption recency for older backups and Recent without losing either drawing', async () => {
     const store = new FakeStore();
-    const current = mkDoc('current', [randomRecipe(seeded(11), 'stroke-current')]);
+    const current = mkDoc('current', [randomRecipe(seeded(11), 'currentstroke')]);
     await store.putStrokes(current.meta.id, current.ordered());
     await store.putMeta(current.meta, current.size);
-    const older = mkDoc('restored', [randomRecipe(seeded(12), 'stroke-backup')]);
+    const older = mkDoc('restored', [randomRecipe(seeded(12), 'backupstroke')]);
     const sourceMeta = { ...older.meta, updated: current.meta.updated - 1000 };
+    const originalLink = await remixUrl(older, 'recency-fixture', () => true);
     const autosave = createAutosave(store) as AutosaveInternal;
     autosave.attach(current);
     const scene = () => ({ dispose() {}, ensure: async () => {} });
@@ -217,6 +219,7 @@ describe('autosave', () => {
     await vi.advanceTimersByTimeAsync(500);
     await autosave.flush();
     const restored = rt.doc;
+    expect(await remixUrl(restored, 'recency-fixture', () => true)).toBe(originalLink);
     expect(restored.meta.created).toBe(sourceMeta.created);
     expect(restored.meta.camera).toEqual(sourceMeta.camera);
     expect(restored.meta.ground).toBe(sourceMeta.ground);
